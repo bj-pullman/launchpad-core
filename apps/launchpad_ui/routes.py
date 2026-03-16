@@ -281,7 +281,6 @@ def settings_general():
             return redirect(url_for("launchpad_ui.settings_general"))
 
         organization_name = (request.form.get("organization_name") or "").strip()
-        portal_name = (request.form.get("portal_name") or "").strip()
         footer_text = (request.form.get("footer_text") or "").strip()
         support_email = (request.form.get("support_email") or "").strip()
         helpdesk_url = (request.form.get("helpdesk_url") or "").strip()
@@ -306,7 +305,6 @@ def settings_general():
             time_format_value = "12h"
 
         set_setting("general.organization_name", organization_name)
-        set_setting("general.portal_name", portal_name)
         set_setting("general.footer_text", footer_text)
         set_setting("general.support_email", support_email)
         set_setting("general.helpdesk_url", helpdesk_url)
@@ -322,7 +320,6 @@ def settings_general():
 
     settings = {
         "organization_name": get_setting("general.organization_name", ""),
-        "portal_name": get_setting("general.portal_name", ""),
         "footer_text": get_setting("general.footer_text", "Sheridan School District • Internal Tech Ops"),
         "support_email": get_setting("general.support_email", ""),
         "helpdesk_url": get_setting("general.helpdesk_url", ""),
