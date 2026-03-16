@@ -927,7 +927,7 @@ def settings_users_edit(user_id: int):
         replace_user_permissions(user_id, selected_direct_permissions)
 
         flash("User updated successfully.", "success")
-        return redirect(url_for("launchpad_ui.settings_users_edit", user_id=user_id))
+        return redirect(url_for("launchpad_ui.settings_users"))
 
     account_type = "local" if user.get("password_hash") else "sso"
 
