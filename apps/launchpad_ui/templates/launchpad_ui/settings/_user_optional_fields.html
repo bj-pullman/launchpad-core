@@ -1,73 +1,133 @@
 <!-- _user_optional_fields.html -->
 
 <div class="form-grid-equal">
-    <div class="form-field">
-        <label for="first_name">First Name</label>
-        <input type="text" id="first_name" name="first_name" value="{{ user.first_name if user and user.first_name else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="first_name">First Name</label>
+    <input
+      type="text"
+      id="first_name"
+      name="first_name"
+      value="{{ user.first_name if user and user.first_name else '' }}"
+    />
+  </div>
 
-    <div class="form-field">
-        <label for="last_name">Last Name</label>
-        <input type="text" id="last_name" name="last_name" value="{{ user.last_name if user and user.last_name else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="last_name">Last Name</label>
+    <input
+      type="text"
+      id="last_name"
+      name="last_name"
+      value="{{ user.last_name if user and user.last_name else '' }}"
+    />
+  </div>
 </div>
 
 <div class="form-grid-equal">
-    <div class="form-field">
-        <label for="job_title">Job Title</label>
-        <input type="text" id="job_title" name="job_title" value="{{ user.job_title if user and user.job_title else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="job_title">Job Title</label>
+    <input
+      type="text"
+      id="job_title"
+      name="job_title"
+      value="{{ user.job_title if user and user.job_title else '' }}"
+    />
+  </div>
 
-    <div class="form-field">
-        <label for="department">Department</label>
-        <input type="text" id="department" name="department" value="{{ user.department if user and user.department else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="department">Department</label>
+    <input
+      type="text"
+      id="department"
+      name="department"
+      value="{{ user.department if user and user.department else '' }}"
+    />
+  </div>
 </div>
 
 <div class="form-grid-equal">
-    <div class="form-field">
-        <label for="office_location">Office Location</label>
-        <input type="text" id="office_location" name="office_location" value="{{ user.office_location if user and user.office_location else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="office_location">Office Location</label>
+    <input
+      type="text"
+      id="office_location"
+      name="office_location"
+      value="{{ user.office_location if user and user.office_location else '' }}"
+    />
+  </div>
 
-    <div class="form-field">
-        <label for="company_name">Company Name</label>
-        <input type="text" id="company_name" name="company_name" value="{{ user.company_name if user and user.company_name else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="company_name">Company Name</label>
+    <input
+      type="text"
+      id="company_name"
+      name="company_name"
+      value="{{ user.company_name if user and user.company_name else '' }}"
+    />
+  </div>
 </div>
 
 <div class="form-grid-equal">
-    <div class="form-field">
-        <label for="employee_id">Employee ID</label>
-        <input type="text" id="employee_id" name="employee_id" value="{{ user.employee_id if user and user.employee_id else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="employee_id">Employee ID</label>
+    <input
+      type="text"
+      id="employee_id"
+      name="employee_id"
+      value="{{ user.employee_id if user and user.employee_id else '' }}"
+    />
+  </div>
 
-    <div class="form-field">
-        <label for="preferred_language">Preferred Language</label>
-        <input type="text" id="preferred_language" name="preferred_language" value="{{ user.preferred_language if user and user.preferred_language else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="preferred_language">Preferred Language</label>
+    <input
+      type="text"
+      id="preferred_language"
+      name="preferred_language"
+      value="{{ user.preferred_language if user and user.preferred_language else '' }}"
+    />
+  </div>
 </div>
 
 <div class="form-grid-equal">
-    <div class="form-field">
-        <label for="business_phone">Business Phone</label>
-        <input type="text" id="business_phone" name="business_phone" value="{{ user.business_phone if user and user.business_phone else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="business_phone">Business Phone</label>
+    <input
+      type="text"
+      id="business_phone"
+      name="business_phone"
+      value="{{ user.business_phone if user and user.business_phone else '' }}"
+    />
+  </div>
 
-    <div class="form-field">
-        <label for="mobile_phone">Mobile Phone</label>
-        <input type="text" id="mobile_phone" name="mobile_phone" value="{{ user.mobile_phone if user and user.mobile_phone else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="mobile_phone">Mobile Phone</label>
+    <input
+      type="text"
+      id="mobile_phone"
+      name="mobile_phone"
+      value="{{ user.mobile_phone if user and user.mobile_phone else '' }}"
+    />
+  </div>
 </div>
 
 <div class="form-grid-equal">
-    <div class="form-field">
-        <label for="manager_email">Manager Email</label>
-        <input type="text" id="manager_email" name="manager_email" value="{{ user.manager_email if user and user.manager_email else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="manager_email">Manager Email</label>
+    <input
+      type="text"
+      id="manager_email"
+      name="manager_email"
+      value="{{ user.manager_email if user and user.manager_email else '' }}"
+    />
+  </div>
 
-    <div class="form-field">
-        <label for="manager_display_name">Manager Display Name</label>
-        <input type="text" id="manager_display_name" name="manager_display_name" value="{{ user.manager_display_name if user and user.manager_display_name else '' }}">
-    </div>
+  <div class="form-field">
+    <label for="manager_display_name">Manager Display Name</label>
+    <input
+      type="text"
+      id="manager_display_name"
+      name="manager_display_name"
+      value="{{ user.manager_display_name if user and user.manager_display_name else '' }}"
+    />
+  </div>
 </div>

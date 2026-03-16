@@ -56,7 +56,7 @@ def create_app() -> Flask:
     app.config["GOOGLE_OIDC_SCOPES"] = "openid email profile"
     app.config["GOOGLE_OIDC_REDIRECT_URI"] = os.getenv(
         "GOOGLE_OIDC_REDIRECT_URI",
-        "http://localhost:5000/auth/google/callback",
+        "http://localhost:5001/auth/google/callback",
     )
 
     # Auth behavior

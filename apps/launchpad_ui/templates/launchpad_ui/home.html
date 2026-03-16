@@ -1,94 +1,92 @@
-{% extends "launchpad_ui/base.html" %}
-
-{% block content %}
+{% extends "launchpad_ui/base.html" %} {% block content %}
 <div class="launchpad-home">
-    <div class="hero">
-        <h1>Technology Launchpad</h1>
-        <p class="muted">
-            Central access point for district technology tools, operations, and settings.
-        </p>
+  <div class="hero">
+    <h1>Technology Launchpad</h1>
+    <p class="muted">
+      Central access point for district technology tools, operations, and
+      settings.
+    </p>
+  </div>
+
+  <div class="launchpad-grid">
+    {% if "snipeops.home.view" in session.get("user_permissions", []) %}
+    <a class="card" href="{{ url_for('snipeops.index') }}">
+      <div class="card-title">SnipeOps</div>
+      <div class="card-body muted">
+        Technology inventory operations, import tools, catalog management, and
+        future device sync workflows.
+      </div>
+      <div class="card-cta">Open →</div>
+    </a>
+    {% endif %} {% if "user360.home.view" in session.get("user_permissions", [])
+    %}
+    <div class="card card-disabled">
+      <div class="card-title">User360</div>
+      <div class="card-body muted">
+        A read-only dashboard that aggregates Entra, Snipe-IT, and Google data
+        to give IT a single view of user identity, devices, lifecycle status,
+        and group membership.
+      </div>
+      <div class="card-cta muted">Coming soon</div>
     </div>
-
-    <div class="launchpad-grid">
-        {% if "snipeops.home.view" in session.get("user_permissions", []) %}
-        <a class="card" href="{{ url_for('snipeops.index') }}">
-            <div class="card-title">SnipeOps</div>
-            <div class="card-body muted">
-                Technology inventory operations, import tools, catalog management, and future device sync workflows.
-            </div>
-            <div class="card-cta">Open →</div>
-        </a>
-        {% endif %}
-
-        {% if "user360.home.view" in session.get("user_permissions", []) %}
-        <div class="card card-disabled">
-            <div class="card-title">User360</div>
-            <div class="card-body muted">
-                A read-only dashboard that aggregates Entra, Snipe-IT, and Google data to give IT a single view of user identity, devices, lifecycle status, and group membership.
-            </div>
-            <div class="card-cta muted">Coming soon</div>
-        </div>
-        {% endif %}
-
-        {% if "finance.home.view" in session.get("user_permissions", []) %}
-        <div class="card card-disabled">
-            <div class="card-title">Finance</div>
-            <div class="card-body muted">
-                Budget tracking, renewals, recurring costs, and purchasing workflows.
-            </div>
-            <div class="card-cta muted">Coming soon</div>
-        </div>
-        {% endif %}
-
-        {% if "gam.home.view" in session.get("user_permissions", []) %}
-        <div class="card card-disabled">
-            <div class="card-title">Google Apps Manager (GAM)</div>
-            <div class="card-body muted">
-                Run approved GAM scripts locally through a secure web interface for easier Google Workspace administration.
-            </div>
-            <div class="card-cta muted">Coming soon</div>
-        </div>
-        {% endif %}
-
-        {% if "newhire.home.view" in session.get("user_permissions", []) %}
-        <div class="card card-disabled">
-            <div class="card-title">New Hire Intake</div>
-            <div class="card-body muted">
-                Manage new hire intake, account preparation, and workflow status.
-            </div>
-            <div class="card-cta muted">Coming soon</div>
-        </div>
-        {% endif %}
-
-        {% if "virtual_students.home.view" in session.get("user_permissions", []) %}
-        <div class="card card-disabled">
-            <div class="card-title">Virtual Student Tracker</div>
-            <div class="card-body muted">
-                Manage virtual student intake, account status, device preparation, and support tracking.
-            </div>
-            <div class="card-cta muted">Coming soon</div>
-        </div>
-        {% endif %}
-
-        {% if "techhub.home.view" in session.get("user_permissions", []) %}
-        <div class="card card-disabled">
-            <div class="card-title">Tech Hub</div>
-            <div class="card-body muted">
-                Staff resources, training, documentation, announcements, and support links.
-            </div>
-            <div class="card-cta muted">Coming soon</div>
-        </div>
-        {% endif %}
-
-        {% if "launchpad.settings.view" in session.get("user_permissions", []) %}
-        <a class="card" href="{{ url_for('launchpad_ui.settings_index') }}">
-            <div class="card-title">Settings</div>
-            <div class="card-body muted">
-                Manage branding, SAML, security, localization, groups, users, and other platform settings.
-            </div>
-            <div class="card-cta">Open →</div>
-        </a>
-        {% endif %}
+    {% endif %} {% if "finance.home.view" in session.get("user_permissions", [])
+    %}
+    <div class="card card-disabled">
+      <div class="card-title">Finance</div>
+      <div class="card-body muted">
+        Budget tracking, renewals, recurring costs, and purchasing workflows.
+      </div>
+      <div class="card-cta muted">Coming soon</div>
     </div>
+    {% endif %} {% if "gam.home.view" in session.get("user_permissions", []) %}
+    <div class="card card-disabled">
+      <div class="card-title">Google Apps Manager (GAM)</div>
+      <div class="card-body muted">
+        Run approved GAM scripts locally through a secure web interface for
+        easier Google Workspace administration.
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+    {% endif %} {% if "newhire.home.view" in session.get("user_permissions", [])
+    %}
+    <div class="card card-disabled">
+      <div class="card-title">New Hire Intake</div>
+      <div class="card-body muted">
+        Manage new hire intake, account preparation, and workflow status.
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+    {% endif %} {% if "virtual_students.home.view" in
+    session.get("user_permissions", []) %}
+    <div class="card card-disabled">
+      <div class="card-title">Virtual Student Tracker</div>
+      <div class="card-body muted">
+        Manage virtual student intake, account status, device preparation, and
+        support tracking.
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+    {% endif %} {% if "techhub.home.view" in session.get("user_permissions", [])
+    %}
+    <div class="card card-disabled">
+      <div class="card-title">Tech Hub</div>
+      <div class="card-body muted">
+        Staff resources, training, documentation, announcements, and support
+        links.
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+    {% endif %} {% if "launchpad.settings.view" in
+    session.get("user_permissions", []) %}
+    <a class="card" href="{{ url_for('launchpad_ui.settings_index') }}">
+      <div class="card-title">Settings</div>
+      <div class="card-body muted">
+        Manage branding, SAML, security, localization, groups, users, and other
+        platform settings.
+      </div>
+      <div class="card-cta">Open →</div>
+    </a>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

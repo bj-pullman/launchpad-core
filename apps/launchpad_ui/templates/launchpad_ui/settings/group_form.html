@@ -1,95 +1,119 @@
-{% extends "launchpad_ui/base.html" %}
-
-{% block title %}
-    {% if form_mode == "new" %}Add Group - Launchpad{% else %}Edit Group - Launchpad{% endif %}
-{% endblock %}
-
-{% block content %}
+{% extends "launchpad_ui/base.html" %} {% block title %} {% if form_mode ==
+"new" %}Add Group - Launchpad{% else %}Edit Group - Launchpad{% endif %} {%
+endblock %} {% block content %}
 <div class="settings-layout">
-    {% include "launchpad_ui/settings/_sidebar.html" %}
+  {% include "launchpad_ui/settings/_sidebar.html" %}
 
-    <div class="settings-main settings-main-narrow">
-        <div class="page-header">
-            <div>
-                <h1>{% if form_mode == "new" %}Add Group{% else %}Edit Group{% endif %}</h1>
-                <p class="muted">Create or update a permission bundle.</p>
-            </div>
-        </div>
-
-        <div class="content-card">
-            <form method="post" class="settings-form">
-                <div class="form-field">
-                    <label for="role_key">Group Key</label>
-                    <input
-                        type="text"
-                        id="role_key"
-                        name="role_key"
-                        value="{{ group.role_key if group else '' }}"
-                        {% if form_mode == "edit" %}readonly{% endif %}
-                    >
-                    <p class="form-help">Used internally. Example: general_settings_manager</p>
-                </div>
-
-                <div class="form-field">
-                    <label for="role_name">Group Name</label>
-                    <input
-                        type="text"
-                        id="role_name"
-                        name="role_name"
-                        value="{{ group.role_name if group else '' }}"
-                    >
-                </div>
-
-                <div class="form-field">
-                    <label for="description">Description</label>
-                    <textarea id="description" name="description" rows="3">{{ group.description if group else '' }}</textarea>
-                </div>
-
-                {% if form_mode == "edit" and group.is_system %}
-                    <div class="flash flash-info">
-                        This is a system group. Its name and description can be viewed here, but deletion is blocked.
-                    </div>
-                {% endif %}
-
-                <div class="content-card optional-card">
-                    <h3>Permissions</h3>
-                    <p class="muted">Select the permissions this group should grant.</p>
-
-                    {% for section, group_map in permission_catalog.items() %}
-                        <div class="card" style="min-height: 0; margin-top: 14px;">
-                            <h3 style="margin-top: 0;">{{ section }}</h3>
-
-                            {% for subgroup, items in group_map.items() %}
-                                <div style="margin-top: 12px;">
-                                    <h4 style="margin: 0 0 10px 0;">{{ subgroup }}</h4>
-
-                                    <div class="checkbox-grid">
-                                        {% for item in items %}
-                                        <label class="checkbox-card">
-                                            <input
-                                                type="checkbox"
-                                                name="permissions"
-                                                value="{{ item.permission_key }}"
-                                                {% if item.permission_key in selected_permissions %}checked{% endif %}
-                                            >
-                                            <span>{{ item.display_label }} — {{ item.action|capitalize }}</span>
-                                        </label>
-                                        {% endfor %}
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% endfor %}
-                </div>
-
-                <div class="form-actions">
-                    <a class="btn btn-secondary" href="{{ url_for('launchpad_ui.settings_groups') }}">Cancel</a>
-                    <button type="submit" class="btn btn-primary">
-                        {% if form_mode == "new" %}Create Group{% else %}Save Group{% endif %}
-                    </button>
-                </div>
-            </form>
-        </div>
+  <div class="settings-main settings-main-narrow">
+    <div class="page-header">
+      <div>
+        <h1>
+          {% if form_mode == "new" %}Add Group{% else %}Edit Group{% endif %}
+        </h1>
+        <p class="muted">Create or update a permission bundle.</p>
+      </div>
     </div>
+
+    <div class="content-card">
+      <form method="post" class="settings-form">
+        <div class="form-field">
+          <label for="role_key">Group Key</label>
+          <input
+            type="text"
+            id="role_key"
+            name="role_key"
+            value="{{ group.role_key if group else '' }}"
+            {%
+            if
+            form_mode=""
+            ="edit"
+            %}readonly{%
+            endif
+            %}
+          />
+          <p class="form-help">
+            Used internally. Example: general_settings_manager
+          </p>
+        </div>
+
+        <div class="form-field">
+          <label for="role_name">Group Name</label>
+          <input
+            type="text"
+            id="role_name"
+            name="role_name"
+            value="{{ group.role_name if group else '' }}"
+          />
+        </div>
+
+        <div class="form-field">
+          <label for="description">Description</label>
+          <textarea id="description" name="description" rows="3">
+{{ group.description if group else '' }}</textarea
+          >
+        </div>
+
+        {% if form_mode == "edit" and group.is_system %}
+        <div class="flash flash-info">
+          This is a system group. Its name and description can be viewed here,
+          but deletion is blocked.
+        </div>
+        {% endif %}
+
+        <div class="content-card optional-card">
+          <h3>Permissions</h3>
+          <p class="muted">Select the permissions this group should grant.</p>
+
+          {% for section, group_map in permission_catalog.items() %}
+          <div class="card" style="min-height: 0; margin-top: 14px">
+            <h3 style="margin-top: 0">{{ section }}</h3>
+
+            {% for subgroup, items in group_map.items() %}
+            <div style="margin-top: 12px">
+              <h4 style="margin: 0 0 10px 0">{{ subgroup }}</h4>
+
+              <div class="checkbox-grid">
+                {% for item in items %}
+                <label class="checkbox-card">
+                  <input
+                    type="checkbox"
+                    name="permissions"
+                    value="{{ item.permission_key }}"
+                    {%
+                    if
+                    item.permission_key
+                    in
+                    selected_permissions
+                    %}checked{%
+                    endif
+                    %}
+                  />
+                  <span
+                    >{{ item.display_label }} — {{ item.action|capitalize
+                    }}</span
+                  >
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="form-actions">
+          <a
+            class="btn btn-secondary"
+            href="{{ url_for('launchpad_ui.settings_groups') }}"
+            >Cancel</a
+          >
+          <button type="submit" class="btn btn-primary">
+            {% if form_mode == "new" %}Create Group{% else %}Save Group{% endif
+            %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 {% endblock %}
