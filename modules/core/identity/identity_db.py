@@ -31,7 +31,7 @@ def init_identity_db():
 
             email TEXT NOT NULL UNIQUE,
             username TEXT NULL,
-            display_name TEXT NOT NULL,
+            display_name TEXT NULL,
 
             first_name TEXT NULL,
             last_name TEXT NULL,

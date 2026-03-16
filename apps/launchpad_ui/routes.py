@@ -663,22 +663,6 @@ def settings_users_new():
                 display_name=display_name,
             )
 
-        if not display_name:
-            flash("Display name is required.", "error")
-            return render_template(
-                "launchpad_ui/settings/users_form.html",
-                active_section="users",
-                user=form_user,
-                groups=groups,
-                selected_group_keys=selected_group_keys,
-                selected_direct_permissions=selected_direct_permissions,
-                permission_catalog=permission_catalog,
-                access_summary=None,
-                form_mode="new",
-                account_type=account_type,
-                display_name=display_name,
-            )
-
         if account_type == "sso" and "@" not in username:
             flash("SSO-only accounts must use an email address.", "error")
             return render_template(
@@ -853,22 +837,6 @@ def settings_users_edit(user_id: int):
 
         if not username:
             flash("Username or email is required.", "error")
-            return render_template(
-                "launchpad_ui/settings/users_form.html",
-                active_section="users",
-                user=form_user,
-                groups=groups,
-                selected_group_keys=selected_group_keys,
-                selected_direct_permissions=selected_direct_permissions,
-                permission_catalog=permission_catalog,
-                access_summary=build_user_access_summary(user_id),
-                form_mode="edit",
-                account_type=account_type,
-                display_name=display_name,
-            )
-
-        if not display_name:
-            flash("Display name is required.", "error")
             return render_template(
                 "launchpad_ui/settings/users_form.html",
                 active_section="users",

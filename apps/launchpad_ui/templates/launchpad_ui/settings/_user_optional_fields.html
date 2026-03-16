@@ -22,6 +22,16 @@
   </div>
 </div>
 
+  <div class="form-field">
+    <label for="display_name">Display Name</label>
+    <input
+      type="text"
+      id="display_name"
+      name="display_name"
+      value="{{ user.display_name if user and user.display_name else '' }}"
+    />
+  </div>
+
 <div class="form-grid-equal">
   <div class="form-field">
     <label for="job_title">Job Title</label>

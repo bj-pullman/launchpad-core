@@ -72,18 +72,6 @@
                             >
                         </div>
 
-                        <div class="form-field">
-                            <label for="display_name">Display Name</label>
-                            <input
-                                type="text"
-                                id="display_name"
-                                name="display_name"
-                                value="{{ display_name if display_name else (user.display_name if user and user.display_name else '') }}"
-                                required
-                                autocomplete="off"
-                            >
-                        </div>
-
                         <div class="form-field" id="password-field">
                             <label for="password">
                                 {% if form_mode == "new" %}Password{% else %}New Password{% endif %}
