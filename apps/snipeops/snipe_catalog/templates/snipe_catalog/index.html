@@ -1,0 +1,76 @@
+<!-- snipe_catalog/index.html -->
+
+{% extends "snipeops/base.html" %}
+
+{% block title %}SnipeOps • Catalog{% endblock %}
+
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('snipe_catalog.static', filename='css/snipe_catalog.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header catalog-header">
+    <div class="catalog-header-left">
+      <h1>Snipe Catalog</h1>
+      <p class="muted">
+        Local cache of Snipe-IT reference data (models, locations, status, suppliers, depreciation).
+      </p>
+      <p class="muted">
+        Last sync:
+        <span id="lastSync"
+              data-utc="{{ last_sync or '' }}">
+          {{ last_sync or "Never" }}
+        </span>
+      </p>
+    </div>
+
+    <div class="catalog-header-right">
+      <button id="syncBtn" class="btn btn-sync">
+        ⟳ Sync Now
+      </button>
+      <div id="syncStatus" class="sync-status"></div>
+    </div>
+  </div>
+
+  <div class="card-body">
+    <hr style="margin:16px 0;">
+
+    <!-- Tabs -->
+    <div class="catalog-tabs" role="tablist" aria-label="Catalog tables">
+      <button class="catalog-tab active" data-tab="models" role="tab" aria-selected="true">Models</button>
+      <button class="catalog-tab" data-tab="locations" role="tab" aria-selected="false">Locations</button>
+      <button class="catalog-tab" data-tab="statuslabels" role="tab" aria-selected="false">Status Labels</button>
+      <button class="catalog-tab" data-tab="suppliers" role="tab" aria-selected="false">Suppliers</button>
+      <button class="catalog-tab" data-tab="depreciations" role="tab" aria-selected="false">Depreciations</button>
+    </div>
+
+    <!-- Active panel -->
+    <div class="panel">
+      <div class="catalog-panel-head">
+        <h3 id="panelTitle" style="margin:0;">Models</h3>
+
+        <div class="catalog-panel-tools">
+          <input id="filterBox" class="catalog-filter" type="search" placeholder="Filter results…" />
+          <span class="muted" id="countHint"></span>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="catalog-table">
+          <thead>
+            <tr id="tableHead"></tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td>Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('snipe_catalog.static', filename='js/snipe_catalog.js') }}"></script>
+{% endblock %}

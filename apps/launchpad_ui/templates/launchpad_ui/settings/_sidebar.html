@@ -1,0 +1,16 @@
+<!-- _sidebar.html -->
+
+<aside class="settings-sidebar">
+    <ul class="settings-nav">
+        {% for section in settings_sections %}
+            <li>
+                <a
+                    href="{{ url_for(section.endpoint) }}"
+                    class="{% if active_section == section.key %}active{% endif %}"
+                >
+                    {{ section.label }}
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+</aside>

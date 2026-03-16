@@ -1,0 +1,124 @@
+from modules.core.identity.rbac_service import (
+    create_role,
+    create_permission,
+    assign_permission_to_role,
+)
+
+
+def seed_permissions():
+    # Roles
+    create_role("super_admin", "Super Admin", "Full platform access", is_system=1)
+    create_role("launchpad_admin", "Launchpad Admin", "Launchpad administration", is_system=1)
+    create_role("snipeops_user", "SnipeOps User", "SnipeOps feature access", is_system=1)
+    create_role("viewer", "Viewer", "Basic Launchpad access only", is_system=1)
+
+    # Permissions
+    permission_keys = [
+        # Launchpad home
+        ("launchpad.home.view", "Launchpad Home"),
+        ("launchpad.home.manage", "Manage Launchpad Home"),
+
+        # Launchpad settings root
+        ("launchpad.settings.view", "Launchpad Settings"),
+        ("launchpad.settings.manage", "Manage Launchpad Settings"),
+
+        # General settings
+        ("launchpad.settings.general.view", "General Settings"),
+        ("launchpad.settings.general.manage", "Manage General Settings"),
+
+        # SnipeOps settings
+        ("launchpad.settings.snipeops.view", "SnipeOps Settings"),
+        ("launchpad.settings.snipeops.manage", "Manage SnipeOps Settings"),
+
+        # SAML settings
+        ("launchpad.settings.saml.view", "SAML Settings"),
+        ("launchpad.settings.saml.manage", "Manage SAML Settings"),
+
+        # Security settings
+        ("launchpad.settings.security.view", "Security Settings"),
+        ("launchpad.settings.security.manage", "Manage Security Settings"),
+
+        # Groups settings
+        ("launchpad.settings.groups.view", "Groups Settings"),
+        ("launchpad.settings.groups.manage", "Manage Groups Settings"),
+
+        # Users settings
+        ("launchpad.settings.users.view", "Users Settings"),
+        ("launchpad.settings.users.manage", "Manage Users Settings"),
+
+        # SnipeOps app access
+        ("snipeops.home.view", "SnipeOps Home"),
+        ("snipeops.home.manage", "Manage SnipeOps Home"),
+        ("snipeops.import_by_scan.view", "Import by Scan"),
+        ("snipeops.import_by_scan.manage", "Manage Import by Scan"),
+        ("snipeops.snipe_catalog.view", "Snipe Catalog"),
+        ("snipeops.snipe_catalog.manage", "Manage Snipe Catalog"),
+
+        # Future apps
+        ("finance.home.view", "Finance Home"),
+        ("finance.home.manage", "Manage Finance Home"),
+
+        ("user360.home.view", "User360 Home"),
+        ("user360.home.manage", "Manage User360 Home"),
+
+        ("gam.home.view", "GAM Home"),
+        ("gam.home.manage", "Manage GAM Home"),
+
+        ("newhire.home.view", "New Hire Intake Home"),
+        ("newhire.home.manage", "Manage New Hire Intake Home"),
+
+        ("virtual_students.home.view", "Virtual Student Tracker Home"),
+        ("virtual_students.home.manage", "Manage Virtual Student Tracker Home"),
+
+        ("techhub.home.view", "Tech Hub Home"),
+        ("techhub.home.manage", "Manage Tech Hub Home"),
+    ]
+
+    for key, name in permission_keys:
+        create_permission(key, name)
+
+    # Super Admin gets everything
+    for key, _ in permission_keys:
+        assign_permission_to_role("super_admin", key)
+
+    # Viewer gets basic platform access only
+    assign_permission_to_role("viewer", "launchpad.home.view")
+
+    # Launchpad Admin
+    launchpad_admin_permissions = [
+        "launchpad.home.view",
+        "launchpad.settings.view",
+        "launchpad.settings.manage",
+
+        "launchpad.settings.general.view",
+        "launchpad.settings.general.manage",
+
+        "launchpad.settings.snipeops.view",
+        "launchpad.settings.snipeops.manage",
+
+        "launchpad.settings.saml.view",
+        "launchpad.settings.saml.manage",
+
+        "launchpad.settings.security.view",
+        "launchpad.settings.security.manage",
+
+        "launchpad.settings.groups.view",
+        "launchpad.settings.groups.manage",
+
+        "launchpad.settings.users.view",
+        "launchpad.settings.users.manage",
+    ]
+
+    for key in launchpad_admin_permissions:
+        assign_permission_to_role("launchpad_admin", key)
+
+    # SnipeOps User
+    snipeops_user_permissions = [
+        "launchpad.home.view",
+        "snipeops.home.view",
+        "snipeops.import_by_scan.view",
+        "snipeops.snipe_catalog.view",
+    ]
+
+    for key in snipeops_user_permissions:
+        assign_permission_to_role("snipeops_user", key)

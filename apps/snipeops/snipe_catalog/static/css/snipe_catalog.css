@@ -1,0 +1,140 @@
+.grid { 
+    display:grid; 
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+    gap:12px; 
+}
+
+.panel { 
+    padding:12px; 
+    border:1px solid rgba(255,255,255,.12); 
+    border-radius:12px; 
+}
+
+.pre { 
+    white-space: pre-wrap; 
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; 
+    font-size: 12px; 
+}
+
+/* Header layout */
+.catalog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.catalog-header-right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Sync button styling */
+.btn-sync {
+  background: linear-gradient(135deg, #2a8a3a, #1f6e2c);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+
+.btn-sync:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+}
+
+.btn-sync:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.sync-status {
+  font-size: 13px;
+  min-height: 18px;
+}
+
+.sync-status.ok { color: #2a8a3a; }
+.sync-status.bad { color: #b23b3b; }
+
+/* Tabs + single-panel controls for Catalog */
+
+.catalog-tabs{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin: 8px 0 12px 0;
+}
+
+.catalog-tab{
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.catalog-tab.active{
+  background: rgba(255,255,255,.14);
+}
+
+.catalog-panel-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom: 10px;
+}
+
+.catalog-panel-tools{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.catalog-filter{
+  width: min(420px, 60vw);
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.20);
+  color: inherit;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.catalog-table thead {
+  background: rgba(255,255,255,.06);
+}
+
+.catalog-table th {
+  text-align: left;
+  padding: 12px 10px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255,255,255,.15);
+}
+
+.catalog-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.catalog-table tbody tr:hover {
+  background: rgba(255,255,255,.05);
+}

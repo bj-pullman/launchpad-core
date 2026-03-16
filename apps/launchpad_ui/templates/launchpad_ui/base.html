@@ -1,0 +1,95 @@
+<!-- launchpad_ui/base.html -->
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}{{ general_settings.portal_name or "Launchpad" }}{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/launchpad.css') }}">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header class="topbar">
+        <div class="container topbar-inner">
+            <div class="topbar-left">
+                <a href="{{ url_for('launchpad_ui.home') }}" class="brand">{{ general_settings.portal_name or "Launchpad" }}</a>
+            </div>
+
+            <nav class="topbar-nav">
+                <a href="{{ url_for('launchpad_ui.home') }}" class="topbar-link">Dashboard</a>
+
+                    {% if launchpad_apps %}
+                    <div class="nav-dropdown">
+                        <button class="nav-dropdown-btn" type="button">
+                            Applications
+                            <span class="nav-caret">▾</span>
+                        </button>
+
+                        <div class="nav-dropdown-menu">
+                            {% for app in launchpad_apps %}
+                                <a href="{{ url_for(app.endpoint) }}" class="nav-dropdown-item">
+                                    {{ app.label }}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                {% if settings_sections %}
+                    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="topbar-link">Settings</a>
+                {% endif %}
+
+                {% if session.get("is_authenticated") %}
+                <div class="nav-dropdown">
+                    <button class="nav-dropdown-btn" type="button">
+                        Account
+                        <span class="nav-caret">▾</span>
+                    </button>
+
+                    <div class="nav-dropdown-menu nav-dropdown-menu-sm">
+                        <a href="{{ url_for('auth.logout') }}" class="nav-dropdown-item">Logout</a>
+                    </div>
+                </div>
+                {% else %}
+                    <a href="{{ url_for('auth.login') }}" class="topbar-link">Login</a>
+                {% endif %}
+
+            </nav>
+        </div>
+    </header>
+
+    {% if general_settings.announcement_enabled and general_settings.announcement_text %}
+        <section class="announcement-banner">
+            <div class="container announcement-banner-inner">
+                {{ general_settings.announcement_text }}
+            </div>
+        </section>
+    {% endif %}
+
+    <main class="page-shell">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-stack">
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-inner">
+            <span class="muted">{{ general_settings.footer_text or "Sheridan School District • Internal Tech Ops" }}</span>
+        </div>
+  </footer>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

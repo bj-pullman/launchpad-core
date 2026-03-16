@@ -1,0 +1,106 @@
+{% extends "layouts/base_public.html" %}
+
+{% block title %}Initial Setup{% endblock %}
+
+{% block extra_css %}
+<link
+    rel="stylesheet"
+    href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/login.css') }}"
+>
+<style>
+    .setup-card {
+        max-width: 560px;
+    }
+
+    .setup-meta {
+        margin-bottom: 18px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #334155;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .setup-meta strong {
+        color: #0f172a;
+    }
+
+    .setup-help {
+        margin: 0 0 18px;
+        color: #64748b;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    .setup-actions {
+        margin-top: 6px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-page">
+    <div class="login-shell">
+        <div class="login-card setup-card">
+            <div class="login-header">
+                <div class="login-badge">First-Time Setup</div>
+                <h1>Configure Local Administrator</h1>
+                <p class="login-subtext">
+                    Set the password for the initial local administrator account before using Launchpad.
+                </p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-stack">
+                        {% for category, message in messages %}
+                            <div class="flash flash-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="setup-meta">
+                <div><strong>Username:</strong> admin</div>
+                <div><strong>Role:</strong> Super Administrator</div>
+            </div>
+
+            <p class="setup-help">
+                This account is your local breakglass administrator and will have full access to Launchpad.
+            </p>
+
+            <form method="post" action="{{ url_for('setup.initial_setup') }}" class="login-form">
+                <div class="form-row">
+                    <label for="password">New Password</label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        autocomplete="new-password"
+                        required
+                    >
+                </div>
+
+                <div class="form-row">
+                    <label for="confirm">Confirm Password</label>
+                    <input
+                        type="password"
+                        id="confirm"
+                        name="confirm"
+                        autocomplete="new-password"
+                        required
+                    >
+                </div>
+
+                <div class="setup-actions">
+                    <button type="submit" class="primary-login-btn">
+                        Save Administrator Password
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

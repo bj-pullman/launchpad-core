@@ -1,0 +1,20 @@
+<!-- security.html -->
+
+{% extends "launchpad_ui/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Security Settings</h1>
+    <p class="page-subtitle">Control local auth, MFA, and password restrictions.</p>
+</div>
+
+<div class="settings-layout">
+    {% include "launchpad_ui/settings/_sidebar.html" %}
+    <section class="settings-content">
+        <div class="card">
+            <h2>Security</h2>
+            <p>Local login, TOTP MFA, lockout rules, session controls, and password policy will live here.</p>
+        </div>
+    </section>
+</div>
+{% endblock %}

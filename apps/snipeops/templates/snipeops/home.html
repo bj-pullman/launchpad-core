@@ -1,0 +1,85 @@
+{% extends "snipeops/base.html" %}
+{% block title %}SnipeOps • Home{% endblock %}
+
+{% block content %}
+  <div class="hero">
+    <h1>SnipeOps</h1>
+    <p class="muted">
+      SnipeIT webapp helper with integrated tools to help operations and automation workflows.
+    </p>
+  </div>
+
+  <div class="grid">
+    <a class="card" href="{{ url_for('import_by_scan.index') }}">
+      <div class="card-title">Import by Scan</div>
+      <div class="card-body muted">
+        Scan serials, create assets, keep a local log for audit and recovery.
+      </div>
+      <div class="card-cta">Open →</div>
+    </a>
+
+    <a class="card" href="{{ url_for('snipe_catalog.index') }}">
+      <div class="card-title">Snipe Catalog</div>
+      <div class="card-body muted">
+        Cached Snipe reference data used by Import by Scan dropdowns.
+      </div>
+      <div class="card-cta">Open →</div>
+    </a>
+
+    <div class="card card-disabled">
+      <div class="card-title">Checkout Assets</div>
+      <div class="card-body muted">
+        Checkout and Checkin assets to users, other assets, locations, and companies, with the ability to do it in bulk. 
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+
+    <div class="card card-disabled">
+      <div class="card-title">Device Audit</div>
+      <div class="card-body muted">
+        Audit and reconcile devices by serial with assignment updates, cart-based Chromebook audits, condition notes, and synced logs.
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+
+    <div class="card card-disabled">
+      <div class="card-title">Intune Sync</div>
+      <div class="card-body muted">
+        Automation workflow to sync Intune device assignments to users in SnipeIT (coming next).
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+
+    <div class="card card-disabled">
+      <div class="card-title">Mosyle Sync</div>
+      <div class="card-body muted">
+        Automation workflow to sync Mosyle device assignments to users in SnipeIT (coming next).
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+
+    <div class="card card-disabled">
+      <div class="card-title">Secure User Rostering</div>
+      <div class="card-body muted">
+        Using SnipeIT's API and Microsoft Graph, we will roster users from Entra ID into SnipeIT, bypassing the security risk of opening LDAP to the public (coming next).
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+
+    <div class="card card-disabled">
+      <div class="card-title">Purchase History</div>
+      <div class="card-body muted">
+        Purchase history for devices, components, and other assets (coming next).
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+
+    <div class="card card-disabled">
+      <div class="card-title">Reports</div>
+      <div class="card-body muted">
+        Activity log, exports, and operational summaries (coming next).
+      </div>
+      <div class="card-cta muted">Coming soon</div>
+    </div>
+  </div>
+{% endblock %}

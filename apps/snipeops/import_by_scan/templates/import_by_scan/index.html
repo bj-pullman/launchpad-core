@@ -1,0 +1,187 @@
+<!-- import_by_scan/index.html -->
+
+{% extends "snipeops/base.html" %}
+{% block title %}SnipeOps • Import by Scan{% endblock %}
+
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('import_by_scan.static', filename='css/import_by_scan.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="tool-header">
+    <div>
+      <h1>Import by Scan</h1>
+      <p class="muted">Scan a serial number to create an asset in Snipe-IT. Defaults persist until changed.</p>
+    </div>
+  </div>
+
+  <div class="tool-grid-top">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Session Defaults</h2>
+        <div class="panel-actions">
+          <button id="resetDefaults" class="btn btn-ghost" type="button">Reset</button>
+          <button id="saveDefaults" class="btn" type="button">Save</button>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label class="label" for="model_id">Model</label>
+          <div class="select">
+            <select id="model_id" name="model_id">
+              <option value="">Select model…</option>
+              {% for m in models %}
+                <option value="{{ m.id }}">{{ m.name }}{% if m.manufacturer_name %} ({{ m.manufacturer_name }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="status_id">Status</label>
+          <div class="select">
+            <select id="status_id" name="status_id">
+              <option value="">Select status…</option>
+              {% for s in statuses %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="location_id">Location</label>
+          <div class="select">
+            <select id="location_id" name="location_id">
+              <option value="">Select location…</option>
+              {% for l in locations %}
+                <option value="{{ l.id }}">{{ l.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="supplier_id">Supplier</label>
+          <div class="select">
+            <select id="supplier_id" name="supplier_id">
+              <option value="">Select supplier…</option>
+              {% for sup in suppliers %}
+                <option value="{{ sup.id }}">{{ sup.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="depreciation_id">Depreciation</label>
+          <div class="select">
+            <select id="depreciation_id" name="depreciation_id">
+              <option value="">Select depreciation…</option>
+              {% for d in depreciations %}
+                <option value="{{ d.id }}">{{ d.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="purchase_cost">Purchase cost</label>
+          <input id="purchase_cost" name="purchase_cost" class="input" inputmode="decimal" placeholder="0.00" />
+        </div>
+
+        <div class="field">
+          <label class="label" for="purchase_date">Purchase date</label>
+          <input id="purchase_date" name="purchase_date" class="input" type="date" />
+        </div>
+
+        <div class="field">
+          <label class="label" for="order_number">Order number</label>
+          <input id="order_number" name="order_number" class="input" placeholder="PO / Order #" />
+        </div>
+
+        <div class="field">
+          <label class="label" for="warranty_months">Warranty (months)</label>
+          <input id="warranty_months" name="warranty_months" class="input" inputmode="numeric" placeholder="12" />
+        </div>
+
+        <div class="field">
+          <label class="label" for="asset_tag">
+            Asset Tag <span class="badge badge-opt">Optional</span>
+          </label>
+          <input id="asset_tag" name="asset_tag" class="input" inputmode="numeric" placeholder="6 digits (e.g. 123456) or blank" />
+        </div>
+      </div>
+
+      <div id="defaultsStatus" class="status muted">Defaults not saved yet.</div>
+      <div class="hint muted">Tip: Save once, then scan continuously. Change defaults any time.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Scan</h2>
+
+      <form id="scanForm" class="scan-form">
+        <label class="label" for="serial">Serial number</label>
+        <div class="row">
+          <input id="serial" name="serial" class="input" autocomplete="off" autofocus placeholder="Scan serial barcode…" />
+          <button class="btn" type="submit">Create</button>
+        </div>
+        <div id="status" class="status muted">Ready.</div>
+      </form>
+
+      <div class="hint muted">
+        Tip: click in the serial field once, then just scan continuously.
+      </div>
+    </section>
+  </div>
+
+  <section class="panel panel-wide">
+    <div class="panel-head">
+      <h2>Recent</h2>
+      <div class="muted small">Stored locally on this server (SQLite).</div>
+    </div>
+
+    <div class="recent-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Go to Asset</th>
+            <th>Serial</th>
+            <th>Asset</th>
+            <th>Result</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="recentBody">
+          {% for r in recent %}
+            <tr class="{{ 'ok' if r.ok else 'bad' }}">
+              <td class="mono">{{ r.timestamp_display or r.timestamp }}</td>
+
+              <td class="mono">
+                {% if r.asset_url %}
+                  <a href="{{ r.asset_url }}" target="_blank" rel="noopener">Go to Asset</a>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+
+              <td class="mono">{{ r.serial }}</td>
+
+              <td class="mono">{{ r.asset_tag or '' }}</td>
+
+              <td>{{ 'Created' if r.ok else 'Error' }}</td>
+
+              <td class="muted">{{ r.message or '' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script defer src="{{ url_for('import_by_scan.static', filename='js/import_by_scan.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,79 @@
+<!-- groups.html -->
+
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}Groups - Launchpad{% endblock %}
+
+{% block content %}
+<div class="settings-layout">
+    {% include "launchpad_ui/settings/_sidebar.html" %}
+
+    <div class="settings-main">
+        <div class="page-header">
+            <div>
+                <h1>Groups</h1>
+                <p class="muted">Manage reusable permission bundles for users.</p>
+            </div>
+
+            {% if "launchpad.settings.groups.manage" in session.get("user_permissions", []) %}
+            <div class="page-header-actions">
+                <a class="btn btn-primary" href="{{ url_for('launchpad_ui.settings_groups_new') }}">
+                    Add Group
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="content-card">
+            {% if groups %}
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Group</th>
+                            <th>Type</th>
+                            <th>Permissions</th>
+                            <th class="actions-col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for group in groups %}
+                        <tr>
+                            <td>
+                                <div class="table-primary">{{ group.role_name }}</div>
+                                {% if group.description %}
+                                    <div class="muted">{{ group.description }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if group.is_system %}
+                                    <span class="badge badge-muted">System</span>
+                                {% else %}
+                                    <span class="badge badge-role">Custom</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ group.permission_count }}</td>
+                            <td class="actions-col">
+                                {% if "launchpad.settings.groups.manage" in session.get("user_permissions", []) %}
+                                    <a class="table-link" href="{{ url_for('launchpad_ui.settings_groups_edit', group_id=group.id) }}">
+                                        Edit
+                                    </a>
+                                {% else %}
+                                    <span class="muted">View only</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <h3>No groups found</h3>
+                <p class="muted">No groups are available yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

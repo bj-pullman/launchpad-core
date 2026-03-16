@@ -1,0 +1,29 @@
+<!-- index.html -->
+
+{% extends "launchpad_ui/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+    <p class="page-subtitle">Configure Launchpad by category.</p>
+</div>
+
+<div class="settings-layout">
+    <aside class="settings-sidebar">
+        <ul class="settings-nav">
+            {% for section in settings_sections %}
+                <li>
+                    <a href="{{ url_for(section.endpoint) }}">{{ section.label }}</a>
+                </li>
+            {% endfor %}
+        </ul>
+    </aside>
+
+    <section class="settings-content">
+        <div class="card">
+            <h2>Settings Categories</h2>
+            <p>Select a category from the left.</p>
+        </div>
+    </section>
+</div>
+{% endblock %}

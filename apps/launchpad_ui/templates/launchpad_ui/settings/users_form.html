@@ -1,0 +1,234 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}
+    {% if form_mode == "new" %}Add User - Launchpad{% else %}Edit User - Launchpad{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="settings-layout">
+    {% include "launchpad_ui/settings/_sidebar.html" %}
+
+    <div class="settings-main settings-main-narrow">
+        <div class="page-header">
+            <div>
+                <h1>{% if form_mode == "new" %}Add User{% else %}Edit User{% endif %}</h1>
+                <p class="muted">
+                    {% if form_mode == "new" %}
+                        Create a local account or pre-stage an SSO-only account.
+                    {% else %}
+                        Update account details, groups, and direct permissions.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="settings-tabs">
+            <button type="button" class="settings-tab active" data-tab="basic">Basic Information</button>
+            <button type="button" class="settings-tab" data-tab="groups">Groups</button>
+            <button type="button" class="settings-tab" data-tab="permissions">Permissions</button>
+            {% if form_mode == "edit" %}
+            <button type="button" class="settings-tab" data-tab="summary">Access Summary</button>
+            {% endif %}
+        </div>
+
+        <div class="content-card">
+            <form method="post" class="settings-form" id="user-form" data-form-mode="{{ form_mode }}">
+
+                <div class="settings-tab-panel active" data-panel="basic">
+                    <div class="card" style="min-height: 0;">
+                        <h2>Basic Information</h2>
+
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label for="account_type">Account Type</label>
+                                <select id="account_type" name="account_type">
+                                    <option value="local" {% if account_type != "sso" %}selected{% endif %}>Local Account</option>
+                                    <option value="sso" {% if account_type == "sso" %}selected{% endif %}>SSO Only</option>
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="is_active">Status</label>
+                                <select id="is_active" name="is_active">
+                                    <option value="1" {% if not user or user.is_active %}selected{% endif %}>Active</option>
+                                    <option value="0" {% if user and not user.is_active %}selected{% endif %}>Disabled</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="username">Email / Username</label>
+                            <input
+                                type="text"
+                                id="username"
+                                name="username"
+                                value="{{ user.username if user else '' }}"
+                                required
+                                autocomplete="off"
+                            >
+                        </div>
+
+                        <div class="form-field">
+                            <label for="display_name">Display Name</label>
+                            <input
+                                type="text"
+                                id="display_name"
+                                name="display_name"
+                                value="{{ display_name if display_name else (user.display_name if user and user.display_name else '') }}"
+                                required
+                                autocomplete="off"
+                            >
+                        </div>
+
+                        <div class="form-field" id="password-field">
+                            <label for="password">
+                                {% if form_mode == "new" %}Password{% else %}New Password{% endif %}
+                            </label>
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                placeholder="{% if form_mode == 'edit' %}Leave blank to keep current password{% else %}Required for local accounts only{% endif %}"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="content-card optional-card">
+                        <h3>Optional Profile Details</h3>
+                        <p class="muted">These fields are optional and are not required for authentication.</p>
+                        {% include "launchpad_ui/settings/_user_optional_fields.html" %}
+                    </div>
+                </div>
+
+                <div class="settings-tab-panel" data-panel="groups">
+                    <div class="card" style="min-height: 0;">
+                        <h2>Groups</h2>
+                        <p class="muted">Groups provide reusable permission bundles.</p>
+
+                        <div class="checkbox-grid">
+                            {% for group in groups %}
+                            <label class="checkbox-card">
+                                <input
+                                    type="checkbox"
+                                    name="groups"
+                                    value="{{ group.role_key }}"
+                                    {% if group.role_key in selected_group_keys %}checked{% endif %}
+                                >
+                                <span>{{ group.role_name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-tab-panel" data-panel="permissions">
+                    <div class="card" style="min-height: 0;">
+                        <h2>Direct Permissions</h2>
+                        <p class="muted">Use direct permissions only for one-off exceptions.</p>
+
+                        {% for section, group_map in permission_catalog.items() %}
+                            <div class="card" style="min-height: 0; margin-top: 14px;">
+                                <h3 style="margin-top: 0;">{{ section }}</h3>
+
+                                {% for subgroup, items in group_map.items() %}
+                                    <div style="margin-top: 12px;">
+                                        <h4 style="margin: 0 0 10px 0;">{{ subgroup }}</h4>
+
+                                        <div class="checkbox-grid">
+                                            {% for item in items %}
+                                            <label class="checkbox-card">
+                                                <input
+                                                    type="checkbox"
+                                                    name="direct_permissions"
+                                                    value="{{ item.permission_key }}"
+                                                    {% if item.permission_key in selected_direct_permissions %}checked{% endif %}
+                                                >
+                                                <span>{{ item.display_label }} — {{ item.action|capitalize }}</span>
+                                            </label>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {% if form_mode == "edit" and access_summary %}
+                <div class="settings-tab-panel" data-panel="summary">
+                    <div class="card" style="min-height: 0;">
+                        <h2>Access Summary</h2>
+
+                        {% if access_summary.is_super_admin %}
+                            <div class="flash flash-info">
+                                This user is a Super Admin and has full platform access.
+                            </div>
+                        {% endif %}
+
+                        <div class="form-grid-equal">
+                            <div>
+                                <h3>Groups</h3>
+                                {% if access_summary.roles %}
+                                    <div class="role-badges">
+                                        {% for role in access_summary.roles %}
+                                            <span class="badge badge-role">{{ role.role_name }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <p class="muted">No groups assigned.</p>
+                                {% endif %}
+                            </div>
+
+                            <div>
+                                <h3>Direct Permissions</h3>
+                                {% if access_summary.direct_permissions %}
+                                    <ul>
+                                        {% for permission in access_summary.direct_permissions %}
+                                            <li>{{ permission.permission_name }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    <p class="muted">No direct permissions assigned.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 16px;">
+                            <h3>Effective Permissions</h3>
+                            {% if access_summary.effective_permissions %}
+                            <div class="permission-list">
+                                {% for permission in access_summary.effective_permissions %}
+                                    <span class="permission-chip">
+                                        {{ permission.permission_name }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                                <p class="muted">No effective permissions found.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="form-actions">
+                    <a class="btn btn-secondary" href="{{ url_for('launchpad_ui.settings_users') }}">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        {% if form_mode == "new" %}Create User{% else %}Save Changes{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+{% endblock %}
