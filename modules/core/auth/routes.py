@@ -175,7 +175,6 @@ def local_login():
         remember=False,
     )
 
-    flash(f"Signed in as {local_user['email']}.", "success")
     return redirect(next_url)
 
 
@@ -269,7 +268,6 @@ def google_callback():
     next_url = session.pop("post_login_redirect", "/")
     session.pop("requested_remember", None)
 
-    flash("Signed in successfully.", "success")
     return redirect(next_url)
 
 
