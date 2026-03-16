@@ -1,4 +1,4 @@
-from modules.core.auth.blueprints import auth_bp
+from modules.core.auth.blueprint import auth_bp
 from modules.core.auth import routes  # noqa: F401
 
 # Adjust this import to match your actual project

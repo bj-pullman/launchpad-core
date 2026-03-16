@@ -2,12 +2,17 @@
 # ENVIRONMENT / SECRETS
 # ==============================
 .env
-.env.*
+.env.local
+.env.production
+.env.development
 *.env
 *.key
 *.pem
 *.crt
 secrets.json
+
+# allow example file
+!.env.example
 
 # ==============================
 # PYTHON

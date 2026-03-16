@@ -101,9 +101,6 @@ def create_user(data: dict):
     if not payload["email"]:
         raise ValueError("email is required")
 
-    if not payload["display_name"]:
-        raise ValueError("display_name is required")
-
     now = utc_now_iso()
 
     with get_connection() as conn:
@@ -233,9 +230,6 @@ def upsert_user(data: dict):
 
     if not payload["email"]:
         raise ValueError("email is required")
-
-    if not payload["display_name"]:
-        raise ValueError("display_name is required")
 
     existing_user = get_user_by_email(payload["email"])
 

@@ -281,7 +281,6 @@ def settings_general():
             return redirect(url_for("launchpad_ui.settings_general"))
 
         organization_name = (request.form.get("organization_name") or "").strip()
-        portal_name = (request.form.get("portal_name") or "").strip()
         footer_text = (request.form.get("footer_text") or "").strip()
         support_email = (request.form.get("support_email") or "").strip()
         helpdesk_url = (request.form.get("helpdesk_url") or "").strip()
@@ -306,7 +305,6 @@ def settings_general():
             time_format_value = "12h"
 
         set_setting("general.organization_name", organization_name)
-        set_setting("general.portal_name", portal_name)
         set_setting("general.footer_text", footer_text)
         set_setting("general.support_email", support_email)
         set_setting("general.helpdesk_url", helpdesk_url)
@@ -322,7 +320,6 @@ def settings_general():
 
     settings = {
         "organization_name": get_setting("general.organization_name", ""),
-        "portal_name": get_setting("general.portal_name", ""),
         "footer_text": get_setting("general.footer_text", "Sheridan School District • Internal Tech Ops"),
         "support_email": get_setting("general.support_email", ""),
         "helpdesk_url": get_setting("general.helpdesk_url", ""),
@@ -666,22 +663,6 @@ def settings_users_new():
                 display_name=display_name,
             )
 
-        if not display_name:
-            flash("Display name is required.", "error")
-            return render_template(
-                "launchpad_ui/settings/users_form.html",
-                active_section="users",
-                user=form_user,
-                groups=groups,
-                selected_group_keys=selected_group_keys,
-                selected_direct_permissions=selected_direct_permissions,
-                permission_catalog=permission_catalog,
-                access_summary=None,
-                form_mode="new",
-                account_type=account_type,
-                display_name=display_name,
-            )
-
         if account_type == "sso" and "@" not in username:
             flash("SSO-only accounts must use an email address.", "error")
             return render_template(
@@ -870,22 +851,6 @@ def settings_users_edit(user_id: int):
                 display_name=display_name,
             )
 
-        if not display_name:
-            flash("Display name is required.", "error")
-            return render_template(
-                "launchpad_ui/settings/users_form.html",
-                active_section="users",
-                user=form_user,
-                groups=groups,
-                selected_group_keys=selected_group_keys,
-                selected_direct_permissions=selected_direct_permissions,
-                permission_catalog=permission_catalog,
-                access_summary=build_user_access_summary(user_id),
-                form_mode="edit",
-                account_type=account_type,
-                display_name=display_name,
-            )
-
         if account_type == "sso" and "@" not in username:
             flash("SSO-only accounts must use an email address.", "error")
             return render_template(
@@ -930,7 +895,7 @@ def settings_users_edit(user_id: int):
         replace_user_permissions(user_id, selected_direct_permissions)
 
         flash("User updated successfully.", "success")
-        return redirect(url_for("launchpad_ui.settings_users_edit", user_id=user_id))
+        return redirect(url_for("launchpad_ui.settings_users"))
 
     account_type = "local" if user.get("password_hash") else "sso"
 
