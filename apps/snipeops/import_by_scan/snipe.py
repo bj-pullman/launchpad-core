@@ -1,81 +1,131 @@
+import os
 import requests
 import urllib3
-from config import settings
 
+from modules.core.settings.settings_service import get_setting
 from apps.snipeops.import_by_scan.serial_utils import serial_candidates, normalize_serial
 
-# Only silence warnings if you're intentionally not verifying SSL
-if settings.VERIFY_SSL is False:
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def _to_bool(value, default=False):
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _get_snipeops_settings():
+    env_url = os.getenv("SNIPE_URL", "").strip()
+    env_token = os.getenv("SNIPE_API_TOKEN", "").strip()
+    env_verify_ssl = _to_bool(os.getenv("VERIFY_SSL", "true"), True)
+
+    db_url = (get_setting("snipeops.base_url", "") or "").strip()
+    db_token = (get_setting("snipeops.api_token", "") or "").strip()
+    db_verify_ssl = get_setting("snipeops.verify_ssl", None)
+
+    base_url = db_url or env_url
+    api_token = db_token or env_token
+
+    if db_verify_ssl is None:
+        verify_ssl = env_verify_ssl
+    else:
+        verify_ssl = _to_bool(db_verify_ssl, True)
+
+    return {
+        "base_url": base_url.rstrip("/"),
+        "api_token": api_token,
+        "verify_ssl": verify_ssl,
+    }
 
 
 def _headers():
+    cfg = _get_snipeops_settings()
+    api_token = cfg["api_token"]
+
+    if not api_token:
+        raise ValueError("SnipeOps API token is missing from settings.")
+
     return {
-        "Authorization": f"Bearer {settings.API_TOKEN}",
+        "Authorization": f"Bearer {api_token}",
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
 
 
-def find_asset_by_serial(raw_serial: str) -> dict | None:
-    """
-    Search Snipe-IT for an asset matching this serial (case-insensitive exact match).
-    Returns a row dict (with id/asset_tag/serial/etc) if found, else None.
-    """
+def _request(method, endpoint, **kwargs):
+    cfg = _get_snipeops_settings()
+    base_url = cfg["base_url"]
+    verify_ssl = cfg["verify_ssl"]
+
+    if not base_url:
+        raise ValueError("SnipeOps base URL is missing from settings.")
+
+    if not verify_ssl:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    url = f"{base_url}{endpoint}"
+    return requests.request(
+        method=method,
+        url=url,
+        headers=_headers(),
+        verify=verify_ssl,
+        timeout=30,
+        **kwargs,
+    )
+
+
+def find_asset_by_serial(raw_serial):
     candidates = serial_candidates(raw_serial)
-    if not candidates:
-        return None
 
-    url = f"{settings.SNIPE_URL}/api/v1/hardware"
-
-    # Try each candidate until we find an exact serial match
     for cand in candidates:
-        resp = requests.get(
-            url,
-            headers=_headers(),
+        response = _request(
+            "GET",
+            "/api/v1/hardware",
             params={"search": cand},
-            verify=settings.VERIFY_SSL,
-            timeout=30,
         )
+        response.raise_for_status()
+        payload = response.json()
 
-        try:
-            data = resp.json()
-        except Exception:
-            continue
-
-        rows = data.get("rows") or []
-        cand_u = cand.upper()
-
-        for r in rows:
-            r_serial = normalize_serial(r.get("serial") or "")
-            if r_serial == cand_u:
-                return r
+        for row in payload.get("rows", []):
+            row_serial = normalize_serial(row.get("serial"))
+            if row_serial in candidates:
+                return row
 
     return None
 
 
-def create_asset(profile: dict, serial: str) -> dict:
-    """
-    Creates an asset in Snipe-IT using the profile defaults + scanned serial.
-    Returns dict: {"http_status": int, "data": json}
-    """
-    url = f"{settings.SNIPE_URL}/api/v1/hardware"
+def find_asset_by_asset_tag(asset_tag):
+    response = _request(
+        "GET",
+        "/api/v1/hardware/bytag/" + str(asset_tag).strip(),
+    )
 
+    if response.status_code == 404:
+        return None
+
+    response.raise_for_status()
+    payload = response.json()
+
+    if isinstance(payload, dict) and payload.get("status") == "error":
+        return None
+
+    return payload
+
+
+def create_asset(profile, serial):
     payload = {
-        "serial": (serial or "").strip(),
-        "model_id": profile["model_id"],
-        "status_id": profile["status_id"],
+        "serial": str(serial).strip(),
+        "model_id": int(profile["model_id"]),
+        "status_id": int(profile["status_id"]),
+        "rtd_location_id": int(profile["location_id"]),
     }
 
-    # Optional fields (only if present)
-    if profile.get("location_id"):
-        payload["location_id"] = profile["location_id"]
+    if profile.get("asset_tag"):
+        payload["asset_tag"] = str(profile["asset_tag"]).strip()
 
     if profile.get("supplier_id"):
-        payload["supplier_id"] = profile["supplier_id"]
+        payload["supplier_id"] = int(profile["supplier_id"])
 
     if profile.get("depreciation_id"):
-        payload["depreciation_id"] = profile["depreciation_id"]
+        payload["depreciation_id"] = int(profile["depreciation_id"])
 
     if profile.get("purchase_cost") is not None:
         payload["purchase_cost"] = profile["purchase_cost"]
@@ -87,47 +137,15 @@ def create_asset(profile: dict, serial: str) -> dict:
         payload["order_number"] = profile["order_number"]
 
     if profile.get("warranty_months") is not None:
-        payload["warranty_months"] = profile["warranty_months"]
+        payload["warranty_months"] = int(profile["warranty_months"])
 
-    if profile.get("asset_tag"):
-        payload["asset_tag"] = profile["asset_tag"]
-
-    # Notes (batch tracking)
-    notes_prefix = profile.get("notes_prefix")
-    if notes_prefix:
-        payload["notes"] = f"{notes_prefix} | Serial scanned"
-
-    # Custom fields (if you use them)
-    custom_fields = profile.get("custom_fields") or {}
-    payload.update(custom_fields)
-
-    resp = requests.post(
-        url,
-        headers=_headers(),
+    response = _request(
+        "POST",
+        "/api/v1/hardware",
         json=payload,
-        verify=settings.VERIFY_SSL,
-        timeout=30
     )
+    response.raise_for_status()
 
-    return {"http_status": resp.status_code, "data": resp.json()}
-
-def find_asset_by_asset_tag(tag: str) -> dict | None:
-    tag = (tag or "").strip()
-    if not tag:
-        return None
-
-    url = f"{settings.SNIPE_URL}/api/v1/hardware"
-    resp = requests.get(
-        url,
-        headers=_headers(),
-        params={"search": tag},
-        verify=settings.VERIFY_SSL,
-        timeout=30,
-    )
-
-    data = resp.json() if resp.content else {}
-    rows = data.get("rows") or []
-    for r in rows:
-        if (r.get("asset_tag") or "").strip() == tag:
-            return r
-    return None
+    return {
+        "data": response.json()
+    }

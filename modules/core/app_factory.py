@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from flask import Flask, flash, redirect, request, session, url_for
 
 from apps.snipeops.import_by_scan.blueprint import bp as import_by_scan_bp
-from apps.snipeops.import_by_scan.db import init_db
+from apps.snipeops.import_by_scan.import_by_scan_db import init_db
 from apps.snipeops.snipe_catalog.blueprint import bp as snipe_catalog_bp
 from apps.launchpad_ui import launchpad_ui_bp
 from apps.snipeops.blueprint import bp as snipeops_bp
