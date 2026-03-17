@@ -12,26 +12,23 @@ DB_PATH = settings.IMPORT_BY_SCAN_DB_PATH
 
 
 def _connect():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def _format_timestamp_display(iso_str: str | None) -> str | None:
     if not iso_str:
         return None
     try:
-        # Handles strings like 2026-03-03T11:35:22-06:00
         dt = datetime.fromisoformat(iso_str)
-        # Example: 03/03/2026 11:35 AM
         return dt.strftime("%m/%d/%Y %I:%M %p")
     except Exception:
         return iso_str
 
+
 def _now_iso():
-    """
-    Prefer America/Chicago if tzdata/zoneinfo is available.
-    Fall back to local tz without crashing (Windows often needs pip tzdata).
-    """
     if ZoneInfo:
         try:
             return datetime.now(ZoneInfo("America/Chicago")).isoformat(timespec="seconds")
@@ -60,6 +57,7 @@ def init_db():
 
 
 def log_scan(profile_key, serial, ok, asset_id=None, asset_tag=None, asset_url=None, message="") -> dict:
+    init_db()
     created_at = _now_iso()
 
     with _connect() as conn:
@@ -88,6 +86,8 @@ def log_scan(profile_key, serial, ok, asset_id=None, asset_tag=None, asset_url=N
 
 
 def get_recent(limit=25):
+    init_db()
+
     with _connect() as conn:
         rows = conn.execute("""
             SELECT id, created_at, profile_key, serial, ok,
@@ -100,7 +100,6 @@ def get_recent(limit=25):
     out = []
     for r in rows:
         d = dict(r)
-        # The template is already expecting timestamp_display or timestamp
         d["timestamp"] = d.get("created_at")
         d["timestamp_display"] = _format_timestamp_display(d.get("created_at"))
         out.append(d)
