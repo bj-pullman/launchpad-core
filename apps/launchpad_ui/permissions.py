@@ -15,9 +15,10 @@ SETTINGS_SECTIONS = [
         "permission": "launchpad.settings.snipeops.view",
     },
     {
-        "key": "saml",
-        "label": "SAML",
-        "endpoint": "launchpad_ui.settings_saml",
+        "key": "authentication",
+        "label": "Authentication",
+        "endpoint": "launchpad_ui.settings_authentication",
+        # keep existing permission key for compatibility
         "permission": "launchpad.settings.saml.view",
     },
     {

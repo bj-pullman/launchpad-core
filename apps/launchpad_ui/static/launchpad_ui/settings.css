@@ -26,11 +26,30 @@
   font-size: 14px;
 }
 
+.form-field input[type="checkbox"] {
+  width: auto;
+  margin-right: 8px;
+}
+
+.content-card .optional-card {
+  margin-top: 16px;
+}
+
 /* checkbox card spacing */
 
 .checkbox-card {
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  margin-bottom: 14px;
+}
+
+.checkbox-card label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
 }
 
 /* grid breathing room */
@@ -48,37 +67,37 @@
 }
 
 .settings-subnav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 18px;
-    padding: 12px;
-    background: #ffffff;
-    border: 1px solid #dbe1e8;
-    border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #dbe1e8;
+  border-radius: 12px;
 }
 
 .settings-subnav a {
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 12px;
-    border-radius: 999px;
-    text-decoration: none;
-    font-weight: 600;
-    color: #334155;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .settings-subnav a:hover {
-    background: #eef2ff;
-    border-color: #c7d2fe;
-    color: #1d4ed8;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #1d4ed8;
 }
 
 .settings-section-card {
-    scroll-margin-top: 90px;
+  scroll-margin-top: 90px;
 }
 
 .settings-test-result {
@@ -90,15 +109,50 @@
 }
 
 .settings-test-result-success {
-  background: rgba(34,197,94,.10);
+  background: rgba(34, 197, 94, 0.10);
   color: #166534;
-  border-color: rgba(34,197,94,.18);
+  border-color: rgba(34, 197, 94, 0.18);
 }
 
 .settings-test-result-error {
-  background: rgba(239,68,68,.10);
+  background: rgba(239, 68, 68, 0.10);
   color: #991b1b;
-  border-color: rgba(239,68,68,.18);
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.test-connection-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #1d4ed8;
+  font-weight: 700;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.08s ease;
+}
+
+.test-connection-btn:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.test-connection-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.10);
+}
+
+.test-connection-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 /* ==============================
@@ -111,7 +165,7 @@
   gap: 10px;
   margin-bottom: 18px;
   padding: 10px;
-  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,251,255,.94));
+  background: linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(248, 251, 255, .94));
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: var(--shadow);
@@ -138,21 +192,21 @@
 
 .settings-tab:hover {
   color: var(--text);
-  background: rgba(59,130,246,.06);
-  border-color: rgba(59,130,246,.10);
+  background: rgba(59, 130, 246, .06);
+  border-color: rgba(59, 130, 246, .10);
 }
 
 .settings-tab:focus-visible {
   outline: none;
-  border-color: rgba(59,130,246,.35);
-  box-shadow: 0 0 0 4px rgba(59,130,246,.10);
+  border-color: rgba(59, 130, 246, .35);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, .10);
 }
 
 .settings-tab.active {
   color: #1d4ed8;
-  background: rgba(59,130,246,.10);
-  border-color: rgba(59,130,246,.18);
-  box-shadow: 0 4px 12px rgba(59,130,246,.10);
+  background: rgba(59, 130, 246, .10);
+  border-color: rgba(59, 130, 246, .18);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, .10);
 }
 
 .settings-tab:active {
@@ -168,6 +222,75 @@
 }
 
 /* ==============================
+   PROVIDER SECTIONS
+============================== */
+
+.settings-provider {
+  border: 1px solid #dbe1e8;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-provider summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+
+.settings-provider summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-provider summary:hover {
+  background: #f8fafc;
+}
+
+.settings-provider-body {
+  padding: 16px 16px 16px 16px;
+  border-top: 1px solid #eef2f7;
+}
+
+.settings-status-badge {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-provider-actions {
+  margin-top: 10px;
+}
+
+/* ==============================
+   FORM ACTIONS
+============================== */
+
+.form-actions {
+  margin-top: 18px;
+}
+
+/* ==============================
+   SETTINGS ACTIONS
+============================== */
+
+.settings-actions {
+  margin-top: 18px;
+}
+
+/* ==============================
    ACCESS SUMMARY
 ============================== */
 
@@ -179,14 +302,12 @@
   margin-bottom: 10px;
 }
 
-/* permission list container */
 .permission-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-/* permission bubble */
 .permission-chip {
   display: inline-block;
   background: #eef2ff;
@@ -196,4 +317,20 @@
   border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
+}
+
+/* ==============================
+   RESPONSIVE
+============================== */
+
+@media (max-width: 900px) {
+  .form-grid,
+  .form-grid-equal {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-provider summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

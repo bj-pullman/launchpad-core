@@ -1,0 +1,39 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/login.css') }}"
+/>
+{% endblock %}
+
+{% block content %}
+<div class="login-page">
+  <div class="login-card emergency">
+    <h1>Emergency Login</h1>
+    <div class="alert alert-warning">
+        Emergency local access for Breakglass accounts only.
+    </div>
+    <form method="post" action="{{ url_for('auth.local_login') }}">
+      <input type="hidden" name="next" value="{{ next_url }}">
+
+      <div class="form-field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required>
+      </div>
+
+      <div class="form-field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Sign In</button>
+        <a href="{{ url_for('auth.login', next=next_url) }}" class="btn btn-secondary">
+          Back
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

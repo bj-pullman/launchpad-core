@@ -269,6 +269,34 @@ body.public-layout {
     display: block;
 }
 
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border: 1px solid #dc2626;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.login-card.emergency {
+  border-top: 4px solid #dc2626;
+}
+
+.alert-warning {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.login-emergency {
+    margin-top: 20px;
+}
+
 @media (max-width: 640px) {
     .login-page {
         padding: 28px 16px 24px;

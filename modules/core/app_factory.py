@@ -34,8 +34,10 @@ def str_to_bool(value, default=False):
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
-def build_allowed_domains():
-    raw = os.getenv("AUTH_ALLOWED_DOMAINS", "sheridanschools.org")
+def parse_list_setting(raw_value: str, default: str = "") -> list[str]:
+    raw = (raw_value or default or "").strip()
+    if not raw:
+        return []
     return [item.strip().lower() for item in raw.split(",") if item.strip()]
 
 
@@ -46,52 +48,132 @@ def create_app() -> Flask:
         static_folder="../../static",
     )
 
+    # Core base config
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
     app.config["SYSTEM_TIMEZONE"] = os.getenv("SYSTEM_TIMEZONE", "UTC")
 
-    # Google OIDC
-    app.config["GOOGLE_OIDC_CLIENT_ID"] = os.getenv("GOOGLE_OIDC_CLIENT_ID", "")
-    app.config["GOOGLE_OIDC_CLIENT_SECRET"] = os.getenv("GOOGLE_OIDC_CLIENT_SECRET", "")
-    app.config["GOOGLE_OIDC_DISCOVERY_URL"] = "https://accounts.google.com/.well-known/openid-configuration"
-    app.config["GOOGLE_OIDC_SCOPES"] = "openid email profile"
-    app.config["GOOGLE_OIDC_REDIRECT_URI"] = os.getenv(
-        "GOOGLE_OIDC_REDIRECT_URI",
-        "http://localhost:5001/auth/google/callback",
+    # Init DB
+    init_db()
+    init_identity_db()
+    init_local_auth_db()
+    init_settings_db()
+    init_rbac_db()
+
+    seed_permissions()
+    ensure_default_local_admin()
+
+    # -----------------------------
+    # Authentication settings
+    # DB-backed source of truth
+    # -----------------------------
+
+    # Sign-in methods
+    app.config["AUTH_PRIMARY_METHOD"] = get_setting("auth.primary_method", "local")
+
+    app.config["AUTH_LOCAL_ENABLED"] = get_bool_setting("auth.local.enabled", True)
+    app.config["AUTH_LOCAL_MODE"] = get_setting("auth.local.mode", "breakglass_only")
+    app.config["AUTH_LOCAL_HIDE_FORM_WHEN_RESTRICTED"] = get_bool_setting(
+        "auth.local.hide_form_when_restricted", False
     )
 
-    # Auth behavior
-    app.config["AUTH_ALLOWED_DOMAINS"] = build_allowed_domains()
-    app.config["AUTH_REQUIRE_GOOGLE_HOSTED_DOMAIN"] = str_to_bool(
-        os.getenv("AUTH_REQUIRE_GOOGLE_HOSTED_DOMAIN", "true")
+    app.config["AUTH_MICROSOFT_OIDC_ENABLED"] = get_bool_setting(
+        "auth.microsoft_oidc.enabled", False
     )
-    app.config["AUTH_AUTO_PROVISION"] = str_to_bool(
-        os.getenv("AUTH_AUTO_PROVISION", "false")
+    app.config["AUTH_MICROSOFT_OIDC_TENANT_ID"] = get_setting(
+        "auth.microsoft_oidc.tenant_id", "common"
     )
-    app.config["AUTH_DEFAULT_ROLE"] = os.getenv("AUTH_DEFAULT_ROLE", "viewer")
-    app.config["AUTH_REQUIRE_LOGIN_FOR_LAUNCHPAD"] = str_to_bool(
-        os.getenv("AUTH_REQUIRE_LOGIN_FOR_LAUNCHPAD", "false")
+    app.config["AUTH_MICROSOFT_OIDC_CLIENT_ID"] = get_setting(
+        "auth.microsoft_oidc.client_id", ""
+    )
+    app.config["AUTH_MICROSOFT_OIDC_CLIENT_SECRET"] = get_setting(
+        "auth.microsoft_oidc.client_secret", ""
+    )
+    app.config["AUTH_MICROSOFT_OIDC_REDIRECT_URI"] = get_setting(
+        "auth.microsoft_oidc.redirect_uri", ""
+    )
+
+    app.config["AUTH_GOOGLE_OIDC_ENABLED"] = get_bool_setting(
+        "auth.google_oidc.enabled", False
+    )
+    app.config["GOOGLE_OIDC_CLIENT_ID"] = get_setting("auth.google_oidc.client_id", "")
+    app.config["GOOGLE_OIDC_CLIENT_SECRET"] = get_setting(
+        "auth.google_oidc.client_secret", ""
+    )
+    app.config["GOOGLE_OIDC_DISCOVERY_URL"] = (
+        "https://accounts.google.com/.well-known/openid-configuration"
+    )
+    app.config["GOOGLE_OIDC_SCOPES"] = "openid email profile"
+    app.config["GOOGLE_OIDC_REDIRECT_URI"] = get_setting(
+        "auth.google_oidc.redirect_uri",
+        "http://localhost:5001/auth/google/callback",
+    )
+    app.config["AUTH_GOOGLE_HOSTED_DOMAIN"] = get_setting(
+        "auth.google_oidc.hosted_domain", ""
+    )
+
+    app.config["AUTH_SAML_ENABLED"] = get_bool_setting("auth.saml.enabled", False)
+    app.config["AUTH_SAML_IDP_TYPE"] = get_setting("auth.saml.idp_type", "generic")
+    app.config["AUTH_SAML_METADATA_URL"] = get_setting("auth.saml.metadata_url", "")
+    app.config["AUTH_SAML_METADATA_XML"] = get_setting("auth.saml.metadata_xml", "")
+    app.config["AUTH_SAML_IDP_ENTITY_ID"] = get_setting("auth.saml.idp_entity_id", "")
+    app.config["AUTH_SAML_SSO_URL"] = get_setting("auth.saml.sso_url", "")
+    app.config["AUTH_SAML_SLO_URL"] = get_setting("auth.saml.slo_url", "")
+    app.config["AUTH_SAML_X509_CERT"] = get_setting("auth.saml.x509_cert", "")
+    app.config["AUTH_SAML_SP_ENTITY_ID"] = get_setting("auth.saml.sp_entity_id", "")
+    app.config["AUTH_SAML_ACS_URL"] = get_setting("auth.saml.acs_url", "")
+    app.config["AUTH_SAML_LOGOUT_URL"] = get_setting("auth.saml.logout_url", "")
+
+    # Access control
+    app.config["AUTH_REQUIRE_LOCAL_USER_FOR_SSO"] = get_bool_setting(
+        "auth.access.require_local_user_for_sso", True
+    )
+    app.config["AUTH_MATCH_USER_BY"] = get_setting("auth.access.match_user_by", "email")
+    app.config["AUTH_DENY_IF_USER_NOT_FOUND"] = get_bool_setting(
+        "auth.access.deny_if_user_not_found", True
+    )
+    app.config["AUTH_DENY_IF_INACTIVE"] = get_bool_setting(
+        "auth.access.deny_if_inactive", True
+    )
+    app.config["AUTH_ALLOWED_DOMAINS"] = parse_list_setting(
+        get_setting("auth.access.allowed_domains", "")
+    )
+    app.config["AUTH_REQUIRED_GROUPS"] = parse_list_setting(
+        get_setting("auth.access.required_groups", "")
+    )
+    app.config["AUTH_GROUP_MATCH_MODE"] = get_setting(
+        "auth.access.required_groups_mode", "any"
+    ).strip().lower()
+    app.config["AUTH_ALLOW_BREAKGLASS_WITH_SSO"] = get_bool_setting(
+        "auth.access.allow_breakglass_with_sso", True
     )
 
     # Session settings
+    app.config["AUTH_REQUIRE_LOGIN_FOR_LAUNCHPAD"] = get_bool_setting(
+        "security.require_login_for_launchpad", False
+    )
     app.config["SESSION_IDLE_TIMEOUT_MINUTES"] = int(
-        os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "30")
+        get_setting("security.session_idle_timeout_minutes", "30") or 30
     )
     app.config["SESSION_ABSOLUTE_TIMEOUT_HOURS"] = int(
-        os.getenv("SESSION_ABSOLUTE_TIMEOUT_HOURS", "8")
+        get_setting("security.session_absolute_timeout_hours", "8") or 8
     )
     app.config["SESSION_REMEMBER_ME_DAYS"] = int(
-        os.getenv("SESSION_REMEMBER_ME_DAYS", "0")
+        get_setting("security.session_remember_me_days", "0") or 0
     )
 
     # Cookie settings
-    app.config["SESSION_COOKIE_NAME"] = os.getenv("SESSION_COOKIE_NAME", "launchpad_session")
-    app.config["SESSION_COOKIE_SECURE"] = str_to_bool(
-        os.getenv("SESSION_COOKIE_SECURE", "false")
+    app.config["SESSION_COOKIE_NAME"] = get_setting(
+        "security.cookie_name", "launchpad_session"
     )
-    app.config["SESSION_COOKIE_HTTPONLY"] = str_to_bool(
-        os.getenv("SESSION_COOKIE_HTTPONLY", "true")
+    app.config["SESSION_COOKIE_SECURE"] = get_bool_setting(
+        "security.cookie_secure", False
     )
-    app.config["SESSION_COOKIE_SAMESITE"] = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+    app.config["SESSION_COOKIE_HTTPONLY"] = get_bool_setting(
+        "security.cookie_httponly", True
+    )
+    app.config["SESSION_COOKIE_SAMESITE"] = get_setting(
+        "security.cookie_samesite", "Lax"
+    )
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
         hours=app.config["SESSION_ABSOLUTE_TIMEOUT_HOURS"]
     )
@@ -104,41 +186,29 @@ def create_app() -> Flask:
         "/auth/google/callback",
     ]
 
-    def build_required_groups():
-        raw = os.getenv("AUTH_REQUIRED_GROUPS", "")
-        return [item.strip().lower() for item in raw.split(",") if item.strip()]
-
-    app.config["AUTH_REQUIRED_GROUPS"] = build_required_groups()
-    app.config["AUTH_GROUP_MATCH_MODE"] = os.getenv("AUTH_GROUP_MATCH_MODE", "any").strip().lower()
-
-    app.config["GOOGLE_DIRECTORY_SERVICE_ACCOUNT_FILE"] = os.getenv(
-        "GOOGLE_DIRECTORY_SERVICE_ACCOUNT_FILE", ""
+    app.config["GOOGLE_DIRECTORY_SERVICE_ACCOUNT_FILE"] = get_setting(
+        "google.directory.service_account_file", ""
     )
-    app.config["GOOGLE_DIRECTORY_DELEGATED_ADMIN"] = os.getenv(
-        "GOOGLE_DIRECTORY_DELEGATED_ADMIN", ""
+    app.config["GOOGLE_DIRECTORY_DELEGATED_ADMIN"] = get_setting(
+        "google.directory.delegated_admin", ""
     )
-
-    # Init DB
-    init_db()
-    init_identity_db()
-    init_local_auth_db()
-    init_settings_db()
-    init_rbac_db()
-
-    seed_permissions()
-    ensure_default_local_admin()
 
     # Init OAuth
     oauth.init_app(app)
-    oauth.register(
-        name="google",
-        client_id=app.config["GOOGLE_OIDC_CLIENT_ID"],
-        client_secret=app.config["GOOGLE_OIDC_CLIENT_SECRET"],
-        server_metadata_url=app.config["GOOGLE_OIDC_DISCOVERY_URL"],
-        client_kwargs={
-            "scope": app.config["GOOGLE_OIDC_SCOPES"],
-        },
-    )
+
+    google_client_id = app.config["GOOGLE_OIDC_CLIENT_ID"]
+    google_client_secret = app.config["GOOGLE_OIDC_CLIENT_SECRET"]
+
+    if google_client_id and google_client_secret:
+        oauth.register(
+            name="google",
+            client_id=google_client_id,
+            client_secret=google_client_secret,
+            server_metadata_url=app.config["GOOGLE_OIDC_DISCOVERY_URL"],
+            client_kwargs={
+                "scope": app.config["GOOGLE_OIDC_SCOPES"],
+            },
+        )
 
     # Register blueprints
     app.register_blueprint(auth_bp)
@@ -210,12 +280,19 @@ def create_app() -> Flask:
     def inject_global_settings():
         general_settings = {
             "organization_name": get_setting("general.organization_name", ""),
-            "footer_text": get_setting("general.footer_text", "Sheridan School District • Internal Tech Ops"),
+            "footer_text": get_setting(
+                "general.footer_text",
+                "Sheridan School District • Internal Tech Ops",
+            ),
             "support_email": get_setting("general.support_email", ""),
             "helpdesk_url": get_setting("general.helpdesk_url", ""),
-            "announcement_enabled": get_bool_setting("general.announcement_enabled", False),
+            "announcement_enabled": get_bool_setting(
+                "general.announcement_enabled", False
+            ),
             "announcement_text": get_setting("general.announcement_text", ""),
-            "timezone": get_setting("general.timezone", app.config.get("SYSTEM_TIMEZONE", "UTC")),
+            "timezone": get_setting(
+                "general.timezone", app.config.get("SYSTEM_TIMEZONE", "UTC")
+            ),
             "language": get_setting("general.language", "en"),
             "date_format": get_setting("general.date_format", "mdy"),
             "time_format": get_setting("general.time_format", "12h"),
