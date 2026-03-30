@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 from flask import Flask, flash, redirect, request, session, url_for
 
 from apps.snipeops.import_by_scan.blueprint import bp as import_by_scan_bp
-from apps.snipeops.import_by_scan.import_by_scan_db import init_db
+from apps.snipeops.import_by_scan.import_by_scan_db import init_db as import_by_scan_init_db
 from apps.snipeops.snipe_catalog.blueprint import bp as snipe_catalog_bp
 from apps.launchpad_ui import launchpad_ui_bp
 from apps.snipeops.blueprint import bp as snipeops_bp
+from apps.staff_status.blueprint import bp as staff_status_bp
+from apps.staff_status.db import init_staff_status_db
 
 from modules.core.auth.blueprint import bp as auth_bp
 from modules.core.auth import routes as auth_routes  # noqa: F401
@@ -53,11 +55,12 @@ def create_app() -> Flask:
     app.config["SYSTEM_TIMEZONE"] = os.getenv("SYSTEM_TIMEZONE", "UTC")
 
     # Init DB
-    init_db()
+    import_by_scan_init_db()
     init_identity_db()
     init_local_auth_db()
     init_settings_db()
     init_rbac_db()
+    init_staff_status_db()
 
     seed_permissions()
     ensure_default_local_admin()
@@ -217,6 +220,7 @@ def create_app() -> Flask:
     app.register_blueprint(launchpad_ui_bp)
     app.register_blueprint(snipeops_bp)
     app.register_blueprint(setup_bp)
+    app.register_blueprint(staff_status_bp)
 
     @app.before_request
     def check_initial_setup():

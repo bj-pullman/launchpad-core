@@ -579,6 +579,9 @@ def build_permission_catalog() -> list[dict]:
         elif key.startswith("techhub."):
             section = "Tech Hub"
             group = "Tech Hub"
+        elif key.startswith("staff_status."):
+            section = "Staff Status"
+            group = "Staff Status"
         else:
             section = "Other"
             group = "Other"

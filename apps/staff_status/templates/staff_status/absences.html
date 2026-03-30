@@ -1,0 +1,62 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('staff_status.static', filename='staff_status.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Absences</h1>
+      <p class="page-subtitle">Record absence events for reporting and board display.</p>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <form method="post" class="settings-form">
+      <div class="form-field">
+        <label for="user_id">User</label>
+        <select id="user_id" name="user_id" required>
+          <option value="">Select a user</option>
+          {% for user in users %}
+            <option value="{{ user.id }}">{{ user.resolved_display_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-grid-equal">
+        <div class="form-field">
+          <label for="absence_type">Absence Type</label>
+          <select id="absence_type" name="absence_type" required>
+            {% for absence_type in absence_types %}
+              <option value="{{ absence_type }}">{{ absence_type|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="note">Note</label>
+          <input type="text" id="note" name="note">
+        </div>
+      </div>
+
+      <div class="form-grid-equal">
+        <div class="form-field">
+          <label for="start_date">Start Date</label>
+          <input type="date" id="start_date" name="start_date" required>
+        </div>
+
+        <div class="form-field">
+          <label for="end_date">End Date</label>
+          <input type="date" id="end_date" name="end_date" required>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Absence</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

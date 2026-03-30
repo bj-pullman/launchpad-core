@@ -319,6 +319,32 @@
   font-weight: 600;
 }
 
+.staff-status-department-list,
+.staff-status-kiosk-list {
+  display: grid;
+  gap: 16px;
+}
+
+.staff-status-department-card,
+.staff-status-kiosk-card {
+  border: 1px solid #dbe1e8;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.staff-status-kiosk-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.staff-status-kiosk-card h3 {
+  margin: 0 0 6px 0;
+}
+
 /* ==============================
    RESPONSIVE
 ============================== */
@@ -332,5 +358,9 @@
   .settings-provider summary {
     align-items: flex-start;
     flex-direction: column;
+  }
+    .staff-status-kiosk-card-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

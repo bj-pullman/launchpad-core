@@ -1,0 +1,48 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('staff_status.static', filename='staff_status.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }}</h1>
+      <p class="page-subtitle">Staff Status department overview.</p>
+    </div>
+  </div>
+
+  <div class="card-grid">
+    <a class="card" href="{{ url_for('staff_status.board', department_name=department_name) }}">
+      <div class="card-title">Status Board</div>
+      <div class="card-body">
+        View the live board for {{ department_name }}.
+      </div>
+      <div class="card-cta">Open Board →</div>
+    </a>
+
+    <a class="card" href="{{ url_for('staff_status.absences', department_name=department_name) }}">
+      <div class="card-title">Absences</div>
+      <div class="card-body">
+        Record and manage absences for {{ department_name }}.
+      </div>
+      <div class="card-cta">Manage Absences →</div>
+    </a>
+  </div>
+
+  <div class="content-card" style="margin-top: 16px;">
+    <h2>Locations</h2>
+
+    {% if locations %}
+      <div class="role-badges">
+        {% for location in locations %}
+          <span class="badge badge-role">{{ location.location_label }}</span>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No locations configured yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
