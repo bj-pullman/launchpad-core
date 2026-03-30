@@ -204,6 +204,204 @@ def _test_snipeit_connection(base_url: str, api_token: str, verify_ssl: bool):
         "message": "Connection successful.",
     }
 
+def _authentication_settings():
+    return {
+        # Sign-In Methods
+        "local_enabled": get_bool_setting("auth.local.enabled", True),
+        "local_mode": get_setting("auth.local.mode", "breakglass_only"),
+        "local_hide_form_when_restricted": get_bool_setting("auth.local.hide_form_when_restricted", False),
+
+        "microsoft_oidc_enabled": get_bool_setting("auth.microsoft_oidc.enabled", False),
+        "microsoft_client_id": get_setting("auth.microsoft_oidc.client_id", ""),
+        "microsoft_client_secret": get_setting("auth.microsoft_oidc.client_secret", ""),
+        "microsoft_tenant_id": get_setting("auth.microsoft_oidc.tenant_id", ""),
+        "microsoft_redirect_uri": get_setting("auth.microsoft_oidc.redirect_uri", ""),
+
+        "google_oidc_enabled": get_bool_setting("auth.google_oidc.enabled", False),
+        "google_client_id": get_setting("auth.google_oidc.client_id", ""),
+        "google_client_secret": get_setting("auth.google_oidc.client_secret", ""),
+        "google_hosted_domain": get_setting("auth.google_oidc.hosted_domain", ""),
+        "google_redirect_uri": get_setting("auth.google_oidc.redirect_uri", ""),
+
+        "saml_enabled": get_bool_setting("auth.saml.enabled", False),
+        "saml_idp_type": get_setting("auth.saml.idp_type", "generic"),
+        "saml_metadata_url": get_setting("auth.saml.metadata_url", ""),
+        "saml_metadata_xml": get_setting("auth.saml.metadata_xml", ""),
+        "saml_idp_entity_id": get_setting("auth.saml.idp_entity_id", ""),
+        "saml_sso_url": get_setting("auth.saml.sso_url", ""),
+        "saml_slo_url": get_setting("auth.saml.slo_url", ""),
+        "saml_x509_cert": get_setting("auth.saml.x509_cert", ""),
+        "saml_sp_entity_id": get_setting("auth.saml.sp_entity_id", ""),
+        "saml_acs_url": get_setting("auth.saml.acs_url", ""),
+        "saml_logout_url": get_setting("auth.saml.logout_url", ""),
+        "saml_attr_email": get_setting("auth.saml.attr.email", "email"),
+        "saml_attr_first_name": get_setting("auth.saml.attr.first_name", "first_name"),
+        "saml_attr_last_name": get_setting("auth.saml.attr.last_name", "last_name"),
+        "saml_attr_display_name": get_setting("auth.saml.attr.display_name", "display_name"),
+        "saml_attr_groups": get_setting("auth.saml.attr.groups", "groups"),
+
+        "primary_method": get_setting("auth.primary_method", "local"),
+
+        # Access Control
+        "require_local_user_for_sso": get_bool_setting("auth.access.require_local_user_for_sso", True),
+        "match_user_by": get_setting("auth.access.match_user_by", "email"),
+        "deny_if_user_not_found": get_bool_setting("auth.access.deny_if_user_not_found", True),
+        "deny_if_inactive": get_bool_setting("auth.access.deny_if_inactive", True),
+        "allowed_domains": get_setting("auth.access.allowed_domains", ""),
+        "required_groups": get_setting("auth.access.required_groups", ""),
+        "required_groups_mode": get_setting("auth.access.required_groups_mode", "any"),
+        "allow_breakglass_with_sso": get_bool_setting("auth.access.allow_breakglass_with_sso", True),
+    }
+
+
+def _provider_status(provider: str, settings: dict) -> str:
+    if provider == "microsoft_oidc":
+        required = [
+            settings.get("microsoft_client_id"),
+            settings.get("microsoft_client_secret"),
+            settings.get("microsoft_tenant_id"),
+        ]
+        enabled = settings.get("microsoft_oidc_enabled")
+    elif provider == "google_oidc":
+        required = [
+            settings.get("google_client_id"),
+            settings.get("google_client_secret"),
+        ]
+        enabled = settings.get("google_oidc_enabled")
+    elif provider == "saml":
+        has_metadata = bool(settings.get("saml_metadata_url") or settings.get("saml_metadata_xml"))
+        has_manual = bool(
+            settings.get("saml_idp_entity_id")
+            and settings.get("saml_sso_url")
+            and settings.get("saml_x509_cert")
+        )
+        required = [has_metadata or has_manual]
+        enabled = settings.get("saml_enabled")
+    else:
+        return "Disabled"
+
+    if enabled:
+        if all(required):
+            return "Enabled"
+        return "Incomplete"
+
+    if all(required):
+        return "Ready"
+
+    if any(required):
+        return "Incomplete"
+
+    return "Disabled"
+
+
+def _test_oidc_configuration(provider: str, form):
+    if provider == "microsoft_oidc":
+        tenant_id = (form.get("microsoft_tenant_id") or "").strip()
+        client_id = (form.get("microsoft_client_id") or "").strip()
+        client_secret = (form.get("microsoft_client_secret") or "").strip()
+
+        if not client_secret:
+            client_secret = (get_setting("auth.microsoft_oidc.client_secret", "") or "").strip()
+
+        if not tenant_id:
+            return {"ok": False, "message": "Microsoft Tenant ID is required."}
+        if not client_id:
+            return {"ok": False, "message": "Microsoft Client ID is required."}
+        if not client_secret:
+            return {"ok": False, "message": "Microsoft Client Secret is required."}
+
+        discovery_url = f"https://login.microsoftonline.com/{tenant_id}/v2.0/.well-known/openid-configuration"
+
+    elif provider == "google_oidc":
+        client_id = (form.get("google_client_id") or "").strip()
+        client_secret = (form.get("google_client_secret") or "").strip()
+
+        if not client_secret:
+            client_secret = (get_setting("auth.google_oidc.client_secret", "") or "").strip()
+
+        if not client_id:
+            return {"ok": False, "message": "Google Client ID is required."}
+        if not client_secret:
+            return {"ok": False, "message": "Google Client Secret is required."}
+
+        discovery_url = "https://accounts.google.com/.well-known/openid-configuration"
+    else:
+        return {"ok": False, "message": "Unsupported OIDC provider."}
+
+    try:
+        response = requests.get(discovery_url, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+    except requests.exceptions.RequestException as exc:
+        return {
+            "ok": False,
+            "message": f"Could not reach the OIDC discovery endpoint: {exc}",
+        }
+    except ValueError:
+        return {"ok": False, "message": "OIDC discovery endpoint returned invalid JSON."}
+
+    required_keys = ["authorization_endpoint", "token_endpoint", "jwks_uri"]
+    missing = [key for key in required_keys if not payload.get(key)]
+    if missing:
+        return {
+            "ok": False,
+            "message": f"OIDC discovery document is missing: {', '.join(missing)}.",
+        }
+
+    return {"ok": True, "message": "OIDC configuration looks valid."}
+
+
+def _test_saml_configuration(form):
+    metadata_url = (form.get("saml_metadata_url") or "").strip()
+    metadata_xml = (form.get("saml_metadata_xml") or "").strip()
+    entity_id = (form.get("saml_idp_entity_id") or "").strip()
+    sso_url = (form.get("saml_sso_url") or "").strip()
+    cert = (form.get("saml_x509_cert") or "").strip()
+    sp_entity_id = (form.get("saml_sp_entity_id") or "").strip()
+    acs_url = (form.get("saml_acs_url") or "").strip()
+
+    if not cert:
+        cert = (get_setting("auth.saml.x509_cert", "") or "").strip()
+
+    if not metadata_xml:
+        metadata_xml = (get_setting("auth.saml.metadata_xml", "") or "").strip()
+
+    if not sp_entity_id:
+        return {"ok": False, "message": "SP Entity ID is required."}
+    if not acs_url:
+        return {"ok": False, "message": "ACS URL is required."}
+
+    if metadata_url:
+        try:
+            response = requests.get(metadata_url, timeout=10)
+            response.raise_for_status()
+            content = response.text
+        except requests.exceptions.RequestException as exc:
+            return {"ok": False, "message": f"Could not fetch metadata URL: {exc}"}
+
+        lowered = content.lower()
+        if "entitydescriptor" not in lowered or "idpssodescriptor" not in lowered:
+            return {"ok": False, "message": "Metadata XML does not appear to be valid IdP metadata."}
+        if "singlesignonservice" not in lowered:
+            return {"ok": False, "message": "Metadata XML is missing a SingleSignOnService entry."}
+        return {"ok": True, "message": "SAML metadata URL looks valid."}
+
+    if metadata_xml:
+        lowered = metadata_xml.lower()
+        if "entitydescriptor" not in lowered or "idpssodescriptor" not in lowered:
+            return {"ok": False, "message": "Pasted metadata XML does not appear to be valid IdP metadata."}
+        if "singlesignonservice" not in lowered:
+            return {"ok": False, "message": "Pasted metadata XML is missing a SingleSignOnService entry."}
+        return {"ok": True, "message": "SAML metadata XML looks valid."}
+
+    if not entity_id:
+        return {"ok": False, "message": "IdP Entity ID is required when not using metadata."}
+    if not sso_url:
+        return {"ok": False, "message": "SSO URL is required when not using metadata."}
+    if not cert:
+        return {"ok": False, "message": "X.509 certificate is required when not using metadata."}
+
+    return {"ok": True, "message": "Manual SAML configuration looks valid."}
 
 @launchpad_ui_bp.app_context_processor
 def inject_launchpad_navigation():
@@ -403,11 +601,133 @@ def settings_snipeops_test_connection():
     return jsonify(result), status_code
 
 
+@launchpad_ui_bp.route("/settings/authentication", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.saml.view")
+def settings_authentication():
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.saml.manage",
+            "You do not have permission to update Authentication settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_authentication"))
+
+        # Sign-In Methods
+        set_setting("auth.local.enabled", 1 if request.form.get("local_enabled") == "1" else 0)
+        set_setting("auth.local.mode", (request.form.get("local_mode") or "breakglass_only").strip())
+        set_setting(
+            "auth.local.hide_form_when_restricted",
+            1 if request.form.get("local_hide_form_when_restricted") == "1" else 0,
+        )
+
+        set_setting("auth.microsoft_oidc.enabled", 1 if request.form.get("microsoft_oidc_enabled") == "1" else 0)
+        set_setting("auth.microsoft_oidc.client_id", (request.form.get("microsoft_client_id") or "").strip())
+        microsoft_secret = (request.form.get("microsoft_client_secret") or "").strip()
+        if microsoft_secret:
+            set_setting("auth.microsoft_oidc.client_secret", microsoft_secret, is_sensitive=1)
+        set_setting("auth.microsoft_oidc.tenant_id", (request.form.get("microsoft_tenant_id") or "common").strip())
+        set_setting("auth.microsoft_oidc.redirect_uri", (request.form.get("microsoft_redirect_uri") or "").strip())
+
+        set_setting("auth.google_oidc.enabled", 1 if request.form.get("google_oidc_enabled") == "1" else 0)
+        set_setting("auth.google_oidc.client_id", (request.form.get("google_client_id") or "").strip())
+        google_secret = (request.form.get("google_client_secret") or "").strip()
+        if google_secret:
+            set_setting("auth.google_oidc.client_secret", google_secret, is_sensitive=1)
+        set_setting("auth.google_oidc.hosted_domain", (request.form.get("google_hosted_domain") or "").strip())
+        set_setting("auth.google_oidc.redirect_uri", (request.form.get("google_redirect_uri") or "").strip())
+
+        set_setting("auth.saml.enabled", 1 if request.form.get("saml_enabled") == "1" else 0)
+        set_setting("auth.saml.idp_type", (request.form.get("saml_idp_type") or "generic").strip())
+        set_setting("auth.saml.metadata_url", (request.form.get("saml_metadata_url") or "").strip())
+        set_setting("auth.saml.metadata_xml", (request.form.get("saml_metadata_xml") or "").strip(), is_sensitive=1)
+        set_setting("auth.saml.idp_entity_id", (request.form.get("saml_idp_entity_id") or "").strip())
+        set_setting("auth.saml.sso_url", (request.form.get("saml_sso_url") or "").strip())
+        set_setting("auth.saml.slo_url", (request.form.get("saml_slo_url") or "").strip())
+        set_setting("auth.saml.x509_cert", (request.form.get("saml_x509_cert") or "").strip(), is_sensitive=1)
+        set_setting("auth.saml.sp_entity_id", (request.form.get("saml_sp_entity_id") or "").strip())
+        set_setting("auth.saml.acs_url", (request.form.get("saml_acs_url") or "").strip())
+        set_setting("auth.saml.logout_url", (request.form.get("saml_logout_url") or "").strip())
+        set_setting("auth.saml.attr.email", (request.form.get("saml_attr_email") or "email").strip())
+        set_setting("auth.saml.attr.first_name", (request.form.get("saml_attr_first_name") or "first_name").strip())
+        set_setting("auth.saml.attr.last_name", (request.form.get("saml_attr_last_name") or "last_name").strip())
+        set_setting("auth.saml.attr.display_name", (request.form.get("saml_attr_display_name") or "display_name").strip())
+        set_setting("auth.saml.attr.groups", (request.form.get("saml_attr_groups") or "groups").strip())
+
+        set_setting("auth.primary_method", (request.form.get("primary_method") or "local").strip())
+
+        # Access Control
+        set_setting(
+            "auth.access.require_local_user_for_sso",
+            1 if request.form.get("require_local_user_for_sso") == "1" else 0,
+        )
+        set_setting("auth.access.match_user_by", (request.form.get("match_user_by") or "email").strip())
+        set_setting(
+            "auth.access.deny_if_user_not_found",
+            1 if request.form.get("deny_if_user_not_found") == "1" else 0,
+        )
+        set_setting(
+            "auth.access.deny_if_inactive",
+            1 if request.form.get("deny_if_inactive") == "1" else 0,
+        )
+        set_setting("auth.access.allowed_domains", (request.form.get("allowed_domains") or "").strip())
+        set_setting("auth.access.required_groups", (request.form.get("required_groups") or "").strip())
+        set_setting(
+            "auth.access.required_groups_mode",
+            (request.form.get("required_groups_mode") or "any").strip(),
+        )
+        set_setting(
+            "auth.access.allow_breakglass_with_sso",
+            1 if request.form.get("allow_breakglass_with_sso") == "1" else 0,
+        )
+
+        flash("Authentication settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_authentication"))
+
+    settings = _authentication_settings()
+    statuses = {
+        "microsoft_oidc": _provider_status("microsoft_oidc", settings),
+        "google_oidc": _provider_status("google_oidc", settings),
+        "saml": _provider_status("saml", settings),
+    }
+
+    return render_template(
+        "launchpad_ui/settings/authentication.html",
+        active_section="authentication",
+        settings=settings,
+        statuses=statuses,
+    )
+
+
+@launchpad_ui_bp.route("/settings/authentication/test-connection", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.saml.view")
+def settings_authentication_test_connection():
+    if "launchpad.settings.saml.manage" not in _user_permissions():
+        return jsonify({
+            "ok": False,
+            "message": "You do not have permission to test authentication settings.",
+        }), 403
+
+    provider = (request.form.get("provider") or "").strip().lower()
+
+    if provider == "microsoft_oidc":
+        result = _test_oidc_configuration("microsoft_oidc", request.form)
+    elif provider == "google_oidc":
+        result = _test_oidc_configuration("google_oidc", request.form)
+    elif provider == "saml":
+        result = _test_saml_configuration(request.form)
+    else:
+        result = {"ok": False, "message": "Unsupported provider."}
+
+    status_code = 200 if result["ok"] else 400
+    return jsonify(result), status_code
+
+
 @launchpad_ui_bp.route("/settings/saml")
 @login_required
 @require_permission("launchpad.settings.saml.view")
 def settings_saml():
-    return render_template("launchpad_ui/settings/saml.html", active_section="saml")
+    return redirect(url_for("launchpad_ui.settings_authentication"))
 
 
 @launchpad_ui_bp.route("/settings/security")

@@ -26,6 +26,7 @@ endblock %} {% block extra_css %}
       {% endif %} {% endwith %}
 
       <section class="login-section">
+        {% if show_local_form %}
         <form
           method="post"
           action="{{ url_for('auth.local_login') }}"
@@ -62,7 +63,7 @@ endblock %} {% block extra_css %}
       <div class="login-divider">
         <span>or</span>
       </div>
-
+      {% endif %}
       <section class="login-section">
         <div class="section-heading">
           <h2>Single Sign-On</h2>
@@ -74,6 +75,7 @@ endblock %} {% block extra_css %}
           Remember me
         </label>
 
+        {% if google_oidc_enabled %}
         <a
           class="google-login-btn"
           id="google-login-btn"
@@ -102,7 +104,18 @@ endblock %} {% block extra_css %}
           </span>
           <span>Sign in with Google</span>
         </a>
+        {% endif %}
       </section>
+        {% if show_emergency_login %}
+          <div class="login-emergency">
+            <a href="{{ url_for('auth.emergency_login', next=next_url) }}" class="btn btn-danger">
+              Emergency Access
+            </a>
+            <div class="muted" style="margin-top:6px; font-size: 12px;">
+              For administrators only when SSO is unavailable
+            </div>
+          </div>
+        {% endif %}
     </div>
   </div>
 </div>

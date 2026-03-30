@@ -41,6 +41,14 @@ endblock %} {% block content %}
             <tr>
               <td>
                 <div class="table-primary">{{ user.username }}</div>
+                <div class="role-badges" style="margin-top: 6px;">
+                  {% if user.is_breakglass %}
+                    <span class="badge badge-role">Breakglass</span>
+                  {% endif %}
+                  {% if user.account_type == "sso" %}
+                    <span class="badge badge-muted">SSO</span>
+                  {% endif %}
+                </div>
               </td>
               <td>
                 {% if user.is_active %}

@@ -1,4 +1,11 @@
 document.addEventListener("DOMContentLoaded", function () {
+  initSnipeOpsConnectionTest();
+  initUserFormPasswordToggle();
+  initSettingsTabs();
+  initAuthenticationConnectionTests();
+});
+
+function initSnipeOpsConnectionTest() {
   const form = document.getElementById("snipeops-settings-form");
   const testButton = document.getElementById("snipeops-test-btn");
   const resultBox = document.getElementById("snipeops-test-result");
@@ -32,15 +39,15 @@ document.addEventListener("DOMContentLoaded", function () {
     } catch (error) {
       showResult(
         "Connection test failed due to a network or server error.",
-        false,
+        false
       );
     } finally {
       testButton.disabled = false;
     }
   });
-});
+}
 
-document.addEventListener("DOMContentLoaded", function () {
+function initUserFormPasswordToggle() {
   const form = document.getElementById("user-form");
   const accountType = document.getElementById("account_type");
   const passwordField = document.getElementById("password-field");
@@ -81,69 +88,90 @@ document.addEventListener("DOMContentLoaded", function () {
 
   accountType.addEventListener("change", syncPasswordField);
   syncPasswordField();
-});
+}
 
-document.addEventListener("DOMContentLoaded", function () {
-    const tabs = document.querySelectorAll(".settings-tab");
-    const panels = document.querySelectorAll(".settings-tab-panel");
+function initSettingsTabs() {
+  const tabs = document.querySelectorAll(".settings-tab");
+  const panels = document.querySelectorAll(".settings-tab-panel");
 
-    if (tabs.length) {
-        tabs.forEach((tab) => {
-            tab.addEventListener("click", function () {
-                tabs.forEach((t) => t.classList.remove("active"));
-                panels.forEach((p) => p.classList.remove("active"));
+  if (!tabs.length || !panels.length) {
+    return;
+  }
 
-                tab.classList.add("active");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", function () {
+      const targetPanel = tab.dataset.tab;
 
-                const panel = document.querySelector(
-                    `.settings-tab-panel[data-panel="${tab.dataset.tab}"]`
-                );
+      tabs.forEach((t) => t.classList.remove("active"));
+      panels.forEach((p) => p.classList.remove("active"));
 
-                if (panel) {
-                    panel.classList.add("active");
-                }
-            });
-        });
-    }
+      tab.classList.add("active");
 
-    const form = document.getElementById("user-form");
-    const accountType = document.getElementById("account_type");
-    const passwordField = document.getElementById("password-field");
-    const passwordInput = document.getElementById("password");
+      const panel = document.querySelector(
+        `.settings-tab-panel[data-panel="${targetPanel}"]`
+      );
 
-    if (!form || !accountType || !passwordInput) {
+      if (panel) {
+        panel.classList.add("active");
+      }
+    });
+  });
+}
+
+function initAuthenticationConnectionTests() {
+  const form = document.getElementById("authentication-settings-form");
+  const buttons = document.querySelectorAll(".test-connection-btn");
+
+  if (!form || !buttons.length) {
+    return;
+  }
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", async function () {
+      const provider = button.dataset.provider;
+      const testUrl = button.dataset.testUrl;
+      const resultBox = document.querySelector(
+        `[data-provider-result="${provider}"]`
+      );
+
+      if (!provider || !testUrl || !resultBox) {
         return;
-    }
+      }
 
-    const isNewForm = form.dataset.formMode === "new";
+      const formData = new FormData(form);
+      formData.set("provider", provider);
 
-    function syncPasswordField() {
-        const isSSO = accountType.value === "sso";
+      button.disabled = true;
+      resultBox.hidden = false;
+      resultBox.textContent = "Testing configuration...";
+      resultBox.className = "settings-test-result";
 
-        if (isSSO) {
-            passwordInput.value = "";
-            passwordInput.placeholder = "Not required for SSO-only accounts";
+      try {
+        const response = await fetch(testUrl, {
+          method: "POST",
+          body: formData,
+        });
 
-            if (isNewForm && passwordField) {
-                passwordField.style.display = "none";
-            }
+        const data = await response.json();
+
+        resultBox.textContent =
+          data.message || "Configuration test completed.";
+
+        if (data.ok) {
+          resultBox.className =
+            "settings-test-result settings-test-result-success";
         } else {
-            if (isNewForm) {
-                passwordInput.placeholder = "Required for local accounts only";
-
-                if (passwordField) {
-                    passwordField.style.display = "";
-                }
-            } else {
-                passwordInput.placeholder = "Leave blank to keep current password";
-
-                if (passwordField) {
-                    passwordField.style.display = "";
-                }
-            }
+          resultBox.className =
+            "settings-test-result settings-test-result-error";
         }
-    }
-
-    accountType.addEventListener("change", syncPasswordField);
-    syncPasswordField();
-});
+      } catch (error) {
+        resultBox.textContent =
+          "Configuration test failed due to a network or server error.";
+        resultBox.className =
+          "settings-test-result settings-test-result-error";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+}
