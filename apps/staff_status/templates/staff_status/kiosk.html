@@ -14,6 +14,14 @@
 <body class="staff-status-kiosk-body">
   <main class="staff-status-kiosk-shell">
     <section class="staff-status-kiosk-card">
+      <div id="staff-status-kiosk-success-overlay" class="staff-status-kiosk-success-overlay" hidden>
+        <div class="staff-status-kiosk-success-card">
+          <div class="staff-status-kiosk-success-icon">✓</div>
+          <h2>Entry Submitted</h2>
+          <p>The status was updated successfully.</p>
+        </div>
+      </div>
+      
       <header class="staff-status-kiosk-header">
         <p class="staff-status-eyebrow">Department Kiosk</p>
         <h1>{{ department_name }}</h1>
@@ -55,7 +63,7 @@
                 {% for location in locations %}
                   <label class="staff-status-kiosk-location-card">
                     <input type="checkbox" name="location_labels" value="{{ location.location_label }}">
-                    <span>{{ location.location_label }}</span>
+                    <span>{{ location.display_name or location.location_label }}</span>
                   </label>
                 {% endfor %}
               </div>

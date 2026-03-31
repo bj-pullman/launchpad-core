@@ -1,29 +1,46 @@
-import json
-import secrets
+import json, zoneinfo, secrets
 from datetime import date, datetime, timezone
 
 from .db import get_connection
 from modules.core.identity.identity_db import get_connection as get_identity_connection
 from modules.core.settings.settings_service import get_setting
 
+from tasks.events import publish_department_update
 
 DEFAULT_PUBLIC_ABSENCE_LABEL = "Out of Office"
 DEFAULT_LOCATIONS = [
-    "EEE",
-    "EEM",
-    "EEI",
-    "Technology Office",
-    "SHS",
-    "SMS",
-    "SIS",
-    "SES",
-    "Central Office",
-    "Annex",
-    "Jacket Health",
-    "ALA",
-    "Off Campus",
+    {"display_name": "East End Elementary", "short_name": "EEE"},
+    {"display_name": "East End Middle", "short_name": "EEM"},
+    {"display_name": "East End Intermediate", "short_name": "EEI"},
+    {"display_name": "Technology Office", "short_name": "Technology Office"},
+    {"display_name": "Sheridan High School", "short_name": "SHS"},
+    {"display_name": "Sheridan Middle School", "short_name": "SMS"},
+    {"display_name": "Sheridan Intermediate School", "short_name": "SIS"},
+    {"display_name": "Sheridan Elementary School", "short_name": "SES"},
+    {"display_name": "Central Office", "short_name": "Central Office"},
+    {"display_name": "Annex", "short_name": "Annex"},
+    {"display_name": "Jacket Health", "short_name": "Jacket Health"},
+    {"display_name": "Alternative Learning Academy", "short_name": "ALA"},
+    {"display_name": "Off Campus", "short_name": "Off Campus"},
 ]
 
+def get_app_timezone() -> str:
+    # Replace "general.timezone" below with your actual General settings key
+    return get_setting("general.timezone", "America/Chicago") or "America/Chicago"
+
+def format_board_timestamp(iso_ts: str | None) -> str:
+    if not iso_ts:
+        return "—"
+
+    try:
+        tz = zoneinfo.ZoneInfo(get_app_timezone())
+        dt = datetime.fromisoformat(iso_ts)
+        dt = dt.astimezone(tz)
+
+        hour = dt.strftime("%I").lstrip("0") or "12"
+        return f"{hour}:{dt.strftime('%M %p')}"
+    except Exception:
+        return "—"
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -182,20 +199,30 @@ def seed_department_locations_if_empty(department_name: str, default_locations: 
         if existing_count:
             return
 
-        for sort_order, label in enumerate(default_locations, start=1):
+        for sort_order, item in enumerate(default_locations, start=1):
             conn.execute(
                 """
                 INSERT INTO staff_status_locations (
                     department_name,
                     location_label,
+                    display_name,
+                    short_name,
                     sort_order,
                     is_active,
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, 1, ?, ?)
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?)
                 """,
-                (department_name, label, sort_order, now, now),
+                (
+                    department_name,
+                    item["short_name"],
+                    item.get("display_name"),
+                    item.get("short_name"),
+                    sort_order,
+                    now,
+                    now,
+                ),
             )
         conn.commit()
 
@@ -334,7 +361,9 @@ def get_board_rows_for_department(department_name: str) -> list[dict]:
                     "display_status_label": absence["public_status_label"],
                     "location_labels": [],
                     "is_out_of_office": True,
-                    "updated_at": absence["updated_at"] or absence["created_at"],
+                    "updated_at": format_board_timestamp(
+                        absence["updated_at"] or absence["created_at"]
+                    ),
                 }
             )
             continue
@@ -348,7 +377,7 @@ def get_board_rows_for_department(department_name: str) -> list[dict]:
                     "display_status_label": current["display_status_label"],
                     "location_labels": _json_load(current["location_labels_json"]),
                     "is_out_of_office": bool(current["is_out_of_office"]),
-                    "updated_at": current["updated_at"],
+                    "updated_at": format_board_timestamp(current["updated_at"]),
                 }
             )
             continue
@@ -426,11 +455,13 @@ def get_department_home_location(department_name: str) -> str:
     if record and normalize_text(record.get("home_location_label")):
         return record["home_location_label"]
 
-    configured = normalize_text(get_setting(f"staff_status.department.{department_name}.home_location", ""))
+    configured = normalize_text(
+        get_setting(f"staff_status.department.{department_name}.home_location", "")
+    )
     if configured:
         return configured
 
-    return "Technology Office"
+    return "Not Configured"
 
 
 def update_user_status(
@@ -553,11 +584,14 @@ def create_absence(
     absence_type: str,
     start_date: str,
     end_date: str,
+    duration_mode: str,
+    days_value: float | None,
     note: str | None,
     created_by_user_id: int,
     created_by_display_name: str,
 ):
     now = utc_now_iso()
+
     with get_connection() as conn:
         conn.execute(
             """
@@ -568,6 +602,8 @@ def create_absence(
                 public_status_label,
                 start_date,
                 end_date,
+                duration_mode,
+                days_value,
                 note,
                 created_by_user_id,
                 created_by_display_name,
@@ -577,7 +613,7 @@ def create_absence(
                 updated_at,
                 is_active
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)
             """,
             (
                 user_id,
@@ -586,12 +622,15 @@ def create_absence(
                 DEFAULT_PUBLIC_ABSENCE_LABEL,
                 start_date,
                 end_date,
+                duration_mode,
+                days_value,
                 normalize_text(note),
                 created_by_user_id,
                 created_by_display_name,
                 now,
             ),
         )
+
         conn.execute(
             """
             INSERT INTO staff_status_history (
@@ -619,6 +658,7 @@ def create_absence(
                 now,
             ),
         )
+
         conn.commit()
 
 def upsert_department_settings(
@@ -686,3 +726,276 @@ def upsert_department_settings(
             )
 
         conn.commit()
+        
+def reset_department_statuses(department_name: str):
+    department_name = normalize_department(department_name)
+    if not department_name:
+        raise ValueError("department_name is required")
+
+    users = list_active_users_for_department(department_name)
+    home_location = get_department_home_location(department_name)
+    now = utc_now_iso()
+    payload_json = _json_dump([home_location])
+
+    print(f"[tasks] reset department={department_name} users={len(users)} home_location={home_location}")
+
+    with get_connection() as conn:
+        for user in users:
+            print(f"[tasks] resetting user_id={user['id']} display_name={user['resolved_display_name']}")
+
+            existing = conn.execute(
+                """
+                SELECT id
+                FROM staff_status_current
+                WHERE user_id = ?
+                """,
+                (user["id"],),
+            ).fetchone()
+
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE staff_status_current
+                    SET department_name = ?,
+                        location_labels_json = ?,
+                        display_status_label = ?,
+                        is_out_of_office = 0,
+                        updated_at = ?,
+                        updated_by_user_id = NULL,
+                        updated_by_display_name = ?,
+                        updated_by_source = ?
+                    WHERE user_id = ?
+                    """,
+                    (
+                        department_name,
+                        payload_json,
+                        home_location,
+                        now,
+                        "System Daily Reset",
+                        "system_reset",
+                        user["id"],
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO staff_status_current (
+                        user_id,
+                        department_name,
+                        location_labels_json,
+                        display_status_label,
+                        is_out_of_office,
+                        updated_at,
+                        updated_by_user_id,
+                        updated_by_display_name,
+                        updated_by_source
+                    )
+                    VALUES (?, ?, ?, ?, 0, ?, NULL, ?, ?)
+                    """,
+                    (
+                        user["id"],
+                        department_name,
+                        payload_json,
+                        home_location,
+                        now,
+                        "System Daily Reset",
+                        "system_reset",
+                    ),
+                )
+
+            conn.execute(
+                """
+                INSERT INTO staff_status_history (
+                    user_id,
+                    department_name,
+                    event_type,
+                    location_labels_json,
+                    private_status_type,
+                    public_status_label,
+                    committed_by_user_id,
+                    committed_by_display_name,
+                    committed_at,
+                    source_ip,
+                    source_device
+                )
+                VALUES (?, ?, 'reset', ?, NULL, ?, NULL, ?, ?, NULL, NULL)
+                """,
+                (
+                    user["id"],
+                    department_name,
+                    payload_json,
+                    home_location,
+                    "System Daily Reset",
+                    now,
+                ),
+            )
+
+        conn.commit()
+        
+    publish_department_update(department_name)
+
+def reset_all_enabled_departments():
+    departments = list_enabled_departments()
+    print(f"[tasks] enabled_departments={len(departments)}")
+
+    for department in departments:
+        print(f"[tasks] running reset for {department['department_name']}")
+        reset_department_statuses(department["department_name"])
+        
+def list_locations_for_department_admin(department_name: str) -> list[dict]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_locations
+            WHERE department_name = ?
+            ORDER BY sort_order, location_label COLLATE NOCASE
+            """,
+            (department_name.strip(),),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def create_location(
+    department_name: str,
+    display_name: str | None,
+    short_name: str | None,
+    sort_order: int | None,
+):
+    department_name = normalize_department(department_name)
+    display_name = normalize_text(display_name)
+    short_name = normalize_text(short_name)
+
+    if not department_name:
+        raise ValueError("department_name is required")
+    if not short_name:
+        raise ValueError("short_name is required")
+
+    now = utc_now_iso()
+    sort_value = sort_order if sort_order is not None else 0
+    location_label = short_name
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO staff_status_locations (
+                department_name,
+                location_label,
+                display_name,
+                short_name,
+                sort_order,
+                is_active,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+            """,
+            (
+                department_name,
+                location_label,
+                display_name or short_name,
+                short_name,
+                sort_value,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+
+
+def update_location(
+    location_id: int,
+    display_name: str | None,
+    short_name: str | None,
+    sort_order: int | None,
+    is_active: bool,
+    ):
+    display_name = normalize_text(display_name)
+    short_name = normalize_text(short_name)
+
+    if not short_name:
+        raise ValueError("short_name is required")
+
+    now = utc_now_iso()
+    sort_value = sort_order if sort_order is not None else 0
+    location_label = short_name
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE staff_status_locations
+            SET location_label = ?,
+                display_name = ?,
+                short_name = ?,
+                sort_order = ?,
+                is_active = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                location_label,
+                display_name or short_name,
+                short_name,
+                sort_value,
+                1 if is_active else 0,
+                now,
+                location_id,
+            ),
+        )
+        conn.commit()
+
+
+def delete_location(location_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM staff_status_locations WHERE id = ?",
+            (location_id,),
+        )
+        conn.commit()
+        
+def list_recent_absences_for_department(department_name: str, limit: int = 25) -> list[dict]:
+    department_name = normalize_department(department_name)
+    if not department_name:
+        return []
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_absences
+            WHERE department_name = ?
+              AND is_active = 1
+            ORDER BY start_date DESC, created_at DESC
+            LIMIT ?
+            """,
+            (department_name, limit),
+        ).fetchall()
+
+    absences = [dict(row) for row in rows]
+
+    user_ids = [row["user_id"] for row in absences if row.get("user_id")]
+    user_map = {}
+
+    if user_ids:
+        unique_user_ids = list(dict.fromkeys(user_ids))
+        placeholders = ",".join(["?"] * len(unique_user_ids))
+
+        with get_identity_connection() as conn:
+            user_rows = conn.execute(
+                f"""
+                SELECT *
+                FROM users
+                WHERE id IN ({placeholders})
+                """,
+                unique_user_ids,
+            ).fetchall()
+
+        user_map = {row["id"]: dict(row) for row in user_rows}
+
+    for row in absences:
+        user = user_map.get(row["user_id"])
+        row["user_display_name"] = (
+            build_display_name(user) if user else f"User {row['user_id']}"
+        )
+
+    return absences

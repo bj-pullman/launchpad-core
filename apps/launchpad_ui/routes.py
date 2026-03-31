@@ -52,6 +52,8 @@ from modules.core.identity.rbac_db import get_connection as get_rbac_connection
 from modules.core.identity.user_service import get_user_by_id, update_user, create_user
 from modules.core.settings.settings_service import get_setting, set_setting, get_bool_setting
 
+from tasks.scheduler import configure_jobs
+
 
 def get_all_roles():
     with get_rbac_connection() as conn:
@@ -421,7 +423,7 @@ def inject_launchpad_navigation():
             url_for(app["endpoint"])
             visible_apps.append(app)
         except BuildError:
-            current_app.logger.warning(
+            current_app.logger.debug(
                 "Skipping launchpad app with unregistered endpoint: %s",
                 app["endpoint"],
             )
@@ -1261,9 +1263,6 @@ def settings_staff_status():
         enabled_departments = request.form.getlist("enabled_departments")
         daily_reset_enabled = 1 if request.form.get("daily_reset_enabled") == "1" else 0
         daily_reset_time = (request.form.get("daily_reset_time") or "01:00").strip()
-        daily_reset_timezone = (
-            request.form.get("daily_reset_timezone") or "America/Chicago"
-        ).strip()
         board_refresh_seconds = (
             request.form.get("board_refresh_seconds") or "15"
         ).strip()
@@ -1271,7 +1270,6 @@ def settings_staff_status():
         set_setting("staff_status.enabled_departments", ",".join(enabled_departments))
         set_setting("staff_status.daily_reset_enabled", daily_reset_enabled)
         set_setting("staff_status.daily_reset_time", daily_reset_time)
-        set_setting("staff_status.daily_reset_timezone", daily_reset_timezone)
         set_setting("staff_status.board_refresh_seconds", board_refresh_seconds)
 
         for department_name in available_departments:
@@ -1290,6 +1288,7 @@ def settings_staff_status():
                 is_enabled=is_enabled,
                 home_location=home_location,
             )
+        configure_jobs()
 
         flash("Staff Status settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_staff_status"))
@@ -1329,9 +1328,6 @@ def settings_staff_status():
         "enabled_departments": enabled_departments,
         "daily_reset_enabled": get_bool_setting("staff_status.daily_reset_enabled", True),
         "daily_reset_time": get_setting("staff_status.daily_reset_time", "01:00"),
-        "daily_reset_timezone": get_setting(
-            "staff_status.daily_reset_timezone", "America/Chicago"
-        ),
         "board_refresh_seconds": get_setting(
             "staff_status.board_refresh_seconds", "15"
         ),

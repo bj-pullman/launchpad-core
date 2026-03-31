@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, request, session, url_for
@@ -26,6 +26,8 @@ from modules.core.setup.blueprint import bp as setup_bp
 from modules.core.auth.bootstrap_admin import ensure_default_local_admin
 from modules.core.utils.time import format_system_time, utc_now
 from modules.core.settings.settings_service import get_setting, get_bool_setting
+
+from tasks.scheduler import configure_jobs
 
 load_dotenv()
 
@@ -221,6 +223,15 @@ def create_app() -> Flask:
     app.register_blueprint(snipeops_bp)
     app.register_blueprint(setup_bp)
     app.register_blueprint(staff_status_bp)
+    
+    should_start_scheduler = True
+
+    if app.debug:
+        should_start_scheduler = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+
+    if should_start_scheduler:
+        with app.app_context():
+            configure_jobs()
 
     @app.before_request
     def check_initial_setup():
@@ -279,6 +290,34 @@ def create_app() -> Flask:
     @app.template_filter("localtime")
     def localtime_filter(value):
         return format_system_time(value)
+    
+    @app.template_filter("localdate")
+    def localdate_filter(value):
+        if not value:
+            return ""
+
+        raw = str(value).strip()
+        if not raw:
+            return ""
+
+        date_format = get_setting("general.date_format", "mdy") or "mdy"
+
+        try:
+            if "T" in raw:
+                dt = datetime.fromisoformat(raw)
+                target_date = dt.date()
+            else:
+                target_date = date.fromisoformat(raw)
+        except Exception:
+            return raw
+
+        if date_format == "dmy":
+            return target_date.strftime("%m/%d/%Y")
+        if date_format == "ymd":
+            return target_date.strftime("%Y-%m-%d")
+
+        # default mdy
+        return target_date.strftime("%m/%d/%Y")
 
     @app.context_processor
     def inject_global_settings():

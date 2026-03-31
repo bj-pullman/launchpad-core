@@ -2,7 +2,7 @@ from pathlib import Path
 import sqlite3
 
 
-BASE_DIR = Path(__file__).resolve().parents[3]
+BASE_DIR = Path(__file__).resolve().parents[2]
 STAFF_STATUS_DIR = BASE_DIR / "instance" / "staff_status"
 DATA_DIR = STAFF_STATUS_DIR / "data"
 DB_PATH = DATA_DIR / "staff_status.db"
@@ -42,13 +42,15 @@ def init_staff_status_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 department_name TEXT NOT NULL,
                 location_label TEXT NOT NULL,
+                display_name TEXT NULL,
+                short_name TEXT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 UNIQUE(department_name, location_label)
             );
-
+            
             CREATE TABLE IF NOT EXISTS staff_status_current (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL UNIQUE,
@@ -82,9 +84,11 @@ def init_staff_status_db():
                 user_id INTEGER NOT NULL,
                 department_name TEXT NOT NULL,
                 absence_type TEXT NOT NULL,
-                public_status_label TEXT NOT NULL DEFAULT 'Out of Office',
+                public_status_label TEXT NOT NULL,
                 start_date TEXT NOT NULL,
                 end_date TEXT NOT NULL,
+                duration_mode TEXT NULL,
+                days_value REAL NULL,
                 note TEXT NULL,
                 created_by_user_id INTEGER NOT NULL,
                 created_by_display_name TEXT NOT NULL,
@@ -119,6 +123,31 @@ def init_staff_status_db():
             conn.execute("ALTER TABLE staff_status_departments ADD COLUMN board_token_created_at TEXT NULL")
         if "board_token_rotated_at" not in columns:
             conn.execute("ALTER TABLE staff_status_departments ADD COLUMN board_token_rotated_at TEXT NULL")
+            
+        location_columns = [
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(staff_status_locations)").fetchall()
+        ]
+
+        if "display_name" not in location_columns:
+            conn.execute(
+                "ALTER TABLE staff_status_locations ADD COLUMN display_name TEXT NULL"
+            )
+        if "short_name" not in location_columns:
+            conn.execute(
+                "ALTER TABLE staff_status_locations ADD COLUMN short_name TEXT NULL"
+            )
+            
+        absence_columns = [
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(staff_status_absences)").fetchall()
+        ]
+
+        if "duration_mode" not in absence_columns:
+            conn.execute("ALTER TABLE staff_status_absences ADD COLUMN duration_mode TEXT NULL")
+
+        if "days_value" not in absence_columns:
+            conn.execute("ALTER TABLE staff_status_absences ADD COLUMN days_value REAL NULL")
 
         conn.execute(
             """

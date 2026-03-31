@@ -1,0 +1,35 @@
+<nav class="staff-status-subnav" aria-label="Staff Status section navigation">
+    <a
+    href="{{ url_for('staff_status.index', department_name=department_name) }}"
+    class="{% if active_tab == 'home' %}active{% endif %}"
+  >
+    Home
+  </a>
+  <a
+    href="{{ url_for('staff_status.department_overview', department_name=department_name) }}"
+    class="{% if active_tab == 'overview' %}active{% endif %}"
+  >
+    Overview
+  </a>
+
+  <a
+    href="{{ url_for('staff_status.board', department_name=department_name) }}"
+    class="{% if active_tab == 'board' %}active{% endif %}"
+  >
+    Board
+  </a>
+
+  <a
+    href="{{ url_for('staff_status.absences', department_name=department_name) }}"
+    class="{% if active_tab == 'absences' %}active{% endif %}"
+  >
+    Absences
+  </a>
+
+  <a
+    href="{{ url_for('staff_status.locations', department_name=department_name) }}"
+    class="{% if active_tab == 'locations' %}active{% endif %}"
+  >
+    Locations
+  </a>
+</nav>

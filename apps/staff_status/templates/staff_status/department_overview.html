@@ -6,6 +6,7 @@
 
 {% block content %}
 <div class="page-shell">
+  {% include "staff_status/_subnav.html" %}
   <div class="page-header">
     <div>
       <h1>{{ department_name }}</h1>
@@ -28,6 +29,14 @@
         Record and manage absences for {{ department_name }}.
       </div>
       <div class="card-cta">Manage Absences →</div>
+    </a>
+
+    <a class="card" href="{{ url_for('staff_status.locations', department_name=department_name) }}">
+      <div class="card-title">Locations</div>
+      <div class="card-body">
+        Add, edit, disable, and order kiosk/board locations.
+      </div>
+      <div class="card-cta">Manage Locations →</div>
     </a>
   </div>
 
