@@ -660,6 +660,79 @@ def create_absence(
         )
 
         conn.commit()
+        
+def update_absence(
+    *,
+    absence_id: int,
+    absence_type: str,
+    start_date: str,
+    end_date: str,
+    duration_mode: str,
+    days_value: float | None,
+    note: str | None,
+    updated_by_user_id: int,
+    updated_by_display_name: str,
+):
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE staff_status_absences
+            SET
+                absence_type = ?,
+                start_date = ?,
+                end_date = ?,
+                duration_mode = ?,
+                days_value = ?,
+                note = ?,
+                updated_by_user_id = ?,
+                updated_by_display_name = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                absence_type,
+                start_date,
+                end_date,
+                duration_mode,
+                days_value,
+                normalize_text(note),
+                updated_by_user_id,
+                updated_by_display_name,
+                now,
+                absence_id,
+            ),
+        )
+        conn.commit()
+        
+def delete_absence(
+    *,
+    absence_id: int,
+    updated_by_user_id: int,
+    updated_by_display_name: str,
+):
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE staff_status_absences
+            SET
+                is_active = 0,
+                updated_by_user_id = ?,
+                updated_by_display_name = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                updated_by_user_id,
+                updated_by_display_name,
+                now,
+                absence_id,
+            ),
+        )
+        conn.commit()
 
 def upsert_department_settings(
     department_name: str,
@@ -953,31 +1026,96 @@ def delete_location(location_id: int):
         )
         conn.commit()
         
-def list_recent_absences_for_department(department_name: str, limit: int = 25) -> list[dict]:
+def list_recent_absences_for_department(
+    department_name: str,
+    limit: int = 50,
+    sort_by: str = "start_date",
+    sort_dir: str = "desc",
+    view: str = "active",
+    absence_types: list[str] | None = None,
+    user_ids: list[str] | None = None,
+) -> list[dict]:
     department_name = normalize_department(department_name)
     if not department_name:
         return []
 
+    allowed_sort_map = {
+        "user": "user_id",
+        "absence_type": "absence_type",
+        "start_date": "start_date",
+        "end_date": "end_date",
+        "days_value": "days_value",
+        "created_at": "created_at",
+    }
+
+    order_column = allowed_sort_map.get(sort_by, "start_date")
+    order_direction = "ASC" if str(sort_dir).lower() == "asc" else "DESC"
+
+    today = date.today().isoformat()
+
+    where_clauses = ["department_name = ?"]
+    params: list = [department_name]
+
+    if view == "today":
+        where_clauses.append("is_active = 1")
+        where_clauses.append("start_date <= ?")
+        where_clauses.append("end_date >= ?")
+        params.extend([today, today])
+    elif view == "upcoming":
+        where_clauses.append("is_active = 1")
+        where_clauses.append("start_date > ?")
+        params.append(today)
+        order_column = "start_date"
+        order_direction = "ASC"
+    elif view == "all":
+        pass
+    else:
+        where_clauses.append("is_active = 1")
+
+    normalized_absence_types = [
+        item.lower()
+        for item in (absence_types or [])
+        if normalize_text(item)
+    ]
+    if normalized_absence_types:
+        placeholders = ",".join(["?"] * len(normalized_absence_types))
+        where_clauses.append(f"absence_type IN ({placeholders})")
+        params.extend(normalized_absence_types)
+
+    normalized_user_ids: list[int] = []
+    for item in (user_ids or []):
+        try:
+            normalized_user_ids.append(int(item))
+        except ValueError:
+            continue
+
+    if normalized_user_ids:
+        placeholders = ",".join(["?"] * len(normalized_user_ids))
+        where_clauses.append(f"user_id IN ({placeholders})")
+        params.extend(normalized_user_ids)
+
+    where_sql = " AND ".join(where_clauses)
+
+    query = f"""
+        SELECT *
+        FROM staff_status_absences
+        WHERE {where_sql}
+        ORDER BY {order_column} {order_direction}, id DESC
+        LIMIT ?
+    """
+
+    params.append(limit)
+
     with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM staff_status_absences
-            WHERE department_name = ?
-              AND is_active = 1
-            ORDER BY start_date DESC, created_at DESC
-            LIMIT ?
-            """,
-            (department_name, limit),
-        ).fetchall()
+        rows = conn.execute(query, params).fetchall()
 
     absences = [dict(row) for row in rows]
 
-    user_ids = [row["user_id"] for row in absences if row.get("user_id")]
+    user_ids_from_rows = [row["user_id"] for row in absences if row.get("user_id")]
     user_map = {}
 
-    if user_ids:
-        unique_user_ids = list(dict.fromkeys(user_ids))
+    if user_ids_from_rows:
+        unique_user_ids = list(dict.fromkeys(user_ids_from_rows))
         placeholders = ",".join(["?"] * len(unique_user_ids))
 
         with get_identity_connection() as conn:

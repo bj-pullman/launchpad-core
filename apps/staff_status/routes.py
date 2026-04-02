@@ -6,6 +6,7 @@ from .blueprint import bp
 from .service import (
     create_absence,
     create_location,
+    delete_absence,
     delete_location,
     get_board_rows_for_department,
     get_department_by_board_token,
@@ -19,6 +20,7 @@ from .service import (
     rotate_kiosk_token,
     seed_department_locations_if_empty,
     sync_departments_from_users,
+    update_absence,
     update_location,
     update_user_status,
 )
@@ -218,12 +220,62 @@ def kiosk_submit(token: str):
 @require_permission("staff_status.absences.manage")
 def absences(department_name: str):
     users = list_active_users_for_department(department_name)
+    absence_types = ["sick", "vacation", "personal", "other"]
 
     if request.method == "POST":
         actor = get_user_by_id(session["user_id"])
         if not actor:
             abort(403)
-            
+
+        action = (request.form.get("action") or "").strip()
+
+        if action == "update_absence":
+            duration_mode = (request.form.get("duration_mode") or "").strip()
+            days_value_raw = (request.form.get("days_value") or "").strip()
+
+            duration_lookup = {
+                "quarter_day": 0.25,
+                "half_day": 0.5,
+                "three_quarter_day": 0.75,
+                "full_day": 1.0,
+            }
+
+            if duration_mode == "multi_day":
+                try:
+                    days_value = float(days_value_raw)
+                except ValueError:
+                    days_value = None
+            else:
+                days_value = duration_lookup.get(duration_mode)
+
+            if duration_mode != "multi_day":
+                end_date = (request.form.get("start_date") or "").strip()
+            else:
+                end_date = (request.form.get("end_date") or "").strip()
+
+            update_absence(
+                absence_id=request.form.get("absence_id", type=int),
+                absence_type=(request.form.get("absence_type") or "").strip().lower(),
+                start_date=(request.form.get("start_date") or "").strip(),
+                end_date=end_date,
+                duration_mode=duration_mode,
+                days_value=days_value,
+                note=(request.form.get("note") or "").strip(),
+                updated_by_user_id=actor["id"],
+                updated_by_display_name=actor.get("display_name") or actor.get("email") or f"User {actor['id']}",
+            )
+            publish_department_update(department_name)
+            return redirect(url_for("staff_status.absences", department_name=department_name))
+
+        if action == "delete_absence":
+            delete_absence(
+                absence_id=request.form.get("absence_id", type=int),
+                updated_by_user_id=actor["id"],
+                updated_by_display_name=actor.get("display_name") or actor.get("email") or f"User {actor['id']}",
+            )
+            publish_department_update(department_name)
+            return redirect(url_for("staff_status.absences", department_name=department_name))
+
         duration_mode = (request.form.get("duration_mode") or "").strip()
         days_value_raw = (request.form.get("days_value") or "").strip()
 
@@ -262,13 +314,38 @@ def absences(department_name: str):
         publish_department_update(department_name)
         return redirect(url_for("staff_status.absences", department_name=department_name))
 
+    sort_by = (request.args.get("sort") or "start_date").strip()
+    sort_dir = (request.args.get("dir") or "desc").strip().lower()
+    view = (request.args.get("view") or "active").strip().lower()
+
+    absence_type_filter = (request.args.get("absence_type") or "").strip().lower()
+    current_absence_types = [absence_type_filter] if absence_type_filter else []
+
+    current_user_ids = [
+        item.strip()
+        for item in request.args.getlist("user_ids")
+        if item.strip()
+    ]
+
     return render_template(
         "staff_status/absences.html",
         department_name=department_name,
         users=users,
-        absence_types=["sick", "vacation", "personal"],
-        recent_absences=list_recent_absences_for_department(department_name),
+        absence_types=absence_types,
+        recent_absences=list_recent_absences_for_department(
+            department_name,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            view=view,
+            absence_types=current_absence_types,
+            user_ids=current_user_ids,
+        ),
         active_tab="absences",
+        current_sort=sort_by,
+        current_dir=sort_dir,
+        current_view=view,
+        current_absence_types=current_absence_types,
+        current_user_ids=current_user_ids,
     )
 
 

@@ -2,6 +2,9 @@ document.addEventListener("DOMContentLoaded", function () {
   initStaffStatusKiosk();
   initStaffStatusBoard();
   initAbsenceDurationForm();
+  initInlineEditToggles();
+  initEditAbsenceForms();
+  initAbsenceUserFilterSearch();
 });
 
 function initStaffStatusKiosk() {
@@ -209,4 +212,134 @@ function initAbsenceDurationForm() {
 
   durationSelect.addEventListener("change", updateDurationFields);
   updateDurationFields();
+}
+
+function initInlineEditToggles() {
+  const buttons = document.querySelectorAll(".staff-status-edit-toggle-btn");
+  if (!buttons.length) return;
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", function () {
+      const targetId = button.dataset.target;
+      if (!targetId) return;
+
+      const targetRow = document.getElementById(targetId);
+      if (!targetRow) return;
+
+      const isHidden = targetRow.hidden;
+
+      document.querySelectorAll(".staff-status-edit-row, .staff-status-location-edit-row").forEach((row) => {
+        row.hidden = true;
+      });
+
+      if (isHidden) {
+        targetRow.hidden = false;
+      }
+    });
+  });
+}
+
+function initEditAbsenceForms() {
+  const forms = document.querySelectorAll(".staff-status-edit-absence-form");
+  if (!forms.length) return;
+
+  const durationLookup = {
+    quarter_day: "0.25",
+    half_day: "0.5",
+    three_quarter_day: "0.75",
+    full_day: "1.0"
+  };
+
+  forms.forEach((form) => {
+    const durationSelect = form.querySelector(".staff-status-edit-duration-mode");
+    const endDateField = form.querySelector(".staff-status-edit-end-date-field");
+    const daysValueField = form.querySelector(".staff-status-edit-days-value-field");
+    const daysValueInput = form.querySelector(".staff-status-edit-days-value-input");
+    const startDateInput = form.querySelector('input[name="start_date"]');
+    const endDateInput = form.querySelector('input[name="end_date"]');
+
+    if (!durationSelect) return;
+
+    function updateEditDurationFields() {
+      const mode = durationSelect.value;
+      const isMultiDay = mode === "multi_day";
+
+      if (endDateField) {
+        endDateField.hidden = !isMultiDay;
+      }
+
+      if (daysValueField) {
+        daysValueField.hidden = !isMultiDay;
+      }
+
+      if (!isMultiDay) {
+        if (daysValueInput && durationLookup[mode]) {
+          daysValueInput.value = durationLookup[mode];
+        }
+
+        if (startDateInput && endDateInput) {
+          endDateInput.value = startDateInput.value;
+        }
+      }
+    }
+
+    durationSelect.addEventListener("change", updateEditDurationFields);
+
+    if (startDateInput && endDateInput) {
+      startDateInput.addEventListener("change", function () {
+        if (durationSelect.value !== "multi_day") {
+          endDateInput.value = startDateInput.value;
+        }
+      });
+    }
+
+    updateEditDurationFields();
+  });
+}
+
+function initAbsenceUserFilterSearch() {
+  const searchInput = document.getElementById("absence-user-search");
+  const userList = document.getElementById("absence-user-filter-list");
+
+  if (!searchInput || !userList) return;
+
+  const options = Array.from(
+    userList.querySelectorAll(".staff-status-user-filter-option")
+  );
+
+  function applyFilter() {
+    const query = searchInput.value.trim().toLowerCase();
+
+    if (!query) {
+      userList.hidden = true;
+
+      options.forEach((option) => {
+        const checked = !!option.querySelector('input[type="checkbox"]')?.checked;
+        option.hidden = !checked;
+      });
+
+      return;
+    }
+
+    let anyVisible = false;
+
+    options.forEach((option) => {
+      const label = (option.dataset.userLabel || "").toLowerCase();
+      const checked = !!option.querySelector('input[type="checkbox"]')?.checked;
+      const matches = label.includes(query);
+
+      option.hidden = !(matches || checked);
+
+      if (!option.hidden) {
+        anyVisible = true;
+      }
+    });
+
+    userList.hidden = !anyVisible;
+  }
+
+  searchInput.addEventListener("input", applyFilter);
+  userList.addEventListener("change", applyFilter);
+
+  applyFilter();
 }

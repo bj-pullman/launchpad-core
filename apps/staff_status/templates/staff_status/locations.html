@@ -81,17 +81,13 @@
                   {% endif %}
                 </td>
                 <td class="actions-col">
-                  <a href="#edit-location-{{ location.id }}" class="table-link">Edit</a>
+                  <button type="button" class="table-link staff-status-edit-toggle-btn" data-target="edit-location-{{ location.id }}">Edit</button>
                 </td>
               </tr>
 
-              <tr id="edit-location-{{ location.id }}" class="staff-status-location-edit-row">
+              <tr id="edit-location-{{ location.id }}" class="staff-status-location-edit-row" hidden>
                 <td colspan="6">
-                  <details class="staff-status-location-edit-card">
-                    <summary class="location-edit-toggle">
-                      <span>Edit</span>
-                    </summary>
-
+                  <div class="staff-status-location-edit-card">
                     <form method="post" class="settings-form">
                       <input type="hidden" name="action" value="update">
                       <input type="hidden" name="location_id" value="{{ location.id }}">
@@ -130,7 +126,7 @@
                       <input type="hidden" name="location_id" value="{{ location.id }}">
                       <button type="submit" class="btn btn-secondary">Delete</button>
                     </form>
-                  </details>
+                  </div>
                 </td>
               </tr>
             {% endfor %}
@@ -145,4 +141,8 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('staff_status.static', filename='staff_status.js') }}"></script>
 {% endblock %}
