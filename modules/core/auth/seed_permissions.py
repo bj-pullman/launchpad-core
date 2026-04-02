@@ -45,6 +45,10 @@ def seed_permissions():
         # Users settings
         ("launchpad.settings.users.view", "Users Settings"),
         ("launchpad.settings.users.manage", "Manage Users Settings"),
+        
+        # Staff Status settings
+        ("launchpad.settings.staff_status.view", "Staff Status Settings"),
+        ("launchpad.settings.staff_status.manage", "Manage Staff Status Settings"),
 
         # SnipeOps app access
         ("snipeops.home.view", "SnipeOps Home"),
@@ -53,6 +57,18 @@ def seed_permissions():
         ("snipeops.import_by_scan.manage", "Manage Import by Scan"),
         ("snipeops.snipe_catalog.view", "Snipe Catalog"),
         ("snipeops.snipe_catalog.manage", "Manage Snipe Catalog"),
+        
+        # Staff Status app access
+        ("staff_status.home.view", "Staff Status Home"),
+        ("staff_status.home.manage", "Manage Staff Status Home"),
+        ("staff_status.board.view", "Staff Status Board"),
+        ("staff_status.board.manage", "Manage Staff Status Board"),
+        ("staff_status.absences.view", "Staff Status Absences"),
+        ("staff_status.absences.manage", "Manage Staff Status Absences"),
+        ("staff_status.reports.view", "Staff Status Reports"),
+        ("staff_status.reports.manage", "Manage Staff Status Reports"),
+        ("staff_status.settings.view", "Staff Status Settings"),
+        ("staff_status.settings.manage", "Manage Staff Status Settings"),
 
         # Future apps
         ("finance.home.view", "Finance Home"),
@@ -107,6 +123,9 @@ def seed_permissions():
 
         "launchpad.settings.users.view",
         "launchpad.settings.users.manage",
+        
+        "launchpad.settings.staff_status.view",
+        "launchpad.settings.staff_status.manage",
     ]
 
     for key in launchpad_admin_permissions:

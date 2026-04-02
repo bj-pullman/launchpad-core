@@ -1,0 +1,148 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('staff_status.static', filename='staff_status.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+    {% include "staff_status/_subnav.html" %}
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Locations</h1>
+      <p class="page-subtitle">Manage location names, shorthand, active state, and display order.</p>
+    </div>
+  </div>
+
+  <div class="content-card" style="margin-bottom: 16px;">
+    <details class="staff-status-location-create-details">
+      <summary>Add Another Location</summary>
+
+      <div class="optional-details-body" style="margin-top: 16px;">
+        <form method="post" class="settings-form">
+          <input type="hidden" name="action" value="create">
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label for="sort_order">Sort Order</label>
+              <input type="number" id="sort_order" name="sort_order" value="0">
+            </div>
+          </div>
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label for="display_name">Display Name</label>
+              <input type="text" id="display_name" name="display_name" placeholder="Sheridan High School">
+            </div>
+
+            <div class="form-field">
+              <label for="short_name">Short Name</label>
+              <input type="text" id="short_name" name="short_name" placeholder="SHS">
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Location</button>
+          </div>
+        </form>
+      </div>
+    </details>
+  </div>
+
+  <div class="content-card">
+    <h2>Existing Locations</h2>
+
+    {% if locations %}
+      <div class="table-wrap">
+        <table class="data-table staff-status-locations-table">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Display Name</th>
+              <th>Short Name</th>
+              <th>Active</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for location in locations %}
+              <tr>
+                <td>{{ location.sort_order }}</td>
+                <td>{{ location.display_name or "—" }}</td>
+                <td>{{ location.short_name or "—" }}</td>
+                <td>
+                  {% if location.is_active %}
+                    <span class="badge badge-success">Active</span>
+                  {% else %}
+                    <span class="badge badge-muted">Inactive</span>
+                  {% endif %}
+                </td>
+                <td class="actions-col">
+                  <button type="button" class="table-link staff-status-edit-toggle-btn" data-target="edit-location-{{ location.id }}">Edit</button>
+                </td>
+              </tr>
+
+              <tr id="edit-location-{{ location.id }}" class="staff-status-location-edit-row" hidden>
+                <td colspan="6">
+                  <div class="staff-status-location-edit-card">
+                    <form method="post" class="settings-form">
+                      <input type="hidden" name="action" value="update">
+                      <input type="hidden" name="location_id" value="{{ location.id }}">
+
+                      <div class="staff-status-location-edit-grid">
+                        <div class="form-field">
+                          <label>Display Name</label>
+                          <input type="text" name="display_name" value="{{ location.display_name or '' }}">
+                        </div>
+
+                        <div class="form-field">
+                          <label>Short Name</label>
+                          <input type="text" name="short_name" value="{{ location.short_name or '' }}">
+                        </div>
+
+                        <div class="form-field">
+                          <label>Sort Order</label>
+                          <input type="number" name="sort_order" value="{{ location.sort_order }}">
+                        </div>
+                      </div>
+
+                      <div class="staff-status-location-edit-actions">
+                        <label class="staff-status-inline-checkbox">
+                          <input type="checkbox" name="is_active" value="1" {% if location.is_active %}checked{% endif %}>
+                          Active
+                        </label>
+
+                        <div class="form-actions">
+                          <button type="submit" class="btn btn-primary">Save</button>
+                        </div>
+                      </div>
+                    </form>
+
+                    <form method="post" style="margin-top: 12px;">
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="location_id" value="{{ location.id }}">
+                      <button type="submit" class="btn btn-secondary">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h3>No locations found</h3>
+        <p class="muted">Add your first location above.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('staff_status.static', filename='staff_status.js') }}"></script>
+{% endblock %}

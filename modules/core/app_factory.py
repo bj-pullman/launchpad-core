@@ -1,14 +1,16 @@
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, request, session, url_for
 
 from apps.snipeops.import_by_scan.blueprint import bp as import_by_scan_bp
-from apps.snipeops.import_by_scan.import_by_scan_db import init_db
+from apps.snipeops.import_by_scan.import_by_scan_db import init_db as import_by_scan_init_db
 from apps.snipeops.snipe_catalog.blueprint import bp as snipe_catalog_bp
 from apps.launchpad_ui import launchpad_ui_bp
 from apps.snipeops.blueprint import bp as snipeops_bp
+from apps.staff_status.blueprint import bp as staff_status_bp
+from apps.staff_status.db import init_staff_status_db
 
 from modules.core.auth.blueprint import bp as auth_bp
 from modules.core.auth import routes as auth_routes  # noqa: F401
@@ -24,6 +26,8 @@ from modules.core.setup.blueprint import bp as setup_bp
 from modules.core.auth.bootstrap_admin import ensure_default_local_admin
 from modules.core.utils.time import format_system_time, utc_now
 from modules.core.settings.settings_service import get_setting, get_bool_setting
+
+from tasks.scheduler import configure_jobs
 
 load_dotenv()
 
@@ -53,11 +57,12 @@ def create_app() -> Flask:
     app.config["SYSTEM_TIMEZONE"] = os.getenv("SYSTEM_TIMEZONE", "UTC")
 
     # Init DB
-    init_db()
+    import_by_scan_init_db()
     init_identity_db()
     init_local_auth_db()
     init_settings_db()
     init_rbac_db()
+    init_staff_status_db()
 
     seed_permissions()
     ensure_default_local_admin()
@@ -217,6 +222,16 @@ def create_app() -> Flask:
     app.register_blueprint(launchpad_ui_bp)
     app.register_blueprint(snipeops_bp)
     app.register_blueprint(setup_bp)
+    app.register_blueprint(staff_status_bp)
+    
+    should_start_scheduler = True
+
+    if app.debug:
+        should_start_scheduler = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+
+    if should_start_scheduler:
+        with app.app_context():
+            configure_jobs()
 
     @app.before_request
     def check_initial_setup():
@@ -275,6 +290,34 @@ def create_app() -> Flask:
     @app.template_filter("localtime")
     def localtime_filter(value):
         return format_system_time(value)
+    
+    @app.template_filter("localdate")
+    def localdate_filter(value):
+        if not value:
+            return ""
+
+        raw = str(value).strip()
+        if not raw:
+            return ""
+
+        date_format = get_setting("general.date_format", "mdy") or "mdy"
+
+        try:
+            if "T" in raw:
+                dt = datetime.fromisoformat(raw)
+                target_date = dt.date()
+            else:
+                target_date = date.fromisoformat(raw)
+        except Exception:
+            return raw
+
+        if date_format == "dmy":
+            return target_date.strftime("%m/%d/%Y")
+        if date_format == "ymd":
+            return target_date.strftime("%Y-%m-%d")
+
+        # default mdy
+        return target_date.strftime("%m/%d/%Y")
 
     @app.context_processor
     def inject_global_settings():

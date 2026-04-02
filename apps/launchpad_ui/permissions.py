@@ -15,6 +15,12 @@ SETTINGS_SECTIONS = [
         "permission": "launchpad.settings.snipeops.view",
     },
     {
+        "key": "staff_status",
+        "label": "Staff Status",
+        "endpoint": "launchpad_ui.settings_staff_status",
+        "permission": "launchpad.settings.staff_status.view",
+    },
+    {
         "key": "authentication",
         "label": "Authentication",
         "endpoint": "launchpad_ui.settings_authentication",
@@ -91,6 +97,14 @@ LAUNCHPAD_APPS = [
         "description": "Staff resources, training, documentation, announcements, and support links.",
         "endpoint": "techhub.index",
         "permission": "techhub.home.view",
+    },
+    
+    {
+        "key": "staff_status",
+        "label": "Staff Status",
+        "description": "Real-time staff location and availability tracking.",
+        "endpoint": "staff_status.index",
+        "permission": "staff_status.home.view",
     },
 ]
 

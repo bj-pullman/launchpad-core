@@ -1,0 +1,58 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('staff_status.static', filename='staff_status.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  {% include "staff_status/_subnav.html" %}
+  <div class="staff-status-private-board-wrap">
+    <header class="staff-status-board-header staff-status-board-header-private">
+      <div>
+        <p class="staff-status-eyebrow">Authenticated Board View</p>
+        <h1>{{ department_name }}</h1>
+        <p class="staff-status-board-subtitle">Current staff location and availability</p>
+      </div>
+
+      <div class="staff-status-board-meta">
+        <div class="staff-status-board-datetime">
+          <div id="staff-status-board-date" class="staff-status-board-date">—</div>
+          <div id="staff-status-board-time" class="staff-status-board-time">—</div>
+        </div>
+        <span class="staff-status-board-refresh">
+          Board updates every {{ refresh_seconds|default(15) }} seconds
+        </span>
+      </div>
+    </header>
+
+      <section
+        id="staff-status-board-grid"
+        class="staff-status-board-grid"
+        data-data-url="{{ url_for('staff_status.board_data', department_name=department_name) }}"
+        data-refresh-seconds="{{ refresh_seconds|default(5) }}"
+        data-timezone="{{ app_timezone }}"
+        data-stream-url="{{ stream_url }}"
+      >
+      {% for row in board_rows %}
+        <article class="staff-status-board-row">
+          <div class="staff-status-board-name">{{ row.display_name }}</div>
+          <div class="staff-status-board-status {% if row.is_out_of_office %}out{% endif %}">
+            {{ row.display_status_label }}
+          </div>
+          <div class="staff-status-board-updated">
+            {{ row.updated_at or "No updates yet" }}
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('staff_status.static', filename='staff_status.js') }}"></script>
+{% endblock %}

@@ -3,6 +3,7 @@ document.addEventListener("DOMContentLoaded", function () {
   initUserFormPasswordToggle();
   initSettingsTabs();
   initAuthenticationConnectionTests();
+  initBoardTokenButtons();
 });
 
 function initSnipeOpsConnectionTest() {
@@ -169,6 +170,125 @@ function initAuthenticationConnectionTests() {
           "Configuration test failed due to a network or server error.";
         resultBox.className =
           "settings-test-result settings-test-result-error";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const rotateButtons = document.querySelectorAll(".rotate-kiosk-token-btn");
+
+  rotateButtons.forEach((button) => {
+    button.addEventListener("click", async function () {
+      const rotateUrl = button.dataset.rotateUrl;
+      const department = button.dataset.department;
+      const resultBox = document.querySelector(`[data-kiosk-result="${department}"]`);
+      const urlInput = document.querySelector(`[data-kiosk-url-input="${department}"]`);
+
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = "Working...";
+
+      try {
+        const response = await fetch(rotateUrl, {
+          method: "POST",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest"
+          }
+        });
+
+        const payload = await response.json();
+
+        resultBox.hidden = false;
+
+        if (response.ok && payload.ok) {
+          urlInput.value = payload.kiosk_url;
+          resultBox.className = "settings-test-result settings-test-result-success";
+          resultBox.textContent = `Kiosk URL updated for ${payload.department_name}.`;
+          button.textContent = "Regenerate Kiosk URL";
+        } else {
+          resultBox.className = "settings-test-result settings-test-result-error";
+          resultBox.textContent = payload.message || "Unable to rotate kiosk URL.";
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        resultBox.hidden = false;
+        resultBox.className = "settings-test-result settings-test-result-error";
+        resultBox.textContent = "Unable to rotate kiosk URL.";
+        button.textContent = originalText;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+});
+
+function initBoardTokenButtons() {
+  const rotateButtons = document.querySelectorAll(".rotate-board-token-btn");
+
+  if (!rotateButtons.length) {
+    return;
+  }
+
+  rotateButtons.forEach((button) => {
+    button.addEventListener("click", async function () {
+      const rotateUrl = button.dataset.rotateUrl;
+      const department = button.dataset.department;
+      const resultBox = document.querySelector(
+        `[data-board-result="${department}"]`
+      );
+      const urlInput = document.querySelector(
+        `[data-board-url-input="${department}"]`
+      );
+
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = "Working...";
+
+      try {
+        const response = await fetch(rotateUrl, {
+          method: "POST",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest"
+          }
+        });
+
+        const payload = await response.json();
+
+        if (resultBox) {
+          resultBox.hidden = false;
+        }
+
+        if (response.ok && payload.ok) {
+          if (urlInput) {
+            urlInput.value = payload.board_url;
+          }
+          if (resultBox) {
+            resultBox.className =
+              "settings-test-result settings-test-result-success";
+            resultBox.textContent =
+              `Board URL updated for ${payload.department_name}.`;
+          }
+          button.textContent = "Regenerate Board URL";
+        } else {
+          if (resultBox) {
+            resultBox.className =
+              "settings-test-result settings-test-result-error";
+            resultBox.textContent =
+              payload.message || "Unable to rotate board URL.";
+          }
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        if (resultBox) {
+          resultBox.hidden = false;
+          resultBox.className =
+            "settings-test-result settings-test-result-error";
+          resultBox.textContent = "Unable to rotate board URL.";
+        }
+        button.textContent = originalText;
       } finally {
         button.disabled = false;
       }

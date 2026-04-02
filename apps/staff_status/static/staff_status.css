@@ -1,0 +1,932 @@
+/* staff_status.css */
+
+:root {
+  --ss-bg: #eef3f8;
+  --ss-panel: #ffffff;
+  --ss-panel-soft: #f8fafc;
+  --ss-text: #1f2937;
+  --ss-muted: #64748b;
+  --ss-border: #dbe3ec;
+  --ss-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --ss-radius: 18px;
+  --ss-radius-sm: 14px;
+  --ss-accent: #2563eb;
+  --ss-success-bg: #ecfdf3;
+  --ss-success-text: #166534;
+  --ss-error-bg: #fef2f2;
+  --ss-error-text: #991b1b;
+  --ss-warning-text: #92400e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.staff-status-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 18px 0;
+  padding: 0;
+}
+
+.staff-status-subnav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 14px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.staff-status-subnav a:hover {
+  background: rgba(59, 130, 246, 0.05);
+  border-color: rgba(59, 130, 246, 0.16);
+}
+
+.staff-status-subnav a.active {
+  background: rgba(59, 130, 246, 0.10);
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.staff-status-kiosk-body,
+.staff-status-board-body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--ss-text);
+  background: var(--ss-bg);
+}
+
+.staff-status-kiosk-shell,
+.staff-status-board-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.staff-status-kiosk-card,
+.staff-status-board-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.staff-status-kiosk-card {
+  border: 1px solid var(--ss-border);
+  background: var(--ss-panel);
+  border-radius: var(--ss-radius);
+  padding: 24px;
+  box-shadow: var(--ss-shadow);
+  position: relative;
+}
+
+.staff-status-kiosk-success-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: var(--ss-radius);
+  z-index: 20;
+}
+
+.staff-status-kiosk-success-card {
+  min-width: 320px;
+  max-width: 420px;
+  padding: 28px 24px;
+  border: 1px solid var(--ss-border);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: var(--ss-shadow);
+  text-align: center;
+}
+
+.staff-status-kiosk-success-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px auto;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ss-success-bg);
+  color: var(--ss-success-text);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.staff-status-kiosk-success-card h2 {
+  margin: 0 0 8px 0;
+  font-size: 28px;
+}
+
+.staff-status-kiosk-success-card p {
+  margin: 0;
+  color: var(--ss-muted);
+}
+
+.staff-status-kiosk-success-overlay[hidden] {
+  display: none !important;
+}
+
+.staff-status-eyebrow {
+  margin: 0 0 8px 0;
+  color: var(--ss-accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.staff-status-kiosk-header,
+.staff-status-board-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.staff-status-kiosk-header h1,
+.staff-status-board-header h1 {
+  margin: 0 0 6px 0;
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+.staff-status-kiosk-subtitle,
+.staff-status-board-subtitle {
+  margin: 0;
+  color: var(--ss-muted);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.staff-status-board-refresh {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--ss-panel-soft);
+  border: 1px solid var(--ss-border);
+  color: var(--ss-muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.staff-status-kiosk-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.staff-status-kiosk-panel {
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+  background: var(--ss-panel-soft);
+  padding: 18px;
+}
+
+.staff-status-kiosk-form .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.staff-status-kiosk-form .form-field label {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.staff-status-kiosk-form .form-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 16px;
+}
+
+.staff-status-kiosk-form select {
+  width: 100%;
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-text);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font: inherit;
+  font-size: 15px;
+}
+
+.staff-status-kiosk-form select:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+}
+
+.staff-status-kiosk-location-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.staff-status-kiosk-location-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 68px;
+  padding: 14px 16px;
+  border: 1px solid var(--ss-border);
+  border-radius: 14px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.staff-status-kiosk-location-card:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.staff-status-kiosk-location-card input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--ss-accent);
+}
+
+.staff-status-kiosk-location-card span {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.staff-status-primary-btn {
+  min-width: 200px;
+  min-height: 50px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: #2563eb;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.staff-status-primary-btn:hover {
+  background: #1d4ed8;
+}
+
+.staff-status-primary-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.staff-status-result {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.staff-status-result-success {
+  background: var(--ss-success-bg);
+  color: var(--ss-success-text);
+  border-color: #bbf7d0;
+}
+
+.staff-status-result-error {
+  background: var(--ss-error-bg);
+  color: var(--ss-error-text);
+  border-color: #fecaca;
+}
+
+.staff-status-board-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.staff-status-board-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 180px;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--ss-border);
+  background: var(--ss-panel);
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: var(--ss-shadow);
+}
+
+.staff-status-board-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.staff-status-board-status {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.staff-status-board-status.out {
+  color: var(--ss-warning-text);
+}
+
+.staff-status-board-updated {
+  font-size: 13px;
+  color: var(--ss-muted);
+  text-align: right;
+  font-weight: 600;
+}
+
+.staff-status-board-datetime {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.staff-status-board-date {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ss-muted);
+}
+
+.staff-status-board-time {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ss-text);
+}
+
+.staff-status-board-header-private {
+  margin-bottom: 18px;
+}
+
+.staff-status-private-board-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.staff-status-locations-table details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ss-accent);
+}
+
+.staff-status-locations-table .optional-details {
+  min-width: 280px;
+}
+
+.staff-status-location-create-details summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--accent), #2563eb);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(37,99,235,.18);
+}
+
+.staff-status-location-create-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.staff-status-location-edit-row td {
+  padding-top: 0;
+  background: transparent;
+}
+
+.staff-status-location-edit-card {
+  margin: 8px 0 12px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(59,130,246,.03);
+}
+
+.staff-status-location-edit-card h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+}
+
+.staff-status-location-edit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(140px, 1fr) 120px;
+  gap: 14px;
+}
+
+.staff-status-location-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.staff-status-inline-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+#days-value-field[hidden],
+#end-date-field[hidden] {
+  display: none !important;
+}
+
+.staff-status-edit-row[hidden],
+.staff-status-location-edit-row[hidden] {
+  display: none !important;
+}
+
+.staff-status-edit-toggle-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.staff-status-edit-days-value-field[hidden],
+.staff-status-edit-end-date-field[hidden] {
+  display: none !important;
+}
+
+.table-actions-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.table-actions-button {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  border: 1px solid rgba(20,32,51,.10);
+  border-radius: 10px;
+  background: #fff;
+  font-weight: 700;
+}
+
+.table-actions-button::-webkit-details-marker {
+  display: none;
+}
+
+.table-actions-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 140px;
+  padding: 8px;
+  border: 1px solid rgba(20,32,51,.10);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15,23,42,.10);
+  z-index: 20;
+}
+
+.table-actions-link {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #142033;
+  font-weight: 600;
+}
+
+/* ------------------------------
+ABSENCE FILTER PANEL
+------------------------------ */
+
+.staff-status-filter-details {
+  display: inline-block;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.staff-status-filter-details[open] {
+  display: block;
+  border: 1px solid var(--ss-border);
+  border-radius: 16px;
+  background: var(--ss-panel-soft);
+  overflow: hidden;
+}
+
+.staff-status-filter-details summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid var(--ss-border);
+  color: var(--ss-text);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.staff-status-filter-details[open] summary {
+  margin: 16px 16px 0 16px;
+}
+
+.staff-status-filter-details summary:hover {
+  background: #f8fbff;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.staff-status-filter-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.staff-status-table-filters {
+  padding: 16px;
+}
+
+.staff-status-table-filters .form-grid-equal {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 260px) minmax(0, 260px);
+  gap: 18px;
+  align-items: start;
+}
+
+.staff-status-table-filters .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.staff-status-table-filters .form-field label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ss-text);
+}
+
+.staff-status-table-filters select,
+.staff-status-table-filters input[type="text"] {
+  width: 100%;
+  border: 1px solid var(--ss-border);
+  background: #ffffff;
+  color: var(--ss-text);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 15px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.staff-status-table-filters select:focus,
+.staff-status-table-filters input[type="text"]:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+  background: #ffffff;
+}
+
+/* ------------------------------
+ABSENCE FILTER PANEL
+------------------------------ */
+
+.staff-status-filter-details {
+  display: inline-block;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.staff-status-filter-details[open] {
+  display: block;
+  border: 1px solid var(--ss-border);
+  border-radius: 16px;
+  background: var(--ss-panel-soft);
+  overflow: hidden;
+}
+
+.staff-status-filter-details summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid var(--ss-border);
+  color: var(--ss-text);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.staff-status-filter-details[open] summary {
+  margin: 16px 16px 0 16px;
+}
+
+.staff-status-filter-details summary:hover {
+  background: #f8fbff;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.staff-status-filter-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.staff-status-table-filters {
+  padding: 16px;
+}
+
+.staff-status-table-filters .form-grid-equal {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 260px) minmax(0, 260px);
+  gap: 18px;
+  align-items: start;
+}
+
+.staff-status-table-filters .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.staff-status-table-filters .form-field label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ss-text);
+}
+
+.staff-status-table-filters select,
+.staff-status-table-filters input[type="text"] {
+  width: 100%;
+  border: 1px solid var(--ss-border);
+  background: #ffffff;
+  color: var(--ss-text);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 15px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.staff-status-table-filters select:focus,
+.staff-status-table-filters input[type="text"]:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+  background: #ffffff;
+}
+
+/* ------------------------------
+FILTER ACTIONS
+------------------------------ */
+
+.staff-status-table-filters .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.staff-status-table-filters .btn {
+  min-width: 150px;
+}
+
+/* ------------------------------
+ACTIVE FILTERS BAR
+------------------------------ */
+
+.staff-status-active-filters-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0 14px 0;
+  padding: 4px 0 0 0;
+}
+
+.staff-status-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.badge-filter {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.14);
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.staff-status-active-filters-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.staff-status-clear-filters-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ss-border);
+  background: #ffffff;
+  color: var(--ss-text);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.staff-status-clear-filters-link:hover {
+  background: #f8fbff;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.staff-status-user-filter-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+/* ------------------------------
+USER FILTER OPTIONS
+------------------------------ */
+
+.staff-status-user-filter-option input[type="checkbox"] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ss-accent);
+  justify-self: start;
+  align-self: center;
+}
+
+.staff-status-user-filter-option span {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ss-text);
+  line-height: 1.3;
+  text-align: left;
+}
+
+#absence-user-filter-list[hidden],
+#absence-type-filter-list[hidden],
+.staff-status-user-filter-option[hidden] {
+  display: none !important;
+}
+
+/* ------------------------------
+SORT LINKS
+------------------------------ */
+
+.table-sort-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.table-sort-link:hover {
+  color: var(--ss-accent);
+  text-decoration: none;
+}
+
+.table-sort-indicator {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ss-accent);
+}
+
+.table-sort-indicator-inactive {
+  color: var(--ss-muted);
+  opacity: 0.35;
+}
+
+.staff-status-filter-wrap {
+  display: block;
+}
+
+@media (max-width: 1100px) {
+  .staff-status-kiosk-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-status-kiosk-location-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-status-board-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .staff-status-board-updated {
+    text-align: left;
+  }
+
+  .staff-status-location-edit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-status-table-filters .form-grid-equal {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 800px) {
+  .staff-status-table-filters .form-grid-equal {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .staff-status-kiosk-shell,
+  .staff-status-board-shell {
+    padding: 16px;
+  }
+
+  .staff-status-kiosk-card {
+    padding: 18px;
+  }
+
+  .staff-status-kiosk-header,
+  .staff-status-board-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .staff-status-kiosk-location-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-status-primary-btn {
+    width: 100%;
+  }
+
+  .staff-status-board-datetime {
+    align-items: flex-start;
+  }
+
+  .staff-status-board-time {
+    font-size: 1.25rem;
+  }
+
+  .staff-status-location-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-status-active-filters-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .staff-status-active-filters-actions {
+    margin-left: 0;
+  }
+
+  .staff-status-table-filters .form-actions {
+    justify-content: stretch;
+  }
+
+  .staff-status-table-filters .btn {
+    width: 100%;
+  }
+}

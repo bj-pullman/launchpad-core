@@ -14,6 +14,15 @@ from flask import (
 from werkzeug.routing import BuildError
 
 from . import launchpad_ui_bp
+
+from apps.staff_status.service import (
+    get_department_record,
+    list_active_departments_from_users,
+    rotate_kiosk_token,
+    upsert_department_settings,
+    rotate_board_token,
+)
+
 from .permissions import get_visible_settings_sections, get_visible_launchpad_apps
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.auth.user_admin_service import (
@@ -42,6 +51,8 @@ from modules.core.identity.rbac_service import (
 from modules.core.identity.rbac_db import get_connection as get_rbac_connection
 from modules.core.identity.user_service import get_user_by_id, update_user, create_user
 from modules.core.settings.settings_service import get_setting, set_setting, get_bool_setting
+
+from tasks.scheduler import configure_jobs
 
 
 def get_all_roles():
@@ -412,7 +423,7 @@ def inject_launchpad_navigation():
             url_for(app["endpoint"])
             visible_apps.append(app)
         except BuildError:
-            current_app.logger.warning(
+            current_app.logger.debug(
                 "Skipping launchpad app with unregistered endpoint: %s",
                 app["endpoint"],
             )
@@ -1234,4 +1245,141 @@ def settings_users_edit(user_id: int):
         inherited_permissions = access_summary.get("inherited_permissions", []),
         direct_permissions = access_summary.get("direct_permissions", []),
         effective_permissions = access_summary.get("effective_permissions", []),
+    )
+    
+@launchpad_ui_bp.route("/settings/staff-status", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.staff_status.view")
+def settings_staff_status():
+    available_departments = list_active_departments_from_users()
+
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.staff_status.manage",
+            "You do not have permission to update Staff Status settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+        enabled_departments = request.form.getlist("enabled_departments")
+        daily_reset_enabled = 1 if request.form.get("daily_reset_enabled") == "1" else 0
+        daily_reset_time = (request.form.get("daily_reset_time") or "01:00").strip()
+        board_refresh_seconds = (
+            request.form.get("board_refresh_seconds") or "15"
+        ).strip()
+
+        set_setting("staff_status.enabled_departments", ",".join(enabled_departments))
+        set_setting("staff_status.daily_reset_enabled", daily_reset_enabled)
+        set_setting("staff_status.daily_reset_time", daily_reset_time)
+        set_setting("staff_status.board_refresh_seconds", board_refresh_seconds)
+
+        for department_name in available_departments:
+            is_enabled = department_name in enabled_departments
+            home_location = (
+                request.form.get(f"home_location_{department_name}") or ""
+            ).strip()
+
+            set_setting(
+                f"staff_status.department.{department_name}.home_location",
+                home_location,
+            )
+
+            upsert_department_settings(
+                department_name=department_name,
+                is_enabled=is_enabled,
+                home_location=home_location,
+            )
+        configure_jobs()
+
+        flash("Staff Status settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+    enabled_departments_raw = get_setting("staff_status.enabled_departments", "") or ""
+    enabled_departments = [
+        item.strip() for item in enabled_departments_raw.split(",") if item.strip()
+    ]
+
+    department_rows = []
+    for department_name in available_departments:
+        department_record = get_department_record(department_name)
+        kiosk_token = department_record.get("kiosk_token") if department_record else None
+        board_token = department_record.get("board_token") if department_record else None
+        kiosk_enabled = (
+            int(department_record.get("kiosk_enabled", 0)) == 1
+            if department_record
+            else False
+        )
+        home_location = get_setting(
+            f"staff_status.department.{department_name}.home_location",
+            department_record.get("home_location_label", "") if department_record else "",
+        )
+
+        department_rows.append(
+            {
+                "department_name": department_name,
+                "is_enabled": department_name in enabled_departments,
+                "home_location": home_location or "",
+                "kiosk_enabled": kiosk_enabled,
+                "kiosk_token": kiosk_token,
+                "board_token": board_token,
+            }
+        )
+
+    settings = {
+        "enabled_departments": enabled_departments,
+        "daily_reset_enabled": get_bool_setting("staff_status.daily_reset_enabled", True),
+        "daily_reset_time": get_setting("staff_status.daily_reset_time", "01:00"),
+        "board_refresh_seconds": get_setting(
+            "staff_status.board_refresh_seconds", "15"
+        ),
+    }
+
+    return render_template(
+        "launchpad_ui/settings/staff_status.html",
+        active_section="staff_status",
+        settings=settings,
+        department_rows=department_rows,
+    )
+    
+@launchpad_ui_bp.route(
+    "/settings/staff-status/<department_name>/rotate-kiosk-token",
+    methods=["POST"],
+)
+@login_required
+@require_permission("launchpad.settings.staff_status.manage")
+def settings_staff_status_rotate_kiosk_token(department_name: str):
+    department = rotate_kiosk_token(department_name)
+
+    return jsonify(
+        {
+            "ok": True,
+            "department_name": department["department_name"],
+            "kiosk_token": department["kiosk_token"],
+            "kiosk_url": url_for(
+                "staff_status.kiosk",
+                token=department["kiosk_token"],
+                _external=True,
+            ),
+        }
+    )
+    
+@launchpad_ui_bp.route(
+    "/settings/staff-status/<department_name>/rotate-board-token",
+    methods=["POST"],
+)
+@login_required
+@require_permission("launchpad.settings.staff_status.manage")
+def settings_staff_status_rotate_board_token(department_name: str):
+    department = rotate_board_token(department_name)
+
+    return jsonify(
+        {
+            "ok": True,
+            "department_name": department["department_name"],
+            "board_token": department["board_token"],
+            "board_url": url_for(
+                "staff_status.board_public",
+                token=department["board_token"],
+                _external=True,
+            ),
+        }
     )

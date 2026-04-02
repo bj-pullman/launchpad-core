@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{ department_name }} Kiosk</title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('staff_status.static', filename='staff_status.css') }}"
+  >
+</head>
+<body class="staff-status-kiosk-body">
+  <main class="staff-status-kiosk-shell">
+    <section class="staff-status-kiosk-card">
+      <div id="staff-status-kiosk-success-overlay" class="staff-status-kiosk-success-overlay" hidden>
+        <div class="staff-status-kiosk-success-card">
+          <div class="staff-status-kiosk-success-icon">✓</div>
+          <h2>Entry Submitted</h2>
+          <p>The status was updated successfully.</p>
+        </div>
+      </div>
+      
+      <header class="staff-status-kiosk-header">
+        <p class="staff-status-eyebrow">Department Kiosk</p>
+        <h1>{{ department_name }}</h1>
+        <p class="staff-status-kiosk-subtitle">
+          Select your name and choose your current location.
+        </p>
+      </header>
+
+      <form
+        id="staff-status-kiosk-form"
+        class="staff-status-kiosk-form"
+        method="post"
+        action="{{ url_for('staff_status.kiosk_submit', token=kiosk_token) }}"
+        data-reset-seconds="{{ reset_seconds|default(5) }}"
+      >
+        <div class="staff-status-kiosk-layout">
+          <div class="staff-status-kiosk-panel">
+            <div class="form-field">
+              <label for="user_id">Staff Member</label>
+              <select id="user_id" name="user_id" required>
+                <option value="">Select a user</option>
+                {% for user in users %}
+                  <option value="{{ user.id }}">{{ user.resolved_display_name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div id="staff-status-kiosk-result" class="staff-status-result" hidden></div>
+
+            <div class="form-actions">
+              <button type="submit" class="staff-status-primary-btn">Update Status</button>
+            </div>
+          </div>
+
+          <div class="staff-status-kiosk-panel">
+            <div class="form-field">
+              <label>Locations</label>
+              <div class="staff-status-kiosk-location-grid">
+                {% for location in locations %}
+                  <label class="staff-status-kiosk-location-card">
+                    <input type="checkbox" name="location_labels" value="{{ location.location_label }}">
+                    <span>{{ location.display_name or location.location_label }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="{{ url_for('staff_status.static', filename='staff_status.js') }}"></script>
+</body>
+</html>

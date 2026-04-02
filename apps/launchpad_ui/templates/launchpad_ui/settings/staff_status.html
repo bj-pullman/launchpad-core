@@ -1,0 +1,223 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+/>
+{% endblock %}
+
+{% block content %}
+<div class="settings-layout">
+  {% include "launchpad_ui/settings/_sidebar.html" %}
+
+  <div class="settings-main settings-main-narrow">
+    <div class="page-header">
+      <div>
+        <h1>Staff Status Settings</h1>
+        <p class="muted">
+          Configure enabled departments, kiosk URLs, board refresh, and daily reset behavior.
+        </p>
+      </div>
+    </div>
+
+    <div class="settings-tabs">
+      <button type="button" class="settings-tab active" data-tab="general">
+        General
+      </button>
+      <button type="button" class="settings-tab" data-tab="departments">
+        Departments
+      </button>
+      <button type="button" class="settings-tab" data-tab="kiosks">
+        Kiosks
+      </button>
+    </div>
+
+    <div class="content-card">
+      <form method="post" id="staff-status-settings-form" class="settings-form">
+        <div class="settings-tab-panel active" data-panel="general">
+          <div class="card" style="min-height: 0;">
+            <h2>General</h2>
+            <p>Manage global Staff Status behavior.</p>
+
+            <div class="form-field checkbox-card">
+              <label>
+                <input
+                  type="checkbox"
+                  name="daily_reset_enabled"
+                  value="1"
+                  {% if settings.daily_reset_enabled %}checked{% endif %}
+                >
+                Enable daily reset
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="daily_reset_time">Daily Reset Time</label>
+                <input
+                  type="time"
+                  id="daily_reset_time"
+                  name="daily_reset_time"
+                  value="{{ settings.daily_reset_time }}"
+                >
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label for="board_refresh_seconds">Board Refresh Seconds</label>
+              <input
+                type="number"
+                min="5"
+                max="300"
+                id="board_refresh_seconds"
+                name="board_refresh_seconds"
+                value="{{ settings.board_refresh_seconds }}"
+              >
+              <small class="form-help">Used by the department board auto-refresh endpoint.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-tab-panel" data-panel="departments">
+          <div class="card" style="min-height: 0;">
+            <h2>Departments</h2>
+            <p>Select which departments should be enabled for Staff Status.</p>
+
+            {% if department_rows %}
+              <div class="staff-status-department-list">
+                {% for department in department_rows %}
+                  <div class="staff-status-department-card">
+                    <div class="form-field checkbox-card">
+                      <label>
+                        <input
+                          type="checkbox"
+                          name="enabled_departments"
+                          value="{{ department.department_name }}"
+                          {% if department.is_enabled %}checked{% endif %}
+                        >
+                        {{ department.department_name }}
+                      </label>
+                    </div>
+
+                    <div class="form-field">
+                      <label for="home_location_{{ loop.index }}">Home Location</label>
+                      <input
+                        type="text"
+                        id="home_location_{{ loop.index }}"
+                        name="home_location_{{ department.department_name }}"
+                        value="{{ department.home_location }}"
+                        placeholder="Technology Office"
+                      >
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state">
+                <h3>No departments found</h3>
+                <p class="muted">Departments are pulled from active users in the users table.</p>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="settings-tab-panel" data-panel="kiosks">
+          <div class="card" style="min-height: 0;">
+            <h2>Kiosks</h2>
+            <p>Each kiosk URL is tied to one department and generated server-side.</p>
+
+            {% if department_rows %}
+              <div class="staff-status-kiosk-list">
+                {% for department in department_rows %}
+                  <div class="staff-status-kiosk-card">
+                    <div class="staff-status-kiosk-card-header">
+                      <div>
+                        <h3>{{ department.department_name }}</h3>
+                        <p class="muted">
+                          {% if department.kiosk_enabled and department.kiosk_token %}
+                            Kiosk URL is active for this department.
+                          {% else %}
+                            No kiosk URL has been generated yet.
+                          {% endif %}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="test-connection-btn rotate-kiosk-token-btn"
+                        data-department="{{ department.department_name }}"
+                        data-rotate-url="{{ url_for('launchpad_ui.settings_staff_status_rotate_kiosk_token', department_name=department.department_name) }}"
+                      >
+                        {% if department.kiosk_enabled and department.kiosk_token %}
+                          Regenerate Kiosk URL
+                        {% else %}
+                          Generate Kiosk URL
+                        {% endif %}
+                      </button>
+
+                      <button
+                        type="button"
+                        class="test-connection-btn rotate-board-token-btn"
+                        data-department="{{ department.department_name }}"
+                        data-rotate-url="{{ url_for('launchpad_ui.settings_staff_status_rotate_board_token', department_name=department.department_name) }}"
+                        >
+                        {% if department.board_token %}
+                            Regenerate Board URL
+                        {% else %}
+                            Generate Board URL
+                        {% endif %}
+                        </button>
+                    </div>
+
+                    <div class="form-field">
+                      <label>Kiosk URL</label>
+                      <input
+                        type="text"
+                        readonly
+                        value="{% if department.kiosk_enabled and department.kiosk_token %}{{ url_for('staff_status.kiosk', token=department.kiosk_token, _external=True) }}{% endif %}"
+                        data-kiosk-url-input="{{ department.department_name }}"
+                        placeholder="No kiosk URL generated yet"
+                      >
+                    </div>
+
+                    <div class="form-field">
+                        <label>Status Board URL</label>
+                        <input
+                            type="text"
+                            readonly
+                            value="{% if department.board_token %}{{ url_for('staff_status.board_public', token=department.board_token, _external=True) }}{% endif %}"
+                            data-board-url-input="{{ department.department_name }}"
+                            placeholder="No board URL generated yet"
+                        >
+                    </div>
+
+                    <div
+                      class="settings-test-result"
+                      data-kiosk-result="{{ department.department_name }}"
+                      hidden
+                    ></div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state">
+                <h3>No departments found</h3>
+                <p class="muted">Departments are pulled from active users in the users table.</p>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save Staff Status Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+{% endblock %}

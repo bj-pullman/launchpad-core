@@ -1,0 +1,44 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('staff_status.static', filename='staff_status.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h1>Staff Status</h1>
+      <p class="page-subtitle">
+        View department boards, kiosks, absences, and reporting.
+      </p>
+    </div>
+  </div>
+
+  {% if departments %}
+    <div class="card-grid">
+      {% for department in departments %}
+        <a
+          class="card"
+          href="{{ url_for('staff_status.department_overview', department_name=department.department_name) }}"
+        >
+          <div class="card-title">{{ department.department_name }}</div>
+          <div class="card-body">
+            Open the {{ department.department_name }} Staff Status area.
+          </div>
+          <div class="card-cta">Open Department →</div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="content-card">
+      <div class="empty-state">
+        <h3>No enabled departments found</h3>
+        <p class="muted">
+          Add active users with department values, then enable departments in Staff Status settings.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{ department_name }} Status Board</title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('staff_status.static', filename='staff_status.css') }}"
+  >
+</head>
+<body class="staff-status-board-body">
+  <main class="staff-status-board-shell">
+    <header class="staff-status-board-header">
+      <div>
+        <p class="staff-status-eyebrow">Live Department Board</p>
+        <h1>{{ department_name }}</h1>
+        <p class="staff-status-board-subtitle">Current staff location and availability</p>
+      </div>
+
+      <div class="staff-status-board-meta">
+        <div class="staff-status-board-datetime">
+          <div id="staff-status-board-date" class="staff-status-board-date">—</div>
+          <div id="staff-status-board-time" class="staff-status-board-time">—</div>
+        </div>
+        <span class="staff-status-board-refresh">
+          Board updates every {{ refresh_seconds|default(15) }} seconds
+        </span>
+      </div>
+    </header>
+
+      <section
+        id="staff-status-board-grid"
+        class="staff-status-board-grid"
+        data-data-url="{{ url_for('staff_status.board_public_data', token=board_token) }}"
+        data-refresh-seconds="{{ refresh_seconds|default(5) }}"
+        data-timezone="{{ app_timezone }}"
+        data-stream-url="{{ stream_url }}"
+      >
+      {% for row in board_rows %}
+        <article class="staff-status-board-row">
+          <div class="staff-status-board-name">{{ row.display_name }}</div>
+          <div class="staff-status-board-status {% if row.is_out_of_office %}out{% endif %}">
+            {{ row.display_status_label }}
+          </div>
+          <div class="staff-status-board-updated">
+            {{ row.updated_at or "No updates yet" }}
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+  </main>
+
+  <script src="{{ url_for('staff_status.static', filename='staff_status.js') }}"></script>
+</body>
+</html>

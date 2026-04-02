@@ -18,8 +18,20 @@
       </div>
       <div class="card-cta">Open →</div>
     </a>
-    {% endif %} {% if "user360.home.view" in session.get("user_permissions", [])
-    %}
+    {% endif %}
+
+    {% if "staff_status.home.view" in session.get("user_permissions", []) %}
+    <a class="card" href="{{ url_for('staff_status.index') }}">
+      <div class="card-title">Staff Status</div>
+      <div class="card-body muted">
+        Technology inventory operations, import tools, catalog management, and
+        future device sync workflows.
+      </div>
+      <div class="card-cta">Open →</div>
+    </a>
+    {% endif %}
+
+    {% if "user360.home.view" in session.get("user_permissions", [])%}
     <div class="card card-disabled">
       <div class="card-title">User360</div>
       <div class="card-body muted">
