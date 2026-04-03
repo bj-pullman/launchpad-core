@@ -147,7 +147,7 @@
                         type="button"
                         class="test-connection-btn rotate-kiosk-token-btn"
                         data-department="{{ department.department_name }}"
-                        data-rotate-url="{{ url_for('launchpad_ui.settings_staff_status_rotate_kiosk_token', department_name=department.department_name) }}"
+                        data-rotate-url="{{ url_for('staff_status.rotate_department_kiosk_token_for_settings', department_name=department.department_name) }}"
                       >
                         {% if department.kiosk_enabled and department.kiosk_token %}
                           Regenerate Kiosk URL
@@ -160,8 +160,7 @@
                         type="button"
                         class="test-connection-btn rotate-board-token-btn"
                         data-department="{{ department.department_name }}"
-                        data-rotate-url="{{ url_for('launchpad_ui.settings_staff_status_rotate_board_token', department_name=department.department_name) }}"
-                        >
+                        data-rotate-url="{{ url_for('staff_status.rotate_department_board_token_for_settings', department_name=department.department_name) }}"                        >
                         {% if department.board_token %}
                             Regenerate Board URL
                         {% else %}
@@ -175,21 +174,21 @@
                       <input
                         type="text"
                         readonly
-                        value="{% if department.kiosk_enabled and department.kiosk_token %}{{ url_for('staff_status.kiosk', token=department.kiosk_token, _external=True) }}{% endif %}"
+                        value="{% if department.kiosk_enabled and department.kiosk_token %}{{ general_settings.public_base_url }}{{ url_for('staff_status.kiosk', token=department.kiosk_token) }}{% endif %}"
                         data-kiosk-url-input="{{ department.department_name }}"
                         placeholder="No kiosk URL generated yet"
                       >
                     </div>
 
                     <div class="form-field">
-                        <label>Status Board URL</label>
-                        <input
-                            type="text"
-                            readonly
-                            value="{% if department.board_token %}{{ url_for('staff_status.board_public', token=department.board_token, _external=True) }}{% endif %}"
-                            data-board-url-input="{{ department.department_name }}"
-                            placeholder="No board URL generated yet"
-                        >
+                      <label>Status Board URL</label>
+                      <input
+                        type="text"
+                        readonly
+                        value="{% if department.board_token %}{{ general_settings.public_base_url }}{{ url_for('staff_status.board_public', token=department.board_token) }}{% endif %}"
+                        data-board-url-input="{{ department.department_name }}"
+                        placeholder="No board URL generated yet"
+                      >
                     </div>
 
                     <div

@@ -1,5 +1,6 @@
 import json, zoneinfo, secrets
 from datetime import date, datetime, timezone
+from flask import current_app, url_for
 
 from .db import get_connection
 from modules.core.identity.identity_db import get_connection as get_identity_connection
@@ -1137,3 +1138,12 @@ def list_recent_absences_for_department(
         )
 
     return absences
+
+def build_public_url(endpoint: str, **values) -> str:
+    path = url_for(endpoint, _external=False, **values)
+    base = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
+
+    if base:
+        return f"{base}{path}"
+
+    return url_for(endpoint, _external=True, **values)

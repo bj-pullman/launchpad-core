@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, request, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from apps.snipeops.import_by_scan.blueprint import bp as import_by_scan_bp
 from apps.snipeops.import_by_scan.import_by_scan_db import init_db as import_by_scan_init_db
@@ -55,6 +56,7 @@ def create_app() -> Flask:
     # Core base config
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
     app.config["SYSTEM_TIMEZONE"] = os.getenv("SYSTEM_TIMEZONE", "UTC")
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1)
 
     # Init DB
     import_by_scan_init_db()
@@ -71,6 +73,10 @@ def create_app() -> Flask:
     # Authentication settings
     # DB-backed source of truth
     # -----------------------------
+    
+    # URL Config
+    app.config["PUBLIC_BASE_URL"] = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+    app.config["PREFERRED_URL_SCHEME"] = os.getenv("PREFERRED_URL_SCHEME", "https")
 
     # Sign-in methods
     app.config["AUTH_PRIMARY_METHOD"] = get_setting("auth.primary_method", "local")
@@ -110,7 +116,7 @@ def create_app() -> Flask:
     app.config["GOOGLE_OIDC_SCOPES"] = "openid email profile"
     app.config["GOOGLE_OIDC_REDIRECT_URI"] = get_setting(
         "auth.google_oidc.redirect_uri",
-        "http://localhost:5001/auth/google/callback",
+        f"{app.config['PUBLIC_BASE_URL']}/auth/google/callback" if app.config.get("PUBLIC_BASE_URL") else "",
     )
     app.config["AUTH_GOOGLE_HOSTED_DOMAIN"] = get_setting(
         "auth.google_oidc.hosted_domain", ""
@@ -263,21 +269,26 @@ def create_app() -> Flask:
             authenticated_at = session.get("authenticated_at")
             last_activity = session.get("last_activity")
 
-            if authenticated_at:
-                auth_dt = datetime.fromisoformat(authenticated_at)
-                max_hours = app.config.get("SESSION_ABSOLUTE_TIMEOUT_HOURS", 8)
-                if now - auth_dt > timedelta(hours=max_hours):
-                    session.clear()
-                    flash("Your session expired. Please sign in again.", "error")
-                    return redirect(url_for("auth.login", next=path))
+            try:
+                if authenticated_at:
+                    auth_dt = datetime.fromisoformat(authenticated_at)
+                    max_hours = app.config.get("SESSION_ABSOLUTE_TIMEOUT_HOURS", 8)
+                    if now - auth_dt > timedelta(hours=max_hours):
+                        session.clear()
+                        flash("Your session expired. Please sign in again.", "error")
+                        return redirect(url_for("auth.login", next=path))
 
-            if last_activity:
-                last_dt = datetime.fromisoformat(last_activity)
-                idle_minutes = app.config.get("SESSION_IDLE_TIMEOUT_MINUTES", 30)
-                if now - last_dt > timedelta(minutes=idle_minutes):
-                    session.clear()
-                    flash("You were signed out due to inactivity.", "error")
-                    return redirect(url_for("auth.login", next=path))
+                if last_activity:
+                    last_dt = datetime.fromisoformat(last_activity)
+                    idle_minutes = app.config.get("SESSION_IDLE_TIMEOUT_MINUTES", 30)
+                    if now - last_dt > timedelta(minutes=idle_minutes):
+                        session.clear()
+                        flash("You were signed out due to inactivity.", "error")
+                        return redirect(url_for("auth.login", next=path))
+            except Exception:
+                session.clear()
+                flash("Your session was reset. Please sign in again.", "error")
+                return redirect(url_for("auth.login", next=path))
 
             session["last_activity"] = now.isoformat()
 
@@ -339,6 +350,7 @@ def create_app() -> Flask:
             "language": get_setting("general.language", "en"),
             "date_format": get_setting("general.date_format", "mdy"),
             "time_format": get_setting("general.time_format", "12h"),
+            "public_base_url": app.config.get("PUBLIC_BASE_URL", ""),
         }
 
         return {

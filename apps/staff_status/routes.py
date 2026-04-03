@@ -23,6 +23,7 @@ from .service import (
     update_absence,
     update_location,
     update_user_status,
+    build_public_url,
 )
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.identity.user_service import get_user_by_id
@@ -348,21 +349,6 @@ def absences(department_name: str):
         current_user_ids=current_user_ids,
     )
 
-
-@bp.route("/<department_name>/kiosk-token/rotate", methods=["POST"])
-@login_required
-@require_permission("staff_status.settings.manage")
-def rotate_department_kiosk_token(department_name: str):
-    department = rotate_kiosk_token(department_name)
-    return jsonify(
-        {
-            "ok": True,
-            "department_name": department["department_name"],
-            "kiosk_token": department["kiosk_token"],
-            "kiosk_url": url_for("staff_status.kiosk", token=department["kiosk_token"], _external=True),
-        }
-    )
-
 @bp.route("/board/<token>")
 def board_public(token: str):
     department = get_department_by_board_token(token)
@@ -430,3 +416,38 @@ def board_public_data(token: str):
     )
     response.headers["Cache-Control"] = "no-store"
     return response
+
+@bp.route("/settings/<department_name>/rotate-kiosk-token", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.staff_status.manage")
+def rotate_department_kiosk_token_for_settings(department_name: str):
+    department = rotate_kiosk_token(department_name)
+    return jsonify(
+        {
+            "ok": True,
+            "department_name": department["department_name"],
+            "kiosk_token": department["kiosk_token"],
+            "kiosk_url": build_public_url(
+                "staff_status.kiosk",
+                token=department["kiosk_token"],
+            ),
+        }
+    )
+
+
+@bp.route("/settings/<department_name>/rotate-board-token", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.staff_status.manage")
+def rotate_department_board_token_for_settings(department_name: str):
+    department = rotate_board_token(department_name)
+    return jsonify(
+        {
+            "ok": True,
+            "department_name": department["department_name"],
+            "board_token": department["board_token"],
+            "board_url": build_public_url(
+                "staff_status.board_public",
+                token=department["board_token"],
+            ),
+        }
+    )

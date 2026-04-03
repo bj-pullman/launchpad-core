@@ -18,9 +18,7 @@ from . import launchpad_ui_bp
 from apps.staff_status.service import (
     get_department_record,
     list_active_departments_from_users,
-    rotate_kiosk_token,
     upsert_department_settings,
-    rotate_board_token,
 )
 
 from .permissions import get_visible_settings_sections, get_visible_launchpad_apps
@@ -1340,46 +1338,3 @@ def settings_staff_status():
         department_rows=department_rows,
     )
     
-@launchpad_ui_bp.route(
-    "/settings/staff-status/<department_name>/rotate-kiosk-token",
-    methods=["POST"],
-)
-@login_required
-@require_permission("launchpad.settings.staff_status.manage")
-def settings_staff_status_rotate_kiosk_token(department_name: str):
-    department = rotate_kiosk_token(department_name)
-
-    return jsonify(
-        {
-            "ok": True,
-            "department_name": department["department_name"],
-            "kiosk_token": department["kiosk_token"],
-            "kiosk_url": url_for(
-                "staff_status.kiosk",
-                token=department["kiosk_token"],
-                _external=True,
-            ),
-        }
-    )
-    
-@launchpad_ui_bp.route(
-    "/settings/staff-status/<department_name>/rotate-board-token",
-    methods=["POST"],
-)
-@login_required
-@require_permission("launchpad.settings.staff_status.manage")
-def settings_staff_status_rotate_board_token(department_name: str):
-    department = rotate_board_token(department_name)
-
-    return jsonify(
-        {
-            "ok": True,
-            "department_name": department["department_name"],
-            "board_token": department["board_token"],
-            "board_url": url_for(
-                "staff_status.board_public",
-                token=department["board_token"],
-                _external=True,
-            ),
-        }
-    )
