@@ -31,10 +31,15 @@
       <button type="button" class="settings-tab" data-tab="kiosks">
         Kiosks
       </button>
+      <button type="button" class="settings-tab" data-tab="operators">
+        Operators
+      </button>
     </div>
 
     <div class="content-card">
       <form method="post" id="staff-status-settings-form" class="settings-form">
+        <input type="hidden" name="action" value="save_settings">
+
         <div class="settings-tab-panel active" data-panel="general">
           <div class="card" style="min-height: 0;">
             <h2>General</h2>
@@ -160,13 +165,14 @@
                         type="button"
                         class="test-connection-btn rotate-board-token-btn"
                         data-department="{{ department.department_name }}"
-                        data-rotate-url="{{ url_for('staff_status.rotate_department_board_token_for_settings', department_name=department.department_name) }}"                        >
+                        data-rotate-url="{{ url_for('staff_status.rotate_department_board_token_for_settings', department_name=department.department_name) }}"
+                      >
                         {% if department.board_token %}
-                            Regenerate Board URL
+                          Regenerate Board URL
                         {% else %}
-                            Generate Board URL
+                          Generate Board URL
                         {% endif %}
-                        </button>
+                      </button>
                     </div>
 
                     <div class="form-field">
@@ -205,13 +211,120 @@
                 <p class="muted">Departments are pulled from active users in the users table.</p>
               </div>
             {% endif %}
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save Staff Status Settings</button>
+            </div>
           </div>
         </div>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Save Staff Status Settings</button>
-        </div>
       </form>
+
+      <div class="settings-tab-panel" data-panel="operators">
+        <div class="card" style="min-height: 0;">
+          <h2>Department Operators</h2>
+          <p>
+            Department Operators can manage operational Staff Status data only for assigned departments.
+            They do not have access to Staff Status settings or other departments.
+          </p>
+
+          <div class="content-card" style="margin-top: 16px;">
+            <h3>Add Department Operator</h3>
+
+            <form method="post" class="settings-form">
+              <input type="hidden" name="action" value="add_department_operator">
+
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="department_operator_user_id">User</label>
+                  <select
+                    id="department_operator_user_id"
+                    name="department_operator_user_id"
+                    class="staff-status-operator-select"
+                    required
+                  >
+                    <option value="">Select a user</option>
+                    {% for user in assignable_users %}
+                      <option value="{{ user.id }}">
+                        {{ user.display_name or user.email }}{% if user.email %} ({{ user.email }}){% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div class="form-field">
+                  <label for="department_operator_department_names">Departments</label>
+                  <select
+                    id="department_operator_department_names"
+                    name="department_operator_department_names"
+                    class="staff-status-operator-select staff-status-operator-multiselect"
+                    multiple
+                    size="6"
+                    required
+                  >
+                    {% for department in department_rows %}
+                      <option value="{{ department.department_name }}">{{ department.department_name }}</option>
+                    {% endfor %}
+                  </select>
+                  <small class="form-help">Hold Ctrl or Shift to select multiple departments.</small>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Department Operator</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="content-card" style="margin-top: 16px;">
+            <h3>Current Staff Status Access</h3>
+
+            {% if department_operator_assignments %}
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Email</th>
+                      <th>Access</th>
+                      <th>Scope</th>
+                      <th>Source</th>
+                      <th class="table-actions-col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in department_operator_assignments %}
+                      <tr>
+                        <td>{{ row.display_name or row.email or ("User " ~ row.user_id) }}</td>
+                        <td>{{ row.email or "" }}</td>
+                        <td>{{ row.access_level or "" }}</td>
+                        <td>{{ row.scope_label or row.department_name or "" }}</td>
+                        <td>{{ row.access_source or "" }}</td>
+                        <td class="table-actions-cell">
+                          {% if row.can_remove %}
+                            <form method="post" style="display:inline;">
+                              <input type="hidden" name="action" value="remove_department_operator">
+                              <input type="hidden" name="department_operator_user_id" value="{{ row.user_id }}">
+                              <input type="hidden" name="department_operator_department_name" value="{{ row.department_name }}">
+                              <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                            </form>
+                          {% else %}
+                            <span class="muted">Managed by role</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="empty-state">
+                <h3>No Staff Status access assignments found</h3>
+                <p class="muted">Add an assignment above or grant access through roles.</p>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

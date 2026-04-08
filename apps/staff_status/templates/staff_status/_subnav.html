@@ -1,10 +1,13 @@
 <nav class="staff-status-subnav" aria-label="Staff Status section navigation">
+  {% if accessible_department_count > 1 %}
     <a
-    href="{{ url_for('staff_status.index', department_name=department_name) }}"
-    class="{% if active_tab == 'home' %}active{% endif %}"
-  >
-    Home
-  </a>
+      href="{{ url_for('staff_status.index') }}"
+      class="{% if active_tab == 'home' %}active{% endif %}"
+    >
+      Home
+    </a>
+  {% endif %}
+
   <a
     href="{{ url_for('staff_status.department_overview', department_name=department_name) }}"
     class="{% if active_tab == 'overview' %}active{% endif %}"

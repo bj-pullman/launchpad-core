@@ -98,6 +98,15 @@ def init_staff_status_db():
                 updated_at TEXT NULL,
                 is_active INTEGER NOT NULL DEFAULT 1
             );
+            
+            CREATE TABLE IF NOT EXISTS staff_status_department_access (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            department_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(user_id, department_name)
+            );
 
             CREATE INDEX IF NOT EXISTS idx_staff_status_departments_enabled
             ON staff_status_departments(is_enabled, department_name);

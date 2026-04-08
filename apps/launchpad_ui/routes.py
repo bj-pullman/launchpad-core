@@ -21,6 +21,12 @@ from apps.staff_status.service import (
     upsert_department_settings,
 )
 
+from apps.staff_status.access_service import (
+    grant_department_access,
+    revoke_department_access,
+    list_staff_status_access_with_users,
+)
+
 from .permissions import get_visible_settings_sections, get_visible_launchpad_apps
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.auth.user_admin_service import (
@@ -45,9 +51,11 @@ from modules.core.identity.rbac_service import (
     replace_user_permissions,
     build_permission_catalog,
     build_user_access_summary,
+    get_user_role_keys,
+    remove_role_from_user,
 )
 from modules.core.identity.rbac_db import get_connection as get_rbac_connection
-from modules.core.identity.user_service import get_user_by_id, update_user, create_user
+from modules.core.identity.user_service import get_user_by_id, update_user, create_user, list_users
 from modules.core.settings.settings_service import get_setting, set_setting, get_bool_setting
 
 from tasks.scheduler import configure_jobs
@@ -1258,6 +1266,49 @@ def settings_staff_status():
         ):
             return redirect(url_for("launchpad_ui.settings_staff_status"))
 
+        action = (request.form.get("action") or "save_settings").strip().lower()
+
+        if action == "add_department_operator":
+            user_id = request.form.get("department_operator_user_id", type=int)
+            department_names = [
+                item.strip()
+                for item in request.form.getlist("department_operator_department_names")
+                if item.strip()
+            ]
+
+            if not user_id:
+                flash("A user must be selected.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+            if not department_names:
+                flash("At least one department must be selected.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+            try:
+                for department_name in department_names:
+                    grant_department_access(user_id, department_name)
+                flash("Department operator assignment(s) added.", "success")
+            except Exception as exc:
+                flash(f"Unable to add department operator assignment(s): {exc}", "error")
+
+            return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+        if action == "remove_department_operator":
+            user_id = request.form.get("department_operator_user_id", type=int)
+            department_name = (request.form.get("department_operator_department_name") or "").strip()
+
+            if not user_id or not department_name:
+                flash("A valid assignment is required.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+            try:
+                revoke_department_access(user_id, department_name)
+                flash("Department operator assignment removed.", "success")
+            except Exception as exc:
+                flash(f"Unable to remove department operator assignment: {exc}", "error")
+
+            return redirect(url_for("launchpad_ui.settings_staff_status"))
+
         enabled_departments = request.form.getlist("enabled_departments")
         daily_reset_enabled = 1 if request.form.get("daily_reset_enabled") == "1" else 0
         daily_reset_time = (request.form.get("daily_reset_time") or "01:00").strip()
@@ -1286,8 +1337,8 @@ def settings_staff_status():
                 is_enabled=is_enabled,
                 home_location=home_location,
             )
-        configure_jobs()
 
+        configure_jobs()
         flash("Staff Status settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_staff_status"))
 
@@ -1331,10 +1382,14 @@ def settings_staff_status():
         ),
     }
 
+    department_operator_assignments = list_staff_status_access_with_users()
+    assignable_users = list_users(active_only=True)
+
     return render_template(
         "launchpad_ui/settings/staff_status.html",
         active_section="staff_status",
         settings=settings,
         department_rows=department_rows,
+        department_operator_assignments=department_operator_assignments,
+        assignable_users=assignable_users,
     )
-    

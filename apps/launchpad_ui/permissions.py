@@ -1,5 +1,7 @@
 from flask import session
 
+from apps.staff_status.access_service import list_accessible_departments_for_user
+
 
 SETTINGS_SECTIONS = [
     {
@@ -24,7 +26,6 @@ SETTINGS_SECTIONS = [
         "key": "authentication",
         "label": "Authentication",
         "endpoint": "launchpad_ui.settings_authentication",
-        # keep existing permission key for compatibility
         "permission": "launchpad.settings.saml.view",
     },
     {
@@ -98,13 +99,12 @@ LAUNCHPAD_APPS = [
         "endpoint": "techhub.index",
         "permission": "techhub.home.view",
     },
-    
     {
         "key": "staff_status",
         "label": "Staff Status",
         "description": "Real-time staff location and availability tracking.",
         "endpoint": "staff_status.index",
-        "permission": "staff_status.home.view",
+        "permission": "staff_status.app.view",
     },
 ]
 
@@ -120,8 +120,22 @@ def get_visible_settings_sections():
 
 def get_visible_launchpad_apps():
     user_permissions = set(session.get("user_permissions", []))
-    return [
-        app
-        for app in LAUNCHPAD_APPS
-        if app["permission"] in user_permissions
-    ]
+    user_id = session.get("user_id")
+
+    visible_apps = []
+
+    for app in LAUNCHPAD_APPS:
+        if app["key"] == "staff_status":
+            if (
+                app["permission"] in user_permissions
+                or ("staff_status.operator" in user_permissions)
+                or ("staff_status.admin" in user_permissions)
+                or (user_id and len(list_accessible_departments_for_user(user_id)) > 0)
+            ):
+                visible_apps.append(app)
+            continue
+
+        if app["permission"] in user_permissions:
+            visible_apps.append(app)
+
+    return visible_apps

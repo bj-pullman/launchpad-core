@@ -6,6 +6,31 @@
   padding: 22px;
 }
 
+.staff-status-operator-select {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+
+.staff-status-operator-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.staff-status-operator-multiselect {
+  min-height: 150px;
+  padding: 6px;
+}
+
+.staff-status-operator-multiselect option {
+  padding: 8px 10px;
+}
+
 .form-field {
   margin-bottom: 16px;
 }
@@ -35,8 +60,6 @@
   margin-top: 16px;
 }
 
-/* checkbox card spacing */
-
 .checkbox-card {
   padding: 12px 14px;
   border-radius: 10px;
@@ -51,8 +74,6 @@
   gap: 8px;
   margin-bottom: 0;
 }
-
-/* grid breathing room */
 
 .form-grid {
   display: grid;
@@ -346,6 +367,44 @@
 }
 
 /* ==============================
+   TABLE CLEANUP
+============================== */
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table-actions-col,
+.table-actions-cell {
+  white-space: nowrap;
+}
+
+.btn-danger {
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  color: #fff;
+}
+
+.btn-danger:hover,
+.btn-danger:focus {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+/* ==============================
    RESPONSIVE
 ============================== */
 
@@ -359,7 +418,8 @@
     align-items: flex-start;
     flex-direction: column;
   }
-    .staff-status-kiosk-card-header {
+
+  .staff-status-kiosk-card-header {
     flex-direction: column;
     align-items: stretch;
   }

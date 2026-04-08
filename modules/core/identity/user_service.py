@@ -237,3 +237,23 @@ def upsert_user(data: dict):
         return update_user(existing_user["id"], payload)
 
     return create_user(payload)
+
+def list_users(active_only: bool = False) -> list[dict]:
+    sql = """
+        SELECT *
+        FROM users
+    """
+    params = []
+
+    if active_only:
+        sql += " WHERE is_active = 1"
+
+    sql += """
+        ORDER BY
+            COALESCE(NULLIF(TRIM(display_name), ''), NULLIF(TRIM(first_name || ' ' || last_name), ''), email) COLLATE NOCASE
+    """
+
+    with get_connection() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    return [dict(row) for row in rows]

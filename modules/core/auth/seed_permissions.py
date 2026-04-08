@@ -11,6 +11,7 @@ def seed_permissions():
     create_role("launchpad_admin", "Launchpad Admin", "Launchpad administration", is_system=1)
     create_role("snipeops_user", "SnipeOps User", "SnipeOps feature access", is_system=1)
     create_role("viewer", "Viewer", "Basic Launchpad access only", is_system=1)
+    create_role("staff_status_admin", "Staff Status Admin", "Full Staff Status administration", is_system=1)
 
     # Permissions
     permission_keys = [
@@ -59,16 +60,10 @@ def seed_permissions():
         ("snipeops.snipe_catalog.manage", "Manage Snipe Catalog"),
         
         # Staff Status app access
-        ("staff_status.home.view", "Staff Status Home"),
-        ("staff_status.home.manage", "Manage Staff Status Home"),
-        ("staff_status.board.view", "Staff Status Board"),
-        ("staff_status.board.manage", "Manage Staff Status Board"),
-        ("staff_status.absences.view", "Staff Status Absences"),
-        ("staff_status.absences.manage", "Manage Staff Status Absences"),
-        ("staff_status.reports.view", "Staff Status Reports"),
-        ("staff_status.reports.manage", "Manage Staff Status Reports"),
-        ("staff_status.settings.view", "Staff Status Settings"),
-        ("staff_status.settings.manage", "Manage Staff Status Settings"),
+        ("staff_status.app.view", "Staff Status App View"),
+        ("staff_status.view", "Staff Status View"),
+        ("staff_status.operator", "Staff Status Operator"),
+        ("staff_status.admin", "Staff Status Admin"),
 
         # Future apps
         ("finance.home.view", "Finance Home"),
@@ -141,3 +136,15 @@ def seed_permissions():
 
     for key in snipeops_user_permissions:
         assign_permission_to_role("snipeops_user", key)
+        
+    # Staff Status Admin
+    staff_status_admin_permissions = [
+        "launchpad.home.view",
+        "staff_status.app.view",
+        "staff_status.view",
+        "staff_status.operator",
+        "staff_status.admin",
+    ]
+
+    for key in staff_status_admin_permissions:
+        assign_permission_to_role("staff_status_admin", key)
