@@ -844,6 +844,115 @@ SORT LINKS
   display: block;
 }
 
+.staff-status-overview-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.staff-status-range-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.staff-status-range-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ss-text);
+  background: #ffffff;
+  border: 1px solid var(--ss-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.staff-status-range-pill:hover {
+  background: rgba(59, 130, 246, 0.05);
+  border-color: rgba(59, 130, 246, 0.16);
+}
+
+.staff-status-range-pill.active {
+  background: rgba(59, 130, 246, 0.10);
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.staff-status-overview-stats .card {
+  min-height: 168px;
+}
+
+.staff-status-stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.staff-status-stat-value-sm {
+  font-size: 1.35rem;
+}
+
+.staff-status-overview-chart-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.staff-status-chart-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.staff-status-chart-card-header h2 {
+  margin: 0 0 4px 0;
+}
+
+.staff-status-chart-wrap {
+  position: relative;
+  height: 320px;
+}
+
+.staff-status-chart-wrap-lg {
+  height: 360px;
+}
+
+.staff-status-chart-empty {
+  margin-top: 12px;
+}
+
+.staff-status-row-warning {
+  background-color: rgba(239, 68, 68, 0.08);
+}
+
+.staff-status-row-warning:hover {
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.staff-status-absence-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.staff-status-date {
+  font-weight: 600;
+}
+
+.staff-status-soon-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.12);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
 @media (max-width: 1100px) {
   .staff-status-kiosk-layout {
     grid-template-columns: 1fr;
@@ -868,6 +977,10 @@ SORT LINKS
 
   .staff-status-table-filters .form-grid-equal {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .staff-status-overview-chart-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -928,5 +1041,25 @@ SORT LINKS
 
   .staff-status-table-filters .btn {
     width: 100%;
+  }
+
+  .staff-status-overview-toolbar {
+    justify-content: flex-start;
+  }
+
+  .staff-status-range-pills {
+    width: 100%;
+  }
+
+  .staff-status-range-pill {
+    flex: 1 1 auto;
+  }
+
+  .staff-status-chart-wrap {
+    height: 280px;
+  }
+
+  .staff-status-chart-wrap-lg {
+    height: 300px;
   }
 }

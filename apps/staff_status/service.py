@@ -1,5 +1,6 @@
 import json, zoneinfo, secrets
-from datetime import date, datetime, timezone
+from collections import Counter
+from datetime import date, datetime, timezone, timedelta
 from flask import current_app, url_for
 
 from .db import get_connection
@@ -1147,3 +1148,264 @@ def build_public_url(endpoint: str, **values) -> str:
         return f"{base}{path}"
 
     return url_for(endpoint, _external=True, **values)
+
+OVERVIEW_RANGE_OPTIONS = {
+    "1d": {"label": "Today", "days": 1},
+    "7d": {"label": "Past 7 Days", "days": 7},
+    "14d": {"label": "Past 14 Days", "days": 14},
+    "30d": {"label": "Past 30 Days", "days": 30},
+    "90d": {"label": "Past 90 Days", "days": 90},
+    "365d": {"label": "Past 365 Days", "days": 365},
+}
+
+
+def normalize_overview_range(range_key: str | None) -> str:
+    value = (range_key or "").strip().lower()
+    return value if value in OVERVIEW_RANGE_OPTIONS else "30d"
+
+def get_overview_range_options() -> list[dict]:
+    return [
+        {"key": key, "label": meta["label"]}
+        for key, meta in OVERVIEW_RANGE_OPTIONS.items()
+    ]
+
+def _get_overview_range_start(range_key: str) -> datetime:
+    normalized = normalize_overview_range(range_key)
+    now = datetime.now(timezone.utc)
+
+    if normalized == "1d":
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    days = OVERVIEW_RANGE_OPTIONS[normalized]["days"]
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days - 1)
+    return start
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+def _iter_location_labels(raw_value: str | None) -> list[str]:
+    labels = []
+    for item in _json_load(raw_value):
+        normalized = normalize_text(item)
+        if normalized:
+            labels.append(normalized)
+    return labels
+
+
+OVERVIEW_RANGE_OPTIONS = {
+    "1d": {"label": "Today", "days": 1},
+    "7d": {"label": "Past 7 Days", "days": 7},
+    "14d": {"label": "Past 14 Days", "days": 14},
+    "30d": {"label": "Past 30 Days", "days": 30},
+    "90d": {"label": "Past 90 Days", "days": 90},
+    "365d": {"label": "Past 365 Days", "days": 365},
+}
+
+
+def normalize_overview_range(range_key: str | None) -> str:
+    value = (range_key or "").strip().lower()
+    return value if value in OVERVIEW_RANGE_OPTIONS else "30d"
+
+
+def get_overview_range_options() -> list[dict]:
+    return [
+        {"key": key, "label": meta["label"]}
+        for key, meta in OVERVIEW_RANGE_OPTIONS.items()
+    ]
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(timezone.utc)
+
+
+def _get_overview_range_start(range_key: str) -> datetime:
+    normalized = normalize_overview_range(range_key)
+    app_tz = zoneinfo.ZoneInfo(get_app_timezone())
+    now_local = datetime.now(app_tz)
+    start_of_today_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if normalized == "1d":
+        return start_of_today_local.astimezone(timezone.utc)
+
+    days = OVERVIEW_RANGE_OPTIONS[normalized]["days"]
+    start_local = start_of_today_local - timedelta(days=days - 1)
+    return start_local.astimezone(timezone.utc)
+
+
+def _iter_location_labels(raw_value: str | None) -> list[str]:
+    labels = []
+    for item in _json_load(raw_value):
+        normalized = normalize_text(item)
+        if normalized:
+            labels.append(normalized)
+    return labels
+
+
+def get_department_overview_analytics(
+    department_name: str,
+    range_key: str = "30d",
+) -> dict:
+    department_name = normalize_department(department_name)
+    normalized_range = normalize_overview_range(range_key)
+
+    empty_result = {
+        "range_key": normalized_range,
+        "summary": {
+            "check_ins": 0,
+            "staff_in_office": 0,
+            "top_location_label": None,
+            "top_location_count": 0,
+        },
+        "location_distribution": [],
+        "top_locations": [],
+        "trend_points": [],
+        "debug": {
+            "all_rows_in_range": 0,
+            "location_update_rows": 0,
+            "absence_override_rows": 0,
+            "reset_rows": 0,
+        },
+    }
+
+    if not department_name:
+        return empty_result
+
+    range_start = _get_overview_range_start(normalized_range)
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_history
+            WHERE department_name = ?
+            ORDER BY committed_at DESC, id DESC
+            """,
+            (department_name,),
+        ).fetchall()
+
+    filtered_rows: list[dict] = []
+    for row in rows:
+        row_dict = dict(row)
+        committed_at = _parse_iso_datetime(row_dict.get("committed_at"))
+        if not committed_at:
+            continue
+        if committed_at >= range_start:
+            row_dict["_committed_at_utc"] = committed_at
+            filtered_rows.append(row_dict)
+
+    location_update_rows = [
+        row for row in filtered_rows if row.get("event_type") == "location_update"
+    ]
+    absence_rows = [
+        row for row in filtered_rows if row.get("event_type") == "absence_override"
+    ]
+    reset_rows = [
+        row for row in filtered_rows if row.get("event_type") == "reset"
+    ]
+    staff_in_office = get_staff_in_office_count(department_name)
+    location_counter: Counter[str] = Counter()
+    for row in location_update_rows:
+        for label in _iter_location_labels(row.get("location_labels_json")):
+            location_counter[label] += 1
+
+    top_locations = [
+        {"label": label, "count": count}
+        for label, count in location_counter.most_common(5)
+    ]
+
+    location_distribution = [
+        {"label": label, "count": count}
+        for label, count in location_counter.most_common()
+    ]
+
+    top_location_label = None
+    top_location_count = 0
+    if location_distribution:
+        top_location_label = location_distribution[0]["label"]
+        top_location_count = location_distribution[0]["count"]
+
+    trend_counter: Counter[str] = Counter()
+    app_tz = zoneinfo.ZoneInfo(get_app_timezone())
+
+    for row in location_update_rows:
+        committed_at = row.get("_committed_at_utc")
+        if not committed_at:
+            continue
+
+        local_dt = committed_at.astimezone(app_tz)
+
+        if normalized_range == "365d":
+            bucket = local_dt.strftime("%Y-%m")
+        else:
+            bucket = local_dt.strftime("%Y-%m-%d")
+
+        trend_counter[bucket] += 1
+
+    trend_points = [
+        {"bucket": bucket, "count": trend_counter[bucket]}
+        for bucket in sorted(trend_counter.keys())
+    ]
+
+    return {
+        "range_key": normalized_range,
+        "summary": {
+            "check_ins": len(location_update_rows),
+            "staff_in_office": staff_in_office,
+            "top_location_label": top_location_label,
+            "top_location_count": top_location_count,
+        },
+        "location_distribution": location_distribution,
+        "top_locations": top_locations,
+        "trend_points": trend_points,
+        "debug": {
+            "all_rows_in_range": len(filtered_rows),
+            "location_update_rows": len(location_update_rows),
+            "absence_override_rows": len(absence_rows),
+            "reset_rows": len(reset_rows),
+        },
+    }
+    
+def get_staff_in_office_count(department_name: str) -> int:
+    department_name = normalize_department(department_name)
+    if not department_name:
+        return 0
+
+    home_location = normalize_text(get_department_home_location(department_name))
+    if not home_location:
+        return 0
+
+    board_rows = get_board_rows_for_department(department_name)
+
+    count = 0
+    for row in board_rows:
+        if row.get("is_out_of_office"):
+            continue
+
+        location_labels = row.get("location_labels") or []
+        normalized_labels = {
+            normalize_text(label)
+            for label in location_labels
+            if normalize_text(label)
+        }
+
+        if home_location in normalized_labels:
+            count += 1
+
+    return count

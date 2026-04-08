@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from flask import abort, jsonify, redirect, render_template, request, session, url_for, Response
 import time, queue
 from modules.core.settings.settings_service import get_setting
@@ -18,10 +20,14 @@ from .service import (
     get_board_rows_for_department,
     get_department_by_board_token,
     get_department_by_kiosk_token,
+    get_department_overview_analytics,
+    get_overview_range_options,
     list_active_users_for_department,
+    list_enabled_departments,
     list_locations_for_department,
     list_locations_for_department_admin,
     list_recent_absences_for_department,
+    normalize_overview_range,
     rotate_board_token,
     rotate_kiosk_token,
     seed_department_locations_if_empty,
@@ -88,14 +94,65 @@ def department_overview(department_name: str):
 
     accessible_departments = list_accessible_departments_for_user(user_id)
 
+    # NEW: timeframe handling
+    range_key = normalize_overview_range(request.args.get("range", "30d"))
+
+    # NEW: analytics payload
+    overview_analytics = get_department_overview_analytics(
+        department_name,
+        range_key,
+    )
+    
+    # upccoming absence highlight
+    highlight_7_day = (date.today() + timedelta(days=7)).isoformat()
+    
+    upcoming_absences = list_recent_absences_for_department(
+        department_name,
+        limit=10,
+        sort_by="start_date",
+        sort_dir="asc",
+        view="upcoming",
+    )
+
     return render_template(
         "staff_status/department_overview.html",
         department_name=department_name,
-        locations=list_locations_for_department(department_name),
         active_tab="overview",
+        selected_range=range_key,
+        range_options=get_overview_range_options(),
+        overview_analytics=overview_analytics,
+        upcoming_absences=upcoming_absences,
         accessible_department_count=len(accessible_departments),
         is_staff_status_admin=has_staff_status_admin(user_id),
+        highlight_7_day=highlight_7_day,
     )
+    
+@bp.route("/<department_name>/overview/data")
+@login_required
+def department_overview_data(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    range_key = normalize_overview_range(request.args.get("range", "30d"))
+
+    analytics = get_department_overview_analytics(
+        department_name,
+        range_key,
+    )
+
+    response = jsonify(
+        {
+            "ok": True,
+            "department_name": department_name,
+            "analytics": analytics,
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 @bp.route("/<department_name>/locations", methods=["GET", "POST"])
 @login_required
