@@ -1252,6 +1252,25 @@ def settings_users_edit(user_id: int):
         direct_permissions = access_summary.get("direct_permissions", []),
         effective_permissions = access_summary.get("effective_permissions", []),
     )
+
+@launchpad_ui_bp.route("/settings/users/<int:user_id>/delete", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.users.manage")
+def settings_users_delete(user_id: int):
+    from modules.core.identity.user_service import delete_user
+
+    try:
+        ok = delete_user(user_id)
+        if ok:
+            flash("User deleted successfully.", "success")
+        else:
+            flash("User not found.", "error")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    except Exception:
+        flash("Unable to delete user.", "error")
+
+    return redirect(url_for("launchpad_ui.settings_users"))
     
 @launchpad_ui_bp.route("/settings/staff-status", methods=["GET", "POST"])
 @login_required

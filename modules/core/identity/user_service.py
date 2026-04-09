@@ -2,6 +2,9 @@ from datetime import datetime, timezone
 
 from modules.core.identity.identity_db import get_connection
 
+from modules.core.auth.user_admin_service import get_local_user_by_user_id
+from modules.core.identity.rbac_service import delete_user_rbac_assignments
+from modules.core.auth.local_auth_service import delete_local_auth_account_by_user_id
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -257,3 +260,54 @@ def list_users(active_only: bool = False) -> list[dict]:
         rows = conn.execute(sql, params).fetchall()
 
     return [dict(row) for row in rows]
+
+def delete_user(user_id: int, protect_breakglass: bool = True):
+    user = get_user_by_id(user_id)
+    if not user:
+        return False
+
+    local_user = get_local_user_by_user_id(user_id)
+
+    if protect_breakglass and local_user and int(local_user.get("is_breakglass") or 0) == 1:
+        raise ValueError("Breakglass users cannot be deleted.")
+
+    delete_user_rbac_assignments(user_id)
+    delete_local_auth_account_by_user_id(user_id)
+
+    with get_connection() as conn:
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+
+    return True
+
+def bulk_delete_users(user_ids: list[int], protect_breakglass: bool = True) -> dict:
+    deleted = []
+    skipped = []
+    errors = []
+
+    seen_ids = []
+    for user_id in user_ids:
+        try:
+            normalized_id = int(user_id)
+        except (TypeError, ValueError):
+            continue
+        if normalized_id not in seen_ids:
+            seen_ids.append(normalized_id)
+
+    for user_id in seen_ids:
+        try:
+            ok = delete_user(user_id, protect_breakglass=protect_breakglass)
+            if ok:
+                deleted.append(user_id)
+            else:
+                skipped.append({"user_id": user_id, "reason": "not_found"})
+        except ValueError as exc:
+            skipped.append({"user_id": user_id, "reason": str(exc)})
+        except Exception as exc:
+            errors.append({"user_id": user_id, "reason": str(exc)})
+
+    return {
+        "deleted_ids": deleted,
+        "skipped": skipped,
+        "errors": errors,
+    }

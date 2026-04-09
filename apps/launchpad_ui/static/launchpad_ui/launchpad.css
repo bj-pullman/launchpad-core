@@ -617,6 +617,64 @@ FOOTER
 }
 
 /* ------------------------------
+MODAL
+------------------------------ */
+.confirm-modal[hidden] {
+  display: none;
+}
+
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+
+.confirm-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.confirm-modal__dialog {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  margin: 10vh auto 0;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.confirm-modal__header {
+  padding: 20px 24px 0 24px;
+}
+
+.confirm-modal__header h3 {
+  margin: 0;
+}
+
+.confirm-modal__body {
+  padding: 12px 24px 24px 24px;
+}
+
+.confirm-modal__body p {
+  margin: 0;
+  color: #4b5563;
+}
+
+.confirm-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 24px 24px 24px;
+}
+
+body.confirm-modal-open {
+  overflow: hidden;
+}
+
+/* ------------------------------
 RESPONSIVE
 ------------------------------ */
 

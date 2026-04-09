@@ -655,3 +655,21 @@ def build_user_access_summary(user_id: int) -> dict:
         "group_permissions": group_permissions,
         "effective_permissions": effective_permissions,
     }
+
+def delete_user_rbac_assignments(user_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            DELETE FROM user_roles
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        conn.execute(
+            """
+            DELETE FROM user_permissions
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        conn.commit()

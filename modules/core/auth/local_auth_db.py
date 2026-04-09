@@ -96,3 +96,14 @@ def init_local_auth_db():
             """
         )
         conn.commit()
+
+def delete_local_auth_account_by_user_id(user_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            DELETE FROM local_auth_accounts
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        conn.commit()

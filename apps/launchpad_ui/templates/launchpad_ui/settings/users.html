@@ -1,5 +1,10 @@
 {% extends "launchpad_ui/base.html" %} {% block title %}Users - Launchpad{%
 endblock %} {% block content %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}">
+{% endblock %}
+
 <div class="settings-layout">
   {% include "launchpad_ui/settings/_sidebar.html" %}
 
@@ -75,20 +80,34 @@ endblock %} {% block content %}
               <td>
                 {{ user.last_login_at | localtime if user.last_login_at else
                 "Never" }}
-              </td>
-              <td class="actions-col">
-                {% if "launchpad.settings.users.manage" in
-                session.get("user_permissions", []) %}
-                <a
-                  class="table-link"
-                  href="{{ url_for('launchpad_ui.settings_users_edit', user_id=user.user_id) }}"
-                >
-                  Edit
-                </a>
-                {% else %}
+            <td class="actions-col">
+              {% if "launchpad.settings.users.manage" in session.get("user_permissions", []) %}
+                <div class="table-action-links">
+                  <a
+                    class="table-link"
+                    href="{{ url_for('launchpad_ui.settings_users_edit', user_id=user.user_id) }}"
+                  >
+                    Edit
+                  </a>
+
+                  <form
+                    method="post"
+                    action="{{ url_for('launchpad_ui.settings_users_delete', user_id=user.user_id) }}"
+                    class="inline-delete-form"
+                    data-confirm-title="Delete User"
+                    data-confirm-message="Are you sure you want to delete {{ user.username or user.email or ('User ' ~ user.user_id) }}? This will remove the user record, local auth account, and role assignments."
+                    data-confirm-button-label="Delete User"
+                    style="display: inline;"
+                  >
+                    <button type="submit" class="btn btn-danger">
+                      Delete
+                    </button>
+                  </form>
+                </div>
+              {% else %}
                 <span class="muted">View only</span>
-                {% endif %}
-              </td>
+              {% endif %}
+            </td>
             </tr>
             {% endfor %}
           </tbody>

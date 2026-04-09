@@ -1,6 +1,9 @@
-{% extends "launchpad_ui/base.html" %} {% block title %} {% if form_mode ==
-"new" %}Add Group - Launchpad{% else %}Edit Group - Launchpad{% endif %} {%
-endblock %} {% block content %}
+{% extends "launchpad_ui/base.html" %}
+{% block title %}
+  {% if form_mode == "new" %}Add Group - Launchpad{% else %}Edit Group - Launchpad{% endif %}
+{% endblock %}
+
+{% block content %}
 <div class="settings-layout">
   {% include "launchpad_ui/settings/_sidebar.html" %}
 
@@ -23,13 +26,7 @@ endblock %} {% block content %}
             id="role_key"
             name="role_key"
             value="{{ group.role_key if group else '' }}"
-            {%
-            if
-            form_mode=""
-            ="edit"
-            %}readonly{%
-            endif
-            %}
+            {% if form_mode == "edit" %}readonly{% endif %}
           />
           <p class="form-help">
             Used internally. Example: general_settings_manager
@@ -48,9 +45,7 @@ endblock %} {% block content %}
 
         <div class="form-field">
           <label for="description">Description</label>
-          <textarea id="description" name="description" rows="3">
-{{ group.description if group else '' }}</textarea
-          >
+          <textarea id="description" name="description" rows="3">{{ group.description if group else '' }}</textarea>
         </div>
 
         {% if form_mode == "edit" and group.is_system %}
@@ -79,19 +74,9 @@ endblock %} {% block content %}
                     type="checkbox"
                     name="permissions"
                     value="{{ item.permission_key }}"
-                    {%
-                    if
-                    item.permission_key
-                    in
-                    selected_permissions
-                    %}checked{%
-                    endif
-                    %}
+                    {% if item.permission_key in selected_permissions %}checked{% endif %}
                   />
-                  <span
-                    >{{ item.display_label }} — {{ item.action|capitalize
-                    }}</span
-                  >
+                  <span>{{ item.display_label }} — {{ item.action|capitalize }}</span>
                 </label>
                 {% endfor %}
               </div>
@@ -102,14 +87,9 @@ endblock %} {% block content %}
         </div>
 
         <div class="form-actions">
-          <a
-            class="btn btn-secondary"
-            href="{{ url_for('launchpad_ui.settings_groups') }}"
-            >Cancel</a
-          >
+          <a class="btn btn-secondary" href="{{ url_for('launchpad_ui.settings_groups') }}">Cancel</a>
           <button type="submit" class="btn btn-primary">
-            {% if form_mode == "new" %}Create Group{% else %}Save Group{% endif
-            %}
+            {% if form_mode == "new" %}Create Group{% else %}Save Group{% endif %}
           </button>
         </div>
       </form>

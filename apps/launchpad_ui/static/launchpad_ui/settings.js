@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", function () {
   initSettingsTabs();
   initAuthenticationConnectionTests();
   initBoardTokenButtons();
+  initDeleteConfirmations();
 });
 
 function initSnipeOpsConnectionTest() {
@@ -293,5 +294,86 @@ function initBoardTokenButtons() {
         button.disabled = false;
       }
     });
+  });
+}
+
+function initDeleteConfirmations() {
+  const modal = document.getElementById("confirm-modal");
+  const titleEl = document.getElementById("confirm-modal-title");
+  const messageEl = document.getElementById("confirm-modal-message");
+  const confirmBtn = document.getElementById("confirm-modal-confirm");
+  const closeEls = document.querySelectorAll("[data-confirm-close]");
+  const deleteForms = document.querySelectorAll(".inline-delete-form");
+
+  if (!modal || !titleEl || !messageEl || !confirmBtn || !deleteForms.length) {
+    return;
+  }
+
+  let pendingForm = null;
+  let lastFocusedElement = null;
+
+  function openModal(form) {
+    pendingForm = form;
+    lastFocusedElement = document.activeElement;
+
+    titleEl.textContent =
+      form.dataset.confirmTitle || "Confirm Action";
+
+    messageEl.textContent =
+      form.dataset.confirmMessage ||
+      "Are you sure you want to continue?";
+
+    confirmBtn.textContent =
+      form.dataset.confirmButtonLabel || "Confirm";
+
+    modal.hidden = false;
+    document.body.classList.add("confirm-modal-open");
+    confirmBtn.focus();
+  }
+
+  function closeModal() {
+    modal.hidden = true;
+    document.body.classList.remove("confirm-modal-open");
+    pendingForm = null;
+
+    if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+      lastFocusedElement.focus();
+    }
+  }
+
+  deleteForms.forEach((form) => {
+    form.addEventListener("submit", function (event) {
+      if (form.dataset.confirmBypassed === "true") {
+        form.dataset.confirmBypassed = "false";
+        return;
+      }
+
+      event.preventDefault();
+      openModal(form);
+    });
+  });
+
+  closeEls.forEach((el) => {
+    el.addEventListener("click", closeModal);
+  });
+
+  confirmBtn.addEventListener("click", function () {
+    if (!pendingForm) {
+      closeModal();
+      return;
+    }
+
+    pendingForm.dataset.confirmBypassed = "true";
+    pendingForm.requestSubmit();
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (modal.hidden) {
+      return;
+    }
+
+    if (event.key === "Escape") {
+      closeModal();
+    }
   });
 }

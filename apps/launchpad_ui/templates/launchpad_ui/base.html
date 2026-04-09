@@ -105,5 +105,45 @@
       </div>
     </footer>
     {% block extra_js %}{% endblock %}
+    <script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+    <div id="confirm-modal" class="confirm-modal" hidden>
+      <div class="confirm-modal__backdrop" data-confirm-close></div>
+
+      <div
+        class="confirm-modal__dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        aria-describedby="confirm-modal-message"
+      >
+        <div class="confirm-modal__header">
+          <h3 id="confirm-modal-title">Confirm Action</h3>
+        </div>
+
+        <div class="confirm-modal__body">
+          <p id="confirm-modal-message">
+            Are you sure you want to continue?
+          </p>
+        </div>
+
+        <div class="confirm-modal__actions">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            id="confirm-modal-cancel"
+            data-confirm-close
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger"
+            id="confirm-modal-confirm"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
