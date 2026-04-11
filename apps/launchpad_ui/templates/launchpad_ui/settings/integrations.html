@@ -1,0 +1,150 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}Integrations - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+/>
+{% endblock %}
+
+{% block content %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Settings</span>
+    </a>
+  </div>
+
+  <div class="settings-page-header">
+    <div>
+      <h1>Integrations</h1>
+      <p class="muted">
+        Configure third-party platforms and provider-specific connection settings.
+      </p>
+    </div>
+  </div>
+
+  <div class="integration-brand-grid">
+    {% if can_view_microsoft %}
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_microsoft') }}"
+      class="integration-brand-card integration-brand-card-microsoft"
+    >
+      <div class="integration-brand-logo-wrap">
+        <img
+          src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/img/integrations/microsoft.png') }}"
+          alt="Microsoft logo"
+          class="integration-brand-logo-image"
+        />
+      </div>
+
+      <div class="integration-brand-title">Microsoft</div>
+
+      <div class="integration-brand-body">
+        OIDC sign-in, tenant settings, redirect URI, and future Microsoft platform integrations.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if can_view_google %}
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_google') }}"
+      class="integration-brand-card integration-brand-card-google"
+    >
+      <div class="integration-brand-logo-wrap">
+        <img
+          src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/img/integrations/google.png') }}"
+          alt="Google logo"
+          class="integration-brand-logo-image"
+        />
+      </div>
+
+      <div class="integration-brand-title">Google</div>
+
+      <div class="integration-brand-body">
+        Google OIDC, hosted domain settings, redirect URI, and future Google Workspace integrations.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if can_view_saml %}
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_saml') }}"
+      class="integration-brand-card integration-brand-card-saml"
+    >
+      <div class="integration-brand-logo-wrap">
+        <img
+          src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/img/integrations/saml.png') }}"
+          alt="SAML logo"
+          class="integration-brand-logo-image"
+        />
+      </div>
+
+      <div class="integration-brand-title">SAML / Federation</div>
+
+      <div class="integration-brand-body">
+        Identity provider metadata, entity IDs, certificates, ACS URLs, and attribute mappings.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if can_view_snipeit %}
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_snipeit') }}"
+      class="integration-brand-card integration-brand-card-snipeit"
+    >
+      <div class="integration-brand-logo-wrap">
+        <img
+          src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/img/integrations/snipeit.png') }}"
+          alt="Snipe-IT logo"
+          class="integration-brand-logo-image"
+        />
+      </div>
+
+      <div class="integration-brand-title">Snipe-IT</div>
+
+      <div class="integration-brand-body">
+        Base URL, API token, SSL verification, and Snipe-IT connectivity for inventory integrations.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

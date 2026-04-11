@@ -338,7 +338,7 @@ def list_staff_status_access_with_users() -> list[dict]:
                 "access_level": "Operator",
                 "scope_label": row["department_name"],
                 "department_name": row["department_name"],
-                "access_source": "Department Assignment",
+                "access_source": "Assigned",
                 "can_remove": True,
             }
         )

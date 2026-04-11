@@ -1,0 +1,96 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}Google Integration - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_integrations') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Integrations</span>
+    </a>
+  </div>
+
+  <div class="settings-page-header">
+    <div>
+      <h1>Google</h1>
+      <p class="muted">Configure Google OIDC provider settings.</p>
+    </div>
+  </div>
+
+  <form method="post" class="settings-form">
+    <div class="settings-narrow-stack">
+      <div class="settings-provider-card">
+        <h2>Google OIDC</h2>
+        <p class="muted">Control Google sign-in integration for Launchpad.</p>
+
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-copy">
+            <strong>Enable Google OIDC</strong>
+            <span>Allow Google identity provider sign-in for Launchpad.</span>
+          </div>
+
+          <label class="settings-switch">
+            <input type="checkbox" name="google_oidc_enabled" value="1" {% if settings.google_oidc_enabled %}checked{% endif %} />
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="google_hosted_domain">Hosted Domain</label>
+            <input type="text" id="google_hosted_domain" name="google_hosted_domain" value="{{ settings.google_hosted_domain }}" />
+          </div>
+
+          <div class="form-field">
+            <label for="google_redirect_uri">Redirect URI</label>
+            <input type="text" id="google_redirect_uri" name="google_redirect_uri" value="{{ settings.google_redirect_uri }}" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="google_client_id">Client ID</label>
+            <input type="text" id="google_client_id" name="google_client_id" value="{{ settings.google_client_id }}" />
+          </div>
+
+          <div class="form-field">
+            <label for="google_client_secret">Client Secret</label>
+            <input type="password" id="google_client_secret" name="google_client_secret" value="" />
+            <small>Leave blank to keep the current stored secret.</small>
+          </div>
+        </div>
+
+        <div class="settings-provider-actions">
+          <button
+            type="button"
+            class="test-connection-btn"
+            data-provider="google_oidc"
+            data-test-url="{{ url_for('launchpad_ui.settings_authentication_test_connection') }}"
+          >
+            Test Configuration
+          </button>
+        </div>
+
+        <div class="settings-test-result" data-provider-result="google_oidc" hidden></div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+{% endblock %}

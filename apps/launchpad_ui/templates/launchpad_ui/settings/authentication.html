@@ -1,5 +1,7 @@
 {% extends "launchpad_ui/base.html" %}
 
+{% block title %}Authentication Settings - Launchpad{% endblock %}
+
 {% block extra_css %}
 <link
   rel="stylesheet"
@@ -8,61 +10,83 @@
 {% endblock %}
 
 {% block content %}
-<div class="settings-layout">
-  {% include "launchpad_ui/settings/_sidebar.html" %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Settings</span>
+    </a>
+  </div>
 
-  <div class="settings-main settings-main-narrow">
-    <div class="page-header">
-      <div>
-        <h1>Authentication Settings</h1>
-        <p class="muted">
-          Configure sign-in methods and access control for Launchpad.
-        </p>
-      </div>
+  <div class="settings-page-header">
+    <div>
+      <h1>Authentication Settings</h1>
+      <p class="muted">
+        Configure sign-in behavior, local login settings, and access control for Launchpad.
+      </p>
     </div>
+  </div>
 
+  <form method="post" id="authentication-settings-form" class="settings-form">
     <div class="settings-tabs">
-      <button type="button" class="settings-tab active" data-tab="sign-in-methods">
-        Sign-In Methods
+      <button type="button" class="settings-tab active" data-tab="sign-in">
+        Sign-In
       </button>
       <button type="button" class="settings-tab" data-tab="access-control">
         Access Control
       </button>
     </div>
 
-    <div class="content-card">
-      <form method="post" id="authentication-settings-form" class="settings-form">
-        <div class="settings-tab-panel active" data-panel="sign-in-methods">
-          <div class="card" style="min-height: 0;">
-            <h2>Sign-In Methods</h2>
-            <p>Configure Local, Microsoft OIDC, Google OIDC, and SAML in one place.</p>
+    <div class="settings-section-stack">
+      <div class="settings-tab-panel active" data-panel="sign-in">
+        <div class="settings-content-card">
+          <h2>Sign-In</h2>
+          <p class="muted">
+            Configure the primary sign-in method and local sign-in behavior.
+          </p>
 
-            <div class="form-field">
-              <label for="primary_method">Primary Sign-In Method</label>
-              <select id="primary_method" name="primary_method">
-                <option value="local" {% if settings.primary_method == "local" %}selected{% endif %}>Local</option>
-                <option value="microsoft_oidc" {% if settings.primary_method == "microsoft_oidc" %}selected{% endif %}>Microsoft OIDC</option>
-                <option value="google_oidc" {% if settings.primary_method == "google_oidc" %}selected{% endif %}>Google OIDC</option>
-                <option value="saml" {% if settings.primary_method == "saml" %}selected{% endif %}>SAML</option>
-              </select>
-            </div>
+          <div class="form-field">
+            <label for="primary_method">Primary Sign-In Method</label>
+            <select id="primary_method" name="primary_method">
+              <option value="local" {% if settings.primary_method == "local" %}selected{% endif %}>Local</option>
+              <option value="microsoft_oidc" {% if settings.primary_method == "microsoft_oidc" %}selected{% endif %}>Microsoft OIDC</option>
+              <option value="google_oidc" {% if settings.primary_method == "google_oidc" %}selected{% endif %}>Google OIDC</option>
+              <option value="saml" {% if settings.primary_method == "saml" %}selected{% endif %}>SAML</option>
+            </select>
+          </div>
 
-            <hr>
-
+          <div class="settings-provider-stack">
             <details class="settings-provider" open>
               <summary>
                 <span><strong>Local Sign-In</strong></span>
               </summary>
 
               <div class="settings-provider-body">
-                <div class="form-field checkbox-card">
-                  <label>
-                    <input type="checkbox" name="local_enabled" value="1" {% if settings.local_enabled %}checked{% endif %}>
-                    Enable Local Sign-In
-                  </label>
-                </div>
+                <label class="checkbox-card">
+                  <input
+                    type="checkbox"
+                    name="local_enabled"
+                    value="1"
+                    {% if settings.local_enabled %}checked{% endif %}
+                  />
+                  <span>Enable Local Sign-In</span>
+                </label>
 
-                <div class="form-field">
+                <div class="form-field" style="margin-top: 16px;">
                   <label for="local_mode">Local Sign-In Mode</label>
                   <select id="local_mode" name="local_mode">
                     <option value="all" {% if settings.local_mode == "all" %}selected{% endif %}>All local accounts</option>
@@ -72,328 +96,103 @@
                   <small>Breakglass accounts are local fallback accounts for emergency access when SSO is unavailable.</small>
                 </div>
 
-                <div class="form-field checkbox-card">
-                  <label>
-                    <input type="checkbox" name="local_hide_form_when_restricted" value="1" {% if settings.local_hide_form_when_restricted %}checked{% endif %}>
-                    Hide local login form when restricted to Breakglass only
-                  </label>
-                </div>
-              </div>
-            </details>
-
-            <hr>
-
-            <details class="settings-provider">
-              <summary>
-                <span><strong>Microsoft OIDC</strong></span>
-                <span class="settings-status-badge">{{ statuses.microsoft_oidc }}</span>
-              </summary>
-
-              <div class="settings-provider-body">
-                <div class="form-field checkbox-card">
-                  <label>
-                    <input type="checkbox" name="microsoft_oidc_enabled" value="1" {% if settings.microsoft_oidc_enabled %}checked{% endif %}>
-                    Enable Microsoft OIDC
-                  </label>
-                </div>
-
-                <div class="form-grid">
-                  <div class="form-field">
-                    <label for="microsoft_tenant_id">Tenant ID</label>
-                    <input type="text" id="microsoft_tenant_id" name="microsoft_tenant_id" value="{{ settings.microsoft_tenant_id }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="microsoft_redirect_uri">Redirect URI</label>
-                    <input type="text" id="microsoft_redirect_uri" name="microsoft_redirect_uri" value="{{ settings.microsoft_redirect_uri }}">
-                  </div>
-                </div>
-
-                <div class="form-grid">
-                  <div class="form-field">
-                    <label for="microsoft_client_id">Client ID</label>
-                    <input type="text" id="microsoft_client_id" name="microsoft_client_id" value="{{ settings.microsoft_client_id }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="microsoft_client_secret">Client Secret</label>
-                    <input type="password" id="microsoft_client_secret" name="microsoft_client_secret" value="">
-                    <small>Leave blank to keep the current stored secret.</small>
-                  </div>
-                </div>
-
-                <div class="settings-provider-actions">
-                  <button
-                    type="button"
-                    class="test-connection-btn"
-                    data-provider="microsoft_oidc"
-                    data-test-url="{{ url_for('launchpad_ui.settings_authentication_test_connection') }}"
-                  >
-                    Test Configuration
-                  </button>
-                </div>
-
-                <div
-                  class="settings-test-result"
-                  data-provider-result="microsoft_oidc"
-                  hidden
-                ></div>
-              </div>
-            </details>
-
-            <hr>
-
-            <details class="settings-provider">
-              <summary>
-                <span><strong>Google OIDC</strong></span>
-                <span class="settings-status-badge">{{ statuses.google_oidc }}</span>
-              </summary>
-
-              <div class="settings-provider-body">
-                <div class="form-field checkbox-card">
-                  <label>
-                    <input type="checkbox" name="google_oidc_enabled" value="1" {% if settings.google_oidc_enabled %}checked{% endif %}>
-                    Enable Google OIDC
-                  </label>
-                </div>
-
-                <div class="form-grid">
-                  <div class="form-field">
-                    <label for="google_client_id">Client ID</label>
-                    <input type="text" id="google_client_id" name="google_client_id" value="{{ settings.google_client_id }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="google_client_secret">Client Secret</label>
-                    <input type="password" id="google_client_secret" name="google_client_secret" value="">
-                    <small>Leave blank to keep the current stored secret.</small>
-                  </div>
-                </div>
-
-                <div class="form-grid">
-                  <div class="form-field">
-                    <label for="google_hosted_domain">Hosted Domain</label>
-                    <input type="text" id="google_hosted_domain" name="google_hosted_domain" value="{{ settings.google_hosted_domain }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="google_redirect_uri">Redirect URI</label>
-                    <input type="text" id="google_redirect_uri" name="google_redirect_uri" value="{{ settings.google_redirect_uri }}">
-                  </div>
-                </div>
-
-                <div class="settings-provider-actions">
-                  <button
-                    type="button"
-                    class="test-connection-btn"
-                    data-provider="google_oidc"
-                    data-test-url="{{ url_for('launchpad_ui.settings_authentication_test_connection') }}"
-                  >
-                    Test Configuration
-                  </button>
-                </div>
-
-                <div
-                  class="settings-test-result"
-                  data-provider-result="google_oidc"
-                  hidden
-                ></div>
-              </div>
-            </details>
-
-            <hr>
-
-            <details class="settings-provider">
-              <summary>
-                <span><strong>SAML</strong></span>
-                <span class="settings-status-badge">{{ statuses.saml }}</span>
-              </summary>
-
-              <div class="settings-provider-body">
-                <div class="form-field checkbox-card">
-                  <label>
-                    <input type="checkbox" name="saml_enabled" value="1" {% if settings.saml_enabled %}checked{% endif %}>
-                    Enable SAML
-                  </label>
-                </div>
-
-                <div class="form-field">
-                  <label for="saml_idp_type">IdP Type</label>
-                  <select id="saml_idp_type" name="saml_idp_type">
-                    <option value="generic" {% if settings.saml_idp_type == "generic" %}selected{% endif %}>Generic</option>
-                    <option value="microsoft" {% if settings.saml_idp_type == "microsoft" %}selected{% endif %}>Microsoft</option>
-                    <option value="google" {% if settings.saml_idp_type == "google" %}selected{% endif %}>Google</option>
-                  </select>
-                </div>
-
-                <div class="form-field">
-                  <label for="saml_metadata_url">Metadata URL</label>
-                  <input type="text" id="saml_metadata_url" name="saml_metadata_url" value="{{ settings.saml_metadata_url }}">
-                </div>
-
-                <div class="form-field">
-                  <label for="saml_metadata_xml">Metadata XML</label>
-                  <textarea id="saml_metadata_xml" name="saml_metadata_xml" rows="5">{{ settings.saml_metadata_xml }}</textarea>
-                </div>
-
-                <div class="form-grid">
-                  <div class="form-field">
-                    <label for="saml_idp_entity_id">IdP Entity ID</label>
-                    <input type="text" id="saml_idp_entity_id" name="saml_idp_entity_id" value="{{ settings.saml_idp_entity_id }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="saml_sso_url">SSO URL</label>
-                    <input type="text" id="saml_sso_url" name="saml_sso_url" value="{{ settings.saml_sso_url }}">
-                  </div>
-                </div>
-
-                <div class="form-grid">
-                  <div class="form-field">
-                    <label for="saml_slo_url">SLO URL</label>
-                    <input type="text" id="saml_slo_url" name="saml_slo_url" value="{{ settings.saml_slo_url }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="saml_sp_entity_id">SP Entity ID</label>
-                    <input type="text" id="saml_sp_entity_id" name="saml_sp_entity_id" value="{{ settings.saml_sp_entity_id }}">
-                  </div>
-                </div>
-
-                <div class="form-grid">
-                  <div class="form-field">
-                    <label for="saml_acs_url">ACS URL</label>
-                    <input type="text" id="saml_acs_url" name="saml_acs_url" value="{{ settings.saml_acs_url }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="saml_logout_url">Logout URL</label>
-                    <input type="text" id="saml_logout_url" name="saml_logout_url" value="{{ settings.saml_logout_url }}">
-                  </div>
-                </div>
-
-                <div class="form-field">
-                  <label for="saml_x509_cert">X.509 Certificate</label>
-                  <textarea id="saml_x509_cert" name="saml_x509_cert" rows="5">{{ settings.saml_x509_cert }}</textarea>
-                </div>
-
-                <div class="form-grid-equal">
-                  <div class="form-field">
-                    <label for="saml_attr_email">Email Attribute</label>
-                    <input type="text" id="saml_attr_email" name="saml_attr_email" value="{{ settings.saml_attr_email }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="saml_attr_first_name">First Name Attribute</label>
-                    <input type="text" id="saml_attr_first_name" name="saml_attr_first_name" value="{{ settings.saml_attr_first_name }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="saml_attr_last_name">Last Name Attribute</label>
-                    <input type="text" id="saml_attr_last_name" name="saml_attr_last_name" value="{{ settings.saml_attr_last_name }}">
-                  </div>
-
-                  <div class="form-field">
-                    <label for="saml_attr_display_name">Display Name Attribute</label>
-                    <input type="text" id="saml_attr_display_name" name="saml_attr_display_name" value="{{ settings.saml_attr_display_name }}">
-                  </div>
-                </div>
-
-                <div class="form-field">
-                  <label for="saml_attr_groups">Groups Attribute</label>
-                  <input type="text" id="saml_attr_groups" name="saml_attr_groups" value="{{ settings.saml_attr_groups }}">
-                </div>
-
-                <div class="settings-provider-actions">
-                  <button
-                    type="button"
-                    class="test-connection-btn"
-                    data-provider="saml"
-                    data-test-url="{{ url_for('launchpad_ui.settings_authentication_test_connection') }}"
-                  >
-                    Test Configuration
-                  </button>
-                </div>
-
-                <div
-                  class="settings-test-result"
-                  data-provider-result="saml"
-                  hidden
-                ></div>
+                <label class="checkbox-card" style="margin-top: 16px;">
+                  <input
+                    type="checkbox"
+                    name="local_hide_form_when_restricted"
+                    value="1"
+                    {% if settings.local_hide_form_when_restricted %}checked{% endif %}
+                  />
+                  <span>Hide local login form when restricted to Breakglass only</span>
+                </label>
               </div>
             </details>
           </div>
         </div>
+      </div>
 
-        <div class="settings-tab-panel" data-panel="access-control">
-          <div class="card" style="min-height: 0;">
-            <h2>Access Control</h2>
-            <p>Control who is allowed into Launchpad after successful authentication.</p>
+      <div class="settings-tab-panel" data-panel="access-control">
+        <div class="settings-content-card">
+          <h2>Access Control</h2>
+          <p class="muted">
+            Control who is allowed into Launchpad after successful authentication.
+          </p>
 
-            <div class="form-field checkbox-card">
-              <label>
-                <input type="checkbox" name="require_local_user_for_sso" value="1" {% if settings.require_local_user_for_sso %}checked{% endif %}>
-                Require local user record for SSO/SAML login
-              </label>
-            </div>
+          <label class="checkbox-card">
+            <input
+              type="checkbox"
+              name="require_local_user_for_sso"
+              value="1"
+              {% if settings.require_local_user_for_sso %}checked{% endif %}
+            />
+            <span>Require local user record for SSO/SAML login</span>
+          </label>
 
-            <div class="form-field">
-              <label for="match_user_by">Match Users By</label>
-              <select id="match_user_by" name="match_user_by">
-                <option value="email" {% if settings.match_user_by == "email" %}selected{% endif %}>Email</option>
-                <option value="username" {% if settings.match_user_by == "username" %}selected{% endif %}>Username</option>
-              </select>
-            </div>
-
-            <div class="form-field checkbox-card">
-              <label>
-                <input type="checkbox" name="deny_if_user_not_found" value="1" {% if settings.deny_if_user_not_found %}checked{% endif %}>
-                Deny login if no local account is found
-              </label>
-            </div>
-
-            <div class="form-field checkbox-card">
-              <label>
-                <input type="checkbox" name="deny_if_inactive" value="1" {% if settings.deny_if_inactive %}checked{% endif %}>
-                Deny login if the local account is inactive
-              </label>
-            </div>
-
-            <div class="form-field">
-              <label for="allowed_domains">Allowed Email Domains</label>
-              <textarea id="allowed_domains" name="allowed_domains" rows="3">{{ settings.allowed_domains }}</textarea>
-              <small>One per line or comma separated.</small>
-            </div>
-
-            <div class="form-field">
-              <label for="required_groups">Required Groups</label>
-              <textarea id="required_groups" name="required_groups" rows="3">{{ settings.required_groups }}</textarea>
-              <small>One per line or comma separated.</small>
-            </div>
-
-            <div class="form-field">
-              <label for="required_groups_mode">Required Groups Match Mode</label>
-              <select id="required_groups_mode" name="required_groups_mode">
-                <option value="any" {% if settings.required_groups_mode == "any" %}selected{% endif %}>Any listed group</option>
-                <option value="all" {% if settings.required_groups_mode == "all" %}selected{% endif %}>All listed groups</option>
-              </select>
-            </div>
-
-            <div class="form-field checkbox-card">
-              <label>
-                <input type="checkbox" name="allow_breakglass_with_sso" value="1" {% if settings.allow_breakglass_with_sso %}checked{% endif %}>
-                Allow Breakglass local sign-in when SSO/SAML is enabled
-              </label>
-            </div>
+          <div class="form-field" style="margin-top: 16px;">
+            <label for="match_user_by">Match Users By</label>
+            <select id="match_user_by" name="match_user_by">
+              <option value="email" {% if settings.match_user_by == "email" %}selected{% endif %}>Email</option>
+              <option value="username" {% if settings.match_user_by == "username" %}selected{% endif %}>Username</option>
+            </select>
           </div>
-        </div>
 
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Save Authentication Settings</button>
+          <label class="checkbox-card" style="margin-top: 16px;">
+            <input
+              type="checkbox"
+              name="deny_if_user_not_found"
+              value="1"
+              {% if settings.deny_if_user_not_found %}checked{% endif %}
+            />
+            <span>Deny login if no local account is found</span>
+          </label>
+
+          <label class="checkbox-card" style="margin-top: 16px;">
+            <input
+              type="checkbox"
+              name="deny_if_inactive"
+              value="1"
+              {% if settings.deny_if_inactive %}checked{% endif %}
+            />
+            <span>Deny login if the local account is inactive</span>
+          </label>
+
+          <div class="form-field" style="margin-top: 16px;">
+            <label for="allowed_domains">Allowed Email Domains</label>
+            <textarea id="allowed_domains" name="allowed_domains" rows="3">{{ settings.allowed_domains }}</textarea>
+            <small>One per line or comma separated.</small>
+          </div>
+
+          <div class="form-field">
+            <label for="required_groups">Required Groups</label>
+            <textarea id="required_groups" name="required_groups" rows="3">{{ settings.required_groups }}</textarea>
+            <small>One per line or comma separated.</small>
+          </div>
+
+          <div class="form-field">
+            <label for="required_groups_mode">Required Groups Match Mode</label>
+            <select id="required_groups_mode" name="required_groups_mode">
+              <option value="any" {% if settings.required_groups_mode == "any" %}selected{% endif %}>Any listed group</option>
+              <option value="all" {% if settings.required_groups_mode == "all" %}selected{% endif %}>All listed groups</option>
+            </select>
+          </div>
+
+          <label class="checkbox-card" style="margin-top: 16px;">
+            <input
+              type="checkbox"
+              name="allow_breakglass_with_sso"
+              value="1"
+              {% if settings.allow_breakglass_with_sso %}checked{% endif %}
+            />
+            <span>Allow Breakglass local sign-in when SSO/SAML is enabled</span>
+          </label>
         </div>
-      </form>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
     </div>
-  </div>
+  </form>
 </div>
 {% endblock %}
 

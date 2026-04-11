@@ -1,24 +1,53 @@
 {% extends "launchpad_ui/base.html" %}
+
 {% block title %}
   {% if form_mode == "new" %}Add Group - Launchpad{% else %}Edit Group - Launchpad{% endif %}
 {% endblock %}
 
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+>
+{% endblock %}
+
 {% block content %}
-<div class="settings-layout">
-  {% include "launchpad_ui/settings/_sidebar.html" %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_groups') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Groups</span>
+    </a>
+  </div>
 
-  <div class="settings-main settings-main-narrow">
-    <div class="page-header">
-      <div>
-        <h1>
-          {% if form_mode == "new" %}Add Group{% else %}Edit Group{% endif %}
-        </h1>
-        <p class="muted">Create or update a permission bundle.</p>
-      </div>
+  <div class="settings-page-header">
+    <div>
+      <h1>
+        {% if form_mode == "new" %}Add Group{% else %}Edit Group{% endif %}
+      </h1>
+      <p class="muted">Create or update a permission bundle.</p>
     </div>
+  </div>
 
-    <div class="content-card">
-      <form method="post" class="settings-form">
+  <form method="post" class="settings-form">
+    <div class="settings-narrow-stack">
+      <div class="settings-provider-card">
+        <h2>Group Details</h2>
+
         <div class="form-field">
           <label for="role_key">Group Key</label>
           <input
@@ -28,9 +57,7 @@
             value="{{ group.role_key if group else '' }}"
             {% if form_mode == "edit" %}readonly{% endif %}
           />
-          <p class="form-help">
-            Used internally. Example: general_settings_manager
-          </p>
+          <small>Used internally. Example: general_settings_manager</small>
         </div>
 
         <div class="form-field">
@@ -49,51 +76,56 @@
         </div>
 
         {% if form_mode == "edit" and group.is_system %}
-        <div class="flash flash-info">
-          This is a system group. Its name and description can be viewed here,
-          but deletion is blocked.
+        <div class="empty-state" style="margin-top: 16px;">
+          <h3>System Group</h3>
+          <p class="muted">
+            This is a system group. Its name and description can be viewed here,
+            but deletion is blocked.
+          </p>
         </div>
         {% endif %}
+      </div>
 
-        <div class="content-card optional-card">
-          <h3>Permissions</h3>
-          <p class="muted">Select the permissions this group should grant.</p>
+      <div class="settings-provider-card">
+        <h2>Permissions</h2>
+        <p class="muted">Select the permissions this group should grant.</p>
 
-          {% for section, group_map in permission_catalog.items() %}
-          <div class="card" style="min-height: 0; margin-top: 14px">
-            <h3 style="margin-top: 0">{{ section }}</h3>
+        {% for section, group_map in permission_catalog.items() %}
+        <div class="settings-provider-card" style="margin-top: 14px; padding: 20px 22px;">
+          <h3 style="margin-top: 0;">{{ section }}</h3>
 
-            {% for subgroup, items in group_map.items() %}
-            <div style="margin-top: 12px">
-              <h4 style="margin: 0 0 10px 0">{{ subgroup }}</h4>
+          {% for subgroup, items in group_map.items() %}
+          <div style="margin-top: 12px;">
+            <h4 style="margin: 0 0 10px 0;">{{ subgroup }}</h4>
 
-              <div class="checkbox-grid">
-                {% for item in items %}
-                <label class="checkbox-card">
-                  <input
-                    type="checkbox"
-                    name="permissions"
-                    value="{{ item.permission_key }}"
-                    {% if item.permission_key in selected_permissions %}checked{% endif %}
-                  />
-                  <span>{{ item.display_label }} — {{ item.action|capitalize }}</span>
-                </label>
-                {% endfor %}
-              </div>
+            <div class="checkbox-grid">
+              {% for item in items %}
+              <label class="checkbox-card">
+                <input
+                  type="checkbox"
+                  name="permissions"
+                  value="{{ item.permission_key }}"
+                  {% if item.permission_key in selected_permissions %}checked{% endif %}
+                />
+                <span>{{ item.display_label }} — {{ item.action|capitalize }}</span>
+              </label>
+              {% endfor %}
             </div>
-            {% endfor %}
           </div>
           {% endfor %}
         </div>
+        {% endfor %}
+      </div>
 
-        <div class="form-actions">
-          <a class="btn btn-secondary" href="{{ url_for('launchpad_ui.settings_groups') }}">Cancel</a>
-          <button type="submit" class="btn btn-primary">
-            {% if form_mode == "new" %}Create Group{% else %}Save Group{% endif %}
-          </button>
-        </div>
-      </form>
+      <div class="form-actions">
+        <a class="btn btn-secondary" href="{{ url_for('launchpad_ui.settings_groups') }}">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          {% if form_mode == "new" %}Create Group{% else %}Save Changes{% endif %}
+        </button>
+      </div>
     </div>
-  </div>
+  </form>
 </div>
 {% endblock %}

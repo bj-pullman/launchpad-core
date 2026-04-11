@@ -3,8 +3,11 @@ document.addEventListener("DOMContentLoaded", function () {
   initUserFormPasswordToggle();
   initSettingsTabs();
   initAuthenticationConnectionTests();
+  initKioskTokenButtons();
   initBoardTokenButtons();
   initDeleteConfirmations();
+  initSettingsProviderToggles();
+  initSettingsFileUploads();
 });
 
 function initSnipeOpsConnectionTest() {
@@ -94,9 +97,12 @@ function initUserFormPasswordToggle() {
 
 function initSettingsTabs() {
   const tabs = document.querySelectorAll(".settings-tab");
-  const panels = document.querySelectorAll(".settings-tab-panel");
+  const panels = document.querySelectorAll(".settings-tab-panel[data-panel]");
+  const savePanels = document.querySelectorAll(
+    ".settings-tab-panel[data-panel-save]"
+  );
 
-  if (!tabs.length || !panels.length) {
+  if (!tabs.length) {
     return;
   }
 
@@ -106,6 +112,7 @@ function initSettingsTabs() {
 
       tabs.forEach((t) => t.classList.remove("active"));
       panels.forEach((p) => p.classList.remove("active"));
+      savePanels.forEach((p) => p.classList.remove("active"));
 
       tab.classList.add("active");
 
@@ -115,6 +122,14 @@ function initSettingsTabs() {
 
       if (panel) {
         panel.classList.add("active");
+      }
+
+      const savePanel = document.querySelector(
+        `.settings-tab-panel[data-panel-save="${targetPanel}"]`
+      );
+
+      if (savePanel) {
+        savePanel.classList.add("active");
       }
     });
   });
@@ -178,15 +193,23 @@ function initAuthenticationConnectionTests() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", function () {
+function initKioskTokenButtons() {
   const rotateButtons = document.querySelectorAll(".rotate-kiosk-token-btn");
+
+  if (!rotateButtons.length) {
+    return;
+  }
 
   rotateButtons.forEach((button) => {
     button.addEventListener("click", async function () {
       const rotateUrl = button.dataset.rotateUrl;
       const department = button.dataset.department;
-      const resultBox = document.querySelector(`[data-kiosk-result="${department}"]`);
-      const urlInput = document.querySelector(`[data-kiosk-url-input="${department}"]`);
+      const resultBox = document.querySelector(
+        `[data-kiosk-result="${department}"]`
+      );
+      const urlInput = document.querySelector(
+        `[data-kiosk-url-input="${department}"]`
+      );
 
       button.disabled = true;
       const originalText = button.textContent;
@@ -196,35 +219,50 @@ document.addEventListener("DOMContentLoaded", function () {
         const response = await fetch(rotateUrl, {
           method: "POST",
           headers: {
-            "X-Requested-With": "XMLHttpRequest"
-          }
+            "X-Requested-With": "XMLHttpRequest",
+          },
         });
 
         const payload = await response.json();
 
-        resultBox.hidden = false;
+        if (resultBox) {
+          resultBox.hidden = false;
+        }
 
         if (response.ok && payload.ok) {
-          urlInput.value = payload.kiosk_url;
-          resultBox.className = "settings-test-result settings-test-result-success";
-          resultBox.textContent = `Kiosk URL updated for ${payload.department_name}.`;
+          if (urlInput) {
+            urlInput.value = payload.kiosk_url;
+          }
+          if (resultBox) {
+            resultBox.className =
+              "settings-test-result settings-test-result-success";
+            resultBox.textContent =
+              `Kiosk URL updated for ${payload.department_name}.`;
+          }
           button.textContent = "Regenerate Kiosk URL";
         } else {
-          resultBox.className = "settings-test-result settings-test-result-error";
-          resultBox.textContent = payload.message || "Unable to rotate kiosk URL.";
+          if (resultBox) {
+            resultBox.className =
+              "settings-test-result settings-test-result-error";
+            resultBox.textContent =
+              payload.message || "Unable to rotate kiosk URL.";
+          }
           button.textContent = originalText;
         }
       } catch (error) {
-        resultBox.hidden = false;
-        resultBox.className = "settings-test-result settings-test-result-error";
-        resultBox.textContent = "Unable to rotate kiosk URL.";
+        if (resultBox) {
+          resultBox.hidden = false;
+          resultBox.className =
+            "settings-test-result settings-test-result-error";
+          resultBox.textContent = "Unable to rotate kiosk URL.";
+        }
         button.textContent = originalText;
       } finally {
         button.disabled = false;
       }
     });
   });
-});
+}
 
 function initBoardTokenButtons() {
   const rotateButtons = document.querySelectorAll(".rotate-board-token-btn");
@@ -252,8 +290,8 @@ function initBoardTokenButtons() {
         const response = await fetch(rotateUrl, {
           method: "POST",
           headers: {
-            "X-Requested-With": "XMLHttpRequest"
-          }
+            "X-Requested-With": "XMLHttpRequest",
+          },
         });
 
         const payload = await response.json();
@@ -316,13 +354,9 @@ function initDeleteConfirmations() {
     pendingForm = form;
     lastFocusedElement = document.activeElement;
 
-    titleEl.textContent =
-      form.dataset.confirmTitle || "Confirm Action";
-
+    titleEl.textContent = form.dataset.confirmTitle || "Confirm Action";
     messageEl.textContent =
-      form.dataset.confirmMessage ||
-      "Are you sure you want to continue?";
-
+      form.dataset.confirmMessage || "Are you sure you want to continue?";
     confirmBtn.textContent =
       form.dataset.confirmButtonLabel || "Confirm";
 
@@ -375,5 +409,77 @@ function initDeleteConfirmations() {
     if (event.key === "Escape") {
       closeModal();
     }
+  });
+}
+
+function initSettingsProviderToggles() {
+  document.querySelectorAll(".settings-provider-card").forEach((card) => {
+    const toggle = card.querySelector('input[type="checkbox"]');
+    const toggleRow = card.querySelector(".settings-toggle-row");
+
+    if (!toggle) {
+      return;
+    }
+
+    const inputs = card.querySelectorAll(
+      "input:not([type=checkbox]), select, textarea, button.test-connection-btn"
+    );
+
+    const applyState = () => {
+      const enabled = toggle.checked;
+
+      if (enabled) {
+        card.classList.remove("settings-card-disabled");
+        if (toggleRow) {
+          toggleRow.classList.remove("settings-toggle-off");
+        }
+      } else {
+        card.classList.add("settings-card-disabled");
+        if (toggleRow) {
+          toggleRow.classList.add("settings-toggle-off");
+        }
+      }
+
+      inputs.forEach((el) => {
+        if (enabled) {
+          el.removeAttribute("disabled");
+          el.classList.remove("settings-disabled");
+        } else {
+          el.setAttribute("disabled", "disabled");
+          el.classList.add("settings-disabled");
+        }
+      });
+    };
+
+    toggle.addEventListener("change", applyState);
+    applyState();
+  });
+}
+
+function initSettingsFileUploads() {
+  const fileInputs = document.querySelectorAll(".settings-file-input");
+
+  fileInputs.forEach((input) => {
+    const label = document.querySelector(`label[for="${input.id}"]`);
+    if (!label) {
+      return;
+    }
+
+    const textEl = label.querySelector(".settings-file-upload-text");
+    if (!textEl) {
+      return;
+    }
+
+    const defaultText = textEl.textContent;
+
+    input.addEventListener("change", () => {
+      if (input.files && input.files.length > 0) {
+        textEl.textContent = input.files[0].name;
+        label.classList.add("settings-file-upload-selected");
+      } else {
+        textEl.textContent = defaultText;
+        label.classList.remove("settings-file-upload-selected");
+      }
+    });
   });
 }
