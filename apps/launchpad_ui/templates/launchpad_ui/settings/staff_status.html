@@ -1,5 +1,7 @@
 {% extends "launchpad_ui/base.html" %}
 
+{% block title %}Staff Status Settings - Launchpad{% endblock %}
+
 {% block extra_css %}
 <link
   rel="stylesheet"
@@ -8,60 +10,80 @@
 {% endblock %}
 
 {% block content %}
-<div class="settings-layout">
-  {% include "launchpad_ui/settings/_sidebar.html" %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Settings</span>
+    </a>
+  </div>
 
-  <div class="settings-main settings-main-narrow">
-    <div class="page-header">
-      <div>
-        <h1>Staff Status Settings</h1>
-        <p class="muted">
-          Configure enabled departments, kiosk URLs, board refresh, and daily reset behavior.
-        </p>
-      </div>
+  <div class="settings-page-header">
+    <div>
+      <h1>Staff Status Settings</h1>
+      <p class="muted">
+        Configure enabled departments, kiosk URLs, board refresh timing, daily reset behavior, and department operators.
+      </p>
     </div>
+  </div>
 
-    <div class="settings-tabs">
-      <button type="button" class="settings-tab active" data-tab="general">
-        General
-      </button>
-      <button type="button" class="settings-tab" data-tab="departments">
-        Departments
-      </button>
-      <button type="button" class="settings-tab" data-tab="kiosks">
-        Kiosks
-      </button>
-    </div>
+  <div class="settings-tabs">
+    <button type="button" class="settings-tab active" data-tab="general">
+      General
+    </button>
+    <button type="button" class="settings-tab" data-tab="departments">
+      Departments
+    </button>
+    <button type="button" class="settings-tab" data-tab="kiosks">
+      Kiosks
+    </button>
+    <button type="button" class="settings-tab" data-tab="operators">
+      Operators
+    </button>
+  </div>
 
-    <div class="content-card">
-      <form method="post" id="staff-status-settings-form" class="settings-form">
-        <div class="settings-tab-panel active" data-panel="general">
-          <div class="card" style="min-height: 0;">
-            <h2>General</h2>
-            <p>Manage global Staff Status behavior.</p>
+  <form method="post" id="staff-status-settings-form" class="settings-form">
+    <input type="hidden" name="action" value="save_settings" />
 
-            <div class="form-field checkbox-card">
-              <label>
-                <input
-                  type="checkbox"
-                  name="daily_reset_enabled"
-                  value="1"
-                  {% if settings.daily_reset_enabled %}checked{% endif %}
-                >
-                Enable daily reset
-              </label>
-            </div>
+    <div class="settings-section-stack">
+      <div class="settings-tab-panel active" data-panel="general">
+        <div class="settings-content-card">
+          <h2>General</h2>
+          <p class="muted">Manage global Staff Status behavior.</p>
 
-            <div class="form-grid">
-              <div class="form-field">
-                <label for="daily_reset_time">Daily Reset Time</label>
-                <input
-                  type="time"
-                  id="daily_reset_time"
-                  name="daily_reset_time"
-                  value="{{ settings.daily_reset_time }}"
-                >
-              </div>
+          <label class="checkbox-card">
+            <input
+              type="checkbox"
+              name="daily_reset_enabled"
+              value="1"
+              {% if settings.daily_reset_enabled %}checked{% endif %}
+            />
+            <span>Enable daily reset</span>
+          </label>
+
+          <div class="form-grid" style="margin-top: 16px;">
+            <div class="form-field">
+              <label for="daily_reset_time">Daily Reset Time</label>
+              <input
+                type="time"
+                id="daily_reset_time"
+                name="daily_reset_time"
+                value="{{ settings.daily_reset_time }}"
+              />
             </div>
 
             <div class="form-field">
@@ -73,146 +95,273 @@
                 id="board_refresh_seconds"
                 name="board_refresh_seconds"
                 value="{{ settings.board_refresh_seconds }}"
-              >
-              <small class="form-help">Used by the department board auto-refresh endpoint.</small>
+              />
+              <small>Used by the department board auto-refresh endpoint.</small>
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="settings-tab-panel" data-panel="departments">
-          <div class="card" style="min-height: 0;">
-            <h2>Departments</h2>
-            <p>Select which departments should be enabled for Staff Status.</p>
+      <div class="settings-tab-panel" data-panel="departments">
+        <div class="settings-content-card">
+          <h2>Departments</h2>
+          <p class="muted">
+            Select which departments should be enabled for Staff Status and define each home location.
+          </p>
 
-            {% if department_rows %}
-              <div class="staff-status-department-list">
-                {% for department in department_rows %}
-                  <div class="staff-status-department-card">
-                    <div class="form-field checkbox-card">
-                      <label>
-                        <input
-                          type="checkbox"
-                          name="enabled_departments"
-                          value="{{ department.department_name }}"
-                          {% if department.is_enabled %}checked{% endif %}
-                        >
-                        {{ department.department_name }}
-                      </label>
-                    </div>
+          {% if department_rows %}
+          <div class="staff-status-department-list">
+            {% for department in department_rows %}
+            <div class="staff-status-department-card">
+              <label class="checkbox-card">
+                <input
+                  type="checkbox"
+                  name="enabled_departments"
+                  value="{{ department.department_name }}"
+                  {% if department.is_enabled %}checked{% endif %}
+                />
+                <span>{{ department.department_name }}</span>
+              </label>
 
-                    <div class="form-field">
-                      <label for="home_location_{{ loop.index }}">Home Location</label>
-                      <input
-                        type="text"
-                        id="home_location_{{ loop.index }}"
-                        name="home_location_{{ department.department_name }}"
-                        value="{{ department.home_location }}"
-                        placeholder="Technology Office"
-                      >
-                    </div>
-                  </div>
-                {% endfor %}
+              <div class="form-field">
+                <label for="home_location_{{ loop.index }}">Home Location</label>
+                <input
+                  type="text"
+                  id="home_location_{{ loop.index }}"
+                  name="home_location_{{ department.department_name }}"
+                  value="{{ department.home_location }}"
+                  placeholder="Technology Office"
+                />
               </div>
-            {% else %}
-              <div class="empty-state">
-                <h3>No departments found</h3>
-                <p class="muted">Departments are pulled from active users in the users table.</p>
-              </div>
-            {% endif %}
+            </div>
+            {% endfor %}
           </div>
-        </div>
-
-        <div class="settings-tab-panel" data-panel="kiosks">
-          <div class="card" style="min-height: 0;">
-            <h2>Kiosks</h2>
-            <p>Each kiosk URL is tied to one department and generated server-side.</p>
-
-            {% if department_rows %}
-              <div class="staff-status-kiosk-list">
-                {% for department in department_rows %}
-                  <div class="staff-status-kiosk-card">
-                    <div class="staff-status-kiosk-card-header">
-                      <div>
-                        <h3>{{ department.department_name }}</h3>
-                        <p class="muted">
-                          {% if department.kiosk_enabled and department.kiosk_token %}
-                            Kiosk URL is active for this department.
-                          {% else %}
-                            No kiosk URL has been generated yet.
-                          {% endif %}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        class="test-connection-btn rotate-kiosk-token-btn"
-                        data-department="{{ department.department_name }}"
-                        data-rotate-url="{{ url_for('launchpad_ui.settings_staff_status_rotate_kiosk_token', department_name=department.department_name) }}"
-                      >
-                        {% if department.kiosk_enabled and department.kiosk_token %}
-                          Regenerate Kiosk URL
-                        {% else %}
-                          Generate Kiosk URL
-                        {% endif %}
-                      </button>
-
-                      <button
-                        type="button"
-                        class="test-connection-btn rotate-board-token-btn"
-                        data-department="{{ department.department_name }}"
-                        data-rotate-url="{{ url_for('launchpad_ui.settings_staff_status_rotate_board_token', department_name=department.department_name) }}"
-                        >
-                        {% if department.board_token %}
-                            Regenerate Board URL
-                        {% else %}
-                            Generate Board URL
-                        {% endif %}
-                        </button>
-                    </div>
-
-                    <div class="form-field">
-                      <label>Kiosk URL</label>
-                      <input
-                        type="text"
-                        readonly
-                        value="{% if department.kiosk_enabled and department.kiosk_token %}{{ url_for('staff_status.kiosk', token=department.kiosk_token, _external=True) }}{% endif %}"
-                        data-kiosk-url-input="{{ department.department_name }}"
-                        placeholder="No kiosk URL generated yet"
-                      >
-                    </div>
-
-                    <div class="form-field">
-                        <label>Status Board URL</label>
-                        <input
-                            type="text"
-                            readonly
-                            value="{% if department.board_token %}{{ url_for('staff_status.board_public', token=department.board_token, _external=True) }}{% endif %}"
-                            data-board-url-input="{{ department.department_name }}"
-                            placeholder="No board URL generated yet"
-                        >
-                    </div>
-
-                    <div
-                      class="settings-test-result"
-                      data-kiosk-result="{{ department.department_name }}"
-                      hidden
-                    ></div>
-                  </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div class="empty-state">
-                <h3>No departments found</h3>
-                <p class="muted">Departments are pulled from active users in the users table.</p>
-              </div>
-            {% endif %}
+          {% else %}
+          <div class="empty-state">
+            <h3>No departments found</h3>
+            <p class="muted">Departments are pulled from active users in the users table.</p>
           </div>
+          {% endif %}
         </div>
+      </div>
 
+      <div class="settings-tab-panel" data-panel="kiosks">
+        <div class="settings-content-card">
+          <h2>Kiosks</h2>
+          <p class="muted">
+            Each kiosk URL and public board URL is generated server-side for a specific department.
+          </p>
+
+          {% if department_rows %}
+          <div class="staff-status-kiosk-list">
+            {% for department in department_rows %}
+            <div class="staff-status-kiosk-card">
+              <div class="staff-status-kiosk-card-header">
+                <div>
+                  <h3>{{ department.department_name }}</h3>
+                  <p class="muted">
+                    {% if department.kiosk_enabled and department.kiosk_token %}
+                    Kiosk URL is active for this department.
+                    {% else %}
+                    No kiosk URL has been generated yet.
+                    {% endif %}
+                  </p>
+                </div>
+
+                <div class="staff-status-kiosk-actions">
+                  <button
+                    type="button"
+                    class="test-connection-btn rotate-kiosk-token-btn"
+                    data-department="{{ department.department_name }}"
+                    data-rotate-url="{{ url_for('staff_status.rotate_department_kiosk_token_for_settings', department_name=department.department_name) }}"
+                  >
+                    {% if department.kiosk_enabled and department.kiosk_token %}
+                    Regenerate Kiosk URL
+                    {% else %}
+                    Generate Kiosk URL
+                    {% endif %}
+                  </button>
+
+                  <button
+                    type="button"
+                    class="test-connection-btn rotate-board-token-btn"
+                    data-department="{{ department.department_name }}"
+                    data-rotate-url="{{ url_for('staff_status.rotate_department_board_token_for_settings', department_name=department.department_name) }}"
+                  >
+                    {% if department.board_token %}
+                    Regenerate Board URL
+                    {% else %}
+                    Generate Board URL
+                    {% endif %}
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-field">
+                <label>Kiosk URL</label>
+                <input
+                  type="text"
+                  readonly
+                  value="{% if department.kiosk_enabled and department.kiosk_token %}{{ general_settings.public_base_url }}{{ url_for('staff_status.kiosk', token=department.kiosk_token) }}{% endif %}"
+                  data-kiosk-url-input="{{ department.department_name }}"
+                  placeholder="No kiosk URL generated yet"
+                />
+              </div>
+
+              <div class="form-field">
+                <label>Status Board URL</label>
+                <input
+                  type="text"
+                  readonly
+                  value="{% if department.board_token %}{{ general_settings.public_base_url }}{{ url_for('staff_status.board_public', token=department.board_token) }}{% endif %}"
+                  data-board-url-input="{{ department.department_name }}"
+                  placeholder="No board URL generated yet"
+                />
+              </div>
+
+              <div
+                class="settings-test-result"
+                data-kiosk-result="{{ department.department_name }}"
+                hidden
+              ></div>
+
+              <div
+                class="settings-test-result"
+                data-board-result="{{ department.department_name }}"
+                hidden
+              ></div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty-state">
+            <h3>No departments found</h3>
+            <p class="muted">Departments are pulled from active users in the users table.</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="settings-tab-save-row settings-tab-panel active" data-panel-save="general">
         <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Save Staff Status Settings</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
         </div>
-      </form>
+      </div>
+
+      <div class="settings-tab-save-row settings-tab-panel" data-panel-save="departments">
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </div>
+
+      <div class="settings-tab-save-row settings-tab-panel" data-panel-save="kiosks">
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div class="settings-tab-panel" data-panel="operators">
+    <div class="settings-content-card">
+      <h2>Department Operators</h2>
+      <p class="muted">
+        Department Operators can manage operational Staff Status data only for assigned departments.
+        They do not have access to Staff Status settings or other departments.
+      </p>
+
+      <div class="settings-content-card" style="margin-top: 16px;">
+        <h3>Add Department Operator</h3>
+
+        <form method="post" class="settings-form">
+          <input type="hidden" name="action" value="add_department_operator" />
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="department_operator_user_id">User</label>
+              <select
+                id="department_operator_user_id"
+                name="department_operator_user_id"
+                class="staff-status-operator-select"
+                required
+              >
+                <option value="">Select a user</option>
+                {% for user in assignable_users %}
+                <option value="{{ user.id }}">
+                  {{ user.display_name or user.email }}{% if user.email %} ({{ user.email }}){% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="department_operator_department_names">Departments</label>
+              <select
+                id="department_operator_department_names"
+                name="department_operator_department_names"
+                class="staff-status-operator-select staff-status-operator-multiselect"
+                multiple
+                size="6"
+                required
+              >
+                {% for department in department_rows %}
+                <option value="{{ department.department_name }}">{{ department.department_name }}</option>
+                {% endfor %}
+              </select>
+              <small>Hold Ctrl or Shift to select multiple departments.</small>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Department Operator</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="settings-content-card" style="margin-top: 16px;">
+        <h3>Current Staff Status Access</h3>
+
+        {% if department_operator_assignments %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Access Scope</th>
+                <th>Source</th>
+                <th class="table-actions-col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in department_operator_assignments %}
+              <tr>
+                <td>{{ row.email or row.display_name or ("User " ~ row.user_id) }}</td>
+                <td>{{ row.scope_label or row.department_name or "" }}</td>
+                <td>{{ row.access_source or "" }}</td>
+                <td class="table-actions-cell">
+                  {% if row.can_remove %}
+                  <form method="post" style="display:inline;">
+                    <input type="hidden" name="action" value="remove_department_operator" />
+                    <input type="hidden" name="department_operator_user_id" value="{{ row.user_id }}" />
+                    <input type="hidden" name="department_operator_department_name" value="{{ row.department_name }}" />
+                    <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                  </form>
+                  {% else %}
+                  <span class="muted">Managed by role</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <h3>No Staff Status access assignments found</h3>
+          <p class="muted">Add an assignment above or grant access through roles.</p>
+        </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 </div>

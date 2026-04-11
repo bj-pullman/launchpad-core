@@ -523,68 +523,102 @@ def user_has_permission(user_id: int, permission_key: str) -> bool:
 def build_permission_catalog() -> list[dict]:
     catalog = []
 
+    allowed_staff_status_keys = {
+        "staff_status.app.view",
+        "staff_status.view",
+        "staff_status.operator",
+        "staff_status.admin",
+        "launchpad.settings.staff_status.view",
+        "launchpad.settings.staff_status.manage",
+    }
+
     for permission in list_permissions():
         key = permission["permission_key"]
+
+        if key.startswith("staff_status.") and key not in allowed_staff_status_keys:
+            continue
+
         action = "manage" if key.endswith(".manage") else "view"
 
-        label = permission["permission_name"]
-        if label.startswith("Manage "):
-            clean_label = label.replace("Manage ", "", 1)
-        else:
-            clean_label = label.replace(" Settings", "")
-
-        if key.startswith("launchpad.settings.general"):
-            section = "Launchpad Settings"
-            group = "General"
-        elif key.startswith("launchpad.settings.snipeops"):
-            section = "Launchpad Settings"
-            group = "SnipeOps"
-        elif key.startswith("launchpad.settings.saml"):
-            section = "Launchpad Settings"
-            group = "SAML"
-        elif key.startswith("launchpad.settings.security"):
-            section = "Launchpad Settings"
-            group = "Security"
-        elif key.startswith("launchpad.settings.groups"):
-            section = "Launchpad Settings"
-            group = "Groups"
-        elif key.startswith("launchpad.settings.users"):
-            section = "Launchpad Settings"
-            group = "Users"
-        elif key.startswith("launchpad.settings"):
-            section = "Launchpad Settings"
-            group = "General"
-        elif key.startswith("launchpad.home"):
-            section = "Launchpad"
-            group = "Dashboard"
-            clean_label = "Dashboard"
-        elif key.startswith("snipeops."):
-            section = "SnipeOps"
-            group = "SnipeOps"
-        elif key.startswith("finance."):
-            section = "Finance"
-            group = "Finance"
-        elif key.startswith("user360."):
-            section = "User360"
-            group = "User360"
-        elif key.startswith("gam."):
-            section = "GAM"
-            group = "GAM"
-        elif key.startswith("newhire."):
-            section = "New Hire Intake"
-            group = "New Hire Intake"
-        elif key.startswith("virtual_students."):
-            section = "Virtual Students"
-            group = "Virtual Students"
-        elif key.startswith("techhub."):
-            section = "Tech Hub"
-            group = "Tech Hub"
-        elif key.startswith("staff_status."):
+        if key == "staff_status.app.view":
             section = "Staff Status"
             group = "Staff Status"
+            clean_label = "Staff Status App"
+            action = "view"
+        elif key == "staff_status.view":
+            section = "Staff Status"
+            group = "Staff Status"
+            clean_label = "Staff Status"
+            action = "view"
+        elif key == "staff_status.operator":
+            section = "Staff Status"
+            group = "Staff Status"
+            clean_label = "Staff Status"
+            action = "operator"
+        elif key == "staff_status.admin":
+            section = "Staff Status"
+            group = "Staff Status"
+            clean_label = "Staff Status"
+            action = "admin"
         else:
-            section = "Other"
-            group = "Other"
+            label = permission["permission_name"]
+            if label.startswith("Manage "):
+                clean_label = label.replace("Manage ", "", 1)
+            else:
+                clean_label = label.replace(" Settings", "")
+
+            if key.startswith("launchpad.settings.general"):
+                section = "Launchpad Settings"
+                group = "General"
+            elif key.startswith("launchpad.settings.snipeops"):
+                section = "Launchpad Settings"
+                group = "SnipeOps"
+            elif key.startswith("launchpad.settings.saml"):
+                section = "Launchpad Settings"
+                group = "SAML"
+            elif key.startswith("launchpad.settings.security"):
+                section = "Launchpad Settings"
+                group = "Security"
+            elif key.startswith("launchpad.settings.groups"):
+                section = "Launchpad Settings"
+                group = "Groups"
+            elif key.startswith("launchpad.settings.users"):
+                section = "Launchpad Settings"
+                group = "Users"
+            elif key.startswith("launchpad.settings.staff_status"):
+                section = "Launchpad Settings"
+                group = "Staff Status"
+            elif key.startswith("launchpad.settings"):
+                section = "Launchpad Settings"
+                group = "General"
+            elif key.startswith("launchpad.home"):
+                section = "Launchpad"
+                group = "Dashboard"
+                clean_label = "Dashboard"
+            elif key.startswith("snipeops."):
+                section = "SnipeOps"
+                group = "SnipeOps"
+            elif key.startswith("finance."):
+                section = "Finance"
+                group = "Finance"
+            elif key.startswith("user360."):
+                section = "User360"
+                group = "User360"
+            elif key.startswith("gam."):
+                section = "GAM"
+                group = "GAM"
+            elif key.startswith("newhire."):
+                section = "New Hire Intake"
+                group = "New Hire Intake"
+            elif key.startswith("virtual_students."):
+                section = "Virtual Students"
+                group = "Virtual Students"
+            elif key.startswith("techhub."):
+                section = "Tech Hub"
+                group = "Tech Hub"
+            else:
+                section = "Other"
+                group = "Other"
 
         catalog.append({
             "permission_key": key,
@@ -595,7 +629,15 @@ def build_permission_catalog() -> list[dict]:
             "action": action,
         })
 
-    return sorted(catalog, key=lambda item: (item["section"], item["group"], item["display_label"], item["action"]))
+    return sorted(
+        catalog,
+        key=lambda item: (
+            item["section"],
+            item["group"],
+            item["display_label"],
+            item["action"],
+        ),
+    )
 
 
 def build_user_access_summary(user_id: int) -> dict:
@@ -613,3 +655,21 @@ def build_user_access_summary(user_id: int) -> dict:
         "group_permissions": group_permissions,
         "effective_permissions": effective_permissions,
     }
+
+def delete_user_rbac_assignments(user_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            DELETE FROM user_roles
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        conn.execute(
+            """
+            DELETE FROM user_permissions
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        conn.commit()

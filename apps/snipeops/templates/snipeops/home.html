@@ -2,6 +2,26 @@
 {% block title %}SnipeOps • Home{% endblock %}
 
 {% block content %}
+
+  {% if snipeops_admin_bypass_active %}
+  <div class="snipeops-warning-banner">
+    <div class="snipeops-warning-banner-copy">
+      <div class="snipeops-warning-banner-title">
+        Snipe-IT integration required
+      </div>
+      <div class="snipeops-warning-banner-text">
+        To use SnipeOps fully, you need to enable and configure the Snipe-IT integration.
+      </div>
+    </div>
+
+    <div class="snipeops-warning-banner-actions">
+      <a href="{{ url_for('launchpad_ui.settings_integrations_snipeit') }}" class="snipeops-warning-button">
+        Open Snipe-IT Settings
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="hero">
     <h1>SnipeOps</h1>
     <p class="muted">

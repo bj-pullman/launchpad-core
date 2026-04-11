@@ -1,23 +1,62 @@
-<!-- security.html -->
+{% extends "launchpad_ui/base.html" %}
 
-{% extends "launchpad_ui/base.html" %} {% block content %}
-<div class="page-header">
-  <h1>Security Settings</h1>
-  <p class="page-subtitle">
-    Control local auth, MFA, and password restrictions.
-  </p>
-</div>
+{% block title %}Security Settings - Launchpad{% endblock %}
 
-<div class="settings-layout">
-  {% include "launchpad_ui/settings/_sidebar.html" %}
-  <section class="settings-content">
-    <div class="card">
-      <h2>Security</h2>
-      <p>
-        Local login, TOTP MFA, lockout rules, session controls, and password
-        policy will live here.
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+/>
+{% endblock %}
+
+{% block content %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Settings</span>
+    </a>
+  </div>
+
+  <div class="settings-page-header">
+    <div>
+      <h1>Security Settings</h1>
+      <p class="muted">
+        Configure local authentication security, MFA, password policy, lockout controls, and session behavior.
       </p>
     </div>
-  </section>
+  </div>
+
+  <div class="settings-narrow-stack">
+    <div class="settings-provider-card">
+      <h2>Security</h2>
+      <p class="muted">
+        Local login, TOTP MFA, lockout rules, session controls, and password policy will live here.
+      </p>
+
+      <div class="settings-form-section">
+        <div class="empty-state" style="margin-top: 0;">
+          <h3>Coming soon</h3>
+          <p class="muted">
+            This section is ready for the new settings layout and can be expanded as security controls are added.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

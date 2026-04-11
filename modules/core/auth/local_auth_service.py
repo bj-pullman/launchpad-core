@@ -2,8 +2,6 @@ from datetime import datetime, timezone
 
 from modules.core.auth.local_auth_db import get_connection
 from modules.core.auth.passwords import hash_password, verify_password
-from modules.core.identity.user_service import get_user_by_id
-
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -88,6 +86,8 @@ def create_local_auth_account(
 
 
 def verify_local_login(username: str, password: str):
+    from modules.core.identity.user_service import get_user_by_id
+    
     account = get_local_auth_by_username(username)
     if not account:
         return None
@@ -141,3 +141,14 @@ def set_local_password(username: str, password: str):
         conn.commit()
 
     return get_local_auth_by_username(username)
+
+def delete_local_auth_account_by_user_id(user_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            DELETE FROM local_auth_accounts
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        conn.commit()

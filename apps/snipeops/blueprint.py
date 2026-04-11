@@ -1,8 +1,7 @@
-# snipeops/blueprint.py
-
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, session
 
 from modules.core.auth.decorators import login_required, require_permission
+from modules.core.settings.settings_service import get_setting, get_bool_setting
 
 bp = Blueprint(
     "snipeops",
@@ -12,8 +11,32 @@ bp = Blueprint(
     static_folder="static/snipeops",
 )
 
+
+def _snipeops_available():
+    enabled = get_bool_setting("snipeops.enabled", False)
+    base_url = (get_setting("snipeops.base_url", "") or "").strip()
+    api_token = (get_setting("snipeops.api_token", "") or "").strip()
+
+    return enabled and bool(base_url and api_token)
+
+
+def _snipeops_admin_bypass_allowed():
+    user_permissions = set(session.get("user_permissions", []))
+    return "launchpad.settings.snipeops.manage" in user_permissions
+
+
 @bp.route("/")
 @login_required
 @require_permission("snipeops.home.view")
 def index():
-    return render_template("snipeops/home.html")
+    is_available = _snipeops_available()
+    admin_bypass = _snipeops_admin_bypass_allowed()
+
+    if not is_available and not admin_bypass:
+        return render_template("snipeops/unavailable.html")
+
+    return render_template(
+        "snipeops/home.html",
+        snipeops_integration_ready=is_available,
+        snipeops_admin_bypass_active=(not is_available and admin_bypass),
+    )

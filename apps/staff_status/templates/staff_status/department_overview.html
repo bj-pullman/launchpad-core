@@ -2,11 +2,13 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('staff_status.static', filename='staff_status.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
 <div class="page-shell">
   {% include "staff_status/_subnav.html" %}
+
   <div class="page-header">
     <div>
       <h1>{{ department_name }}</h1>
@@ -14,44 +16,153 @@
     </div>
   </div>
 
-  <div class="card-grid">
-    <a class="card" href="{{ url_for('staff_status.board', department_name=department_name) }}">
-      <div class="card-title">Status Board</div>
-      <div class="card-body">
-        View the live board for {{ department_name }}.
+  <div class="content-card" style="margin-bottom: 16px;">
+    <div class="staff-status-overview-toolbar">
+      <div class="staff-status-range-pills">
+        {% for option in range_options %}
+          <a
+            class="staff-status-range-pill {% if selected_range == option.key %}active{% endif %}"
+            href="{{ url_for('staff_status.department_overview', department_name=department_name, range=option.key) }}"
+          >
+            {{ option.label }}
+          </a>
+        {% endfor %}
       </div>
-      <div class="card-cta">Open Board →</div>
-    </a>
+    </div>
+  </div>
 
-    <a class="card" href="{{ url_for('staff_status.absences', department_name=department_name) }}">
-      <div class="card-title">Absences</div>
-      <div class="card-body">
-        Record and manage absences for {{ department_name }}.
+  <div class="card-grid staff-status-overview-stats">
+    <div class="card">
+      <div class="card-title">Check-Ins</div>
+      <div class="card-body staff-status-stat-value">
+        {{ overview_analytics.summary.check_ins }}
       </div>
-      <div class="card-cta">Manage Absences →</div>
-    </a>
+      <div class="card-cta muted">Location updates in this timeframe</div>
+    </div>
 
-    <a class="card" href="{{ url_for('staff_status.locations', department_name=department_name) }}">
-      <div class="card-title">Locations</div>
-      <div class="card-body">
-        Add, edit, disable, and order kiosk/board locations.
+    <div class="card">
+      <div class="card-title">Staff in Office</div>
+      <div class="card-body staff-status-stat-value">
+        {{ overview_analytics.summary.staff_in_office }}
       </div>
-      <div class="card-cta">Manage Locations →</div>
-    </a>
+      <div class="card-cta muted">Currently assigned to {{ department_name }}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Top Location</div>
+      <div class="card-body staff-status-stat-value staff-status-stat-value-sm">
+        {% if overview_analytics.summary.top_location_label %}
+          {{ overview_analytics.summary.top_location_label }}
+        {% else %}
+          No data
+        {% endif %}
+      </div>
+      <div class="card-cta muted">
+        {% if overview_analytics.summary.top_location_count %}
+          {{ overview_analytics.summary.top_location_count }} check-ins
+        {% else %}
+          No location activity yet
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card-grid staff-status-overview-chart-grid" style="margin-top: 16px;">
+    <div class="content-card">
+      <div class="staff-status-chart-card-header">
+        <div>
+          <h2>Location Distribution</h2>
+          <p class="muted">All location updates for the selected timeframe.</p>
+        </div>
+      </div>
+      <div class="staff-status-chart-wrap">
+        <canvas id="staff-status-location-distribution-chart"></canvas>
+      </div>
+      <p
+        id="staff-status-location-distribution-empty"
+        class="muted staff-status-chart-empty"
+        hidden
+      >
+        No location distribution data is available for this timeframe.
+      </p>
+    </div>
+
+    <div class="content-card">
+      <div class="staff-status-chart-card-header">
+        <div>
+          <h2>Top 5 Locations</h2>
+          <p class="muted">Most frequently selected campuses and locations.</p>
+        </div>
+      </div>
+      <div class="staff-status-chart-wrap">
+        <canvas id="staff-status-top-locations-chart"></canvas>
+      </div>
+      <p
+        id="staff-status-top-locations-empty"
+        class="muted staff-status-chart-empty"
+        hidden
+      >
+        No top-location data is available for this timeframe.
+      </p>
+    </div>
   </div>
 
   <div class="content-card" style="margin-top: 16px;">
-    <h2>Locations</h2>
+    <div class="staff-status-chart-card-header">
+      <div>
+        <h2>Upcoming Absences</h2>
+        <p class="muted">Planned time away for the upcoming schedule window.</p>
+      </div>
+    </div>
 
-    {% if locations %}
-      <div class="role-badges">
-        {% for location in locations %}
-          <span class="badge badge-role">{{ location.location_label }}</span>
-        {% endfor %}
+    {% if upcoming_absences %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Staff</th>
+              <th>Start</th>
+              <th>End</th>
+              <th>Days</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for absence in upcoming_absences %}
+              <tr
+                class="
+                  {% if absence.start_date and absence.start_date <= highlight_7_day %}
+                    staff-status-row-warning
+                  {% endif %}
+                "
+              >
+                <td>{{ absence.user_display_name }}</td>
+                <td>
+                  <div class="staff-status-absence-cell">
+                    <span class="staff-status-date">{{ absence.start_date }}</span>
+                    {% if absence.start_date <= highlight_7_day %}
+                      <span class="staff-status-soon-label">Soon</span>
+                    {% endif %}
+                  </div>
+                </td>
+                <td>{{ absence.end_date }}</td>
+                <td>{{ absence.days_value or "—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     {% else %}
-      <p class="muted">No locations configured yet.</p>
+      <p class="muted">No upcoming absences scheduled.</p>
     {% endif %}
   </div>
 </div>
+
+<script>
+  window.staffStatusOverviewData = {{ overview_analytics | tojson }};
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('staff_status.static', filename='staff_status.js') }}"></script>
+<script src="{{ url_for('staff_status.static', filename='staff_status_overview.js') }}"></script>
 {% endblock %}

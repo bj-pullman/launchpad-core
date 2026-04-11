@@ -1,6 +1,15 @@
+from datetime import date, timedelta
+
 from flask import abort, jsonify, redirect, render_template, request, session, url_for, Response
 import time, queue
 from modules.core.settings.settings_service import get_setting
+
+from .access_service import (
+    can_access_department,
+    has_staff_status_admin,
+    list_accessible_departments_for_user,
+    can_operate_department,
+)
 
 from .blueprint import bp
 from .service import (
@@ -11,11 +20,14 @@ from .service import (
     get_board_rows_for_department,
     get_department_by_board_token,
     get_department_by_kiosk_token,
+    get_department_overview_analytics,
+    get_overview_range_options,
     list_active_users_for_department,
     list_enabled_departments,
     list_locations_for_department,
     list_locations_for_department_admin,
     list_recent_absences_for_department,
+    normalize_overview_range,
     rotate_board_token,
     rotate_kiosk_token,
     seed_department_locations_if_empty,
@@ -23,6 +35,7 @@ from .service import (
     update_absence,
     update_location,
     update_user_status,
+    build_public_url,
 )
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.identity.user_service import get_user_by_id
@@ -31,47 +44,134 @@ from tasks.events import publish_department_update, subscribe, unsubscribe
 
 @bp.route("/")
 @login_required
-@require_permission("staff_status.home.view")
 def index():
     sync_departments_from_users()
-    departments = list_enabled_departments()
+
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    departments = list_accessible_departments_for_user(user_id)
 
     if not departments:
-        return render_template("staff_status/index.html", departments=[])
+        return render_template(
+            "staff_status/index.html",
+            departments=[],
+            active_tab="home",
+            no_departments_assigned=True,
+            is_staff_status_admin=has_staff_status_admin(user_id),
+        )
 
     if len(departments) == 1:
-        return redirect(url_for(
-            "staff_status.department_overview", 
-            department_name=departments[0]["department_name"], 
-            active_tab="overview",
-            ))
+        return redirect(
+            url_for(
+                "staff_status.department_overview",
+                department_name=departments[0]["department_name"],
+                active_tab="overview",
+            )
+        )
 
     return render_template(
-        "staff_status/index.html", 
-        departments=departments, 
+        "staff_status/index.html",
+        departments=departments,
         active_tab="home",
-        )
+        no_departments_assigned=False,
+        is_staff_status_admin=has_staff_status_admin(user_id),
+    )
 
 
 @bp.route("/<department_name>")
 @login_required
-@require_permission("staff_status.home.view")
 def department_overview(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
     seed_department_locations_if_empty(department_name)
+
+    accessible_departments = list_accessible_departments_for_user(user_id)
+
+    # NEW: timeframe handling
+    range_key = normalize_overview_range(request.args.get("range", "30d"))
+
+    # NEW: analytics payload
+    overview_analytics = get_department_overview_analytics(
+        department_name,
+        range_key,
+    )
+    
+    # upccoming absence highlight
+    highlight_7_day = (date.today() + timedelta(days=7)).isoformat()
+    
+    upcoming_absences = list_recent_absences_for_department(
+        department_name,
+        limit=10,
+        sort_by="start_date",
+        sort_dir="asc",
+        view="upcoming",
+    )
+
     return render_template(
         "staff_status/department_overview.html",
         department_name=department_name,
-        locations=list_locations_for_department(department_name),
         active_tab="overview",
+        selected_range=range_key,
+        range_options=get_overview_range_options(),
+        overview_analytics=overview_analytics,
+        upcoming_absences=upcoming_absences,
+        accessible_department_count=len(accessible_departments),
+        is_staff_status_admin=has_staff_status_admin(user_id),
+        highlight_7_day=highlight_7_day,
     )
+    
+@bp.route("/<department_name>/overview/data")
+@login_required
+def department_overview_data(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    range_key = normalize_overview_range(request.args.get("range", "30d"))
+
+    analytics = get_department_overview_analytics(
+        department_name,
+        range_key,
+    )
+
+    response = jsonify(
+        {
+            "ok": True,
+            "department_name": department_name,
+            "analytics": analytics,
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 @bp.route("/<department_name>/locations", methods=["GET", "POST"])
 @login_required
-@require_permission("staff_status.home.view")
 def locations(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
     seed_department_locations_if_empty(department_name)
+    accessible_departments = list_accessible_departments_for_user(user_id)
+    can_operate = can_operate_department(user_id, department_name)
 
     if request.method == "POST":
+        if not can_operate:
+            abort(403)
+
         action = (request.form.get("action") or "").strip()
 
         if action == "create":
@@ -94,22 +194,35 @@ def locations(department_name: str):
                 location_id=request.form.get("location_id", type=int),
             )
 
-        return redirect(url_for(
-            "staff_status.locations", 
-            department_name=department_name, 
-            active_tab="overview",))
+        return redirect(
+            url_for(
+                "staff_status.locations",
+                department_name=department_name,
+                active_tab="locations",
+            )
+        )
 
     return render_template(
         "staff_status/locations.html",
         department_name=department_name,
         locations=list_locations_for_department_admin(department_name),
         active_tab="locations",
+        accessible_department_count=len(accessible_departments),
+        is_staff_status_admin=has_staff_status_admin(user_id),
+        can_operate=can_operate,
     )
 
 @bp.route("/<department_name>/board")
 @login_required
-@require_permission("staff_status.board.view")
 def board(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    accessible_departments = list_accessible_departments_for_user(user_id)
     refresh_seconds = int(get_setting("staff_status.board_refresh_seconds", "5") or "5")
     app_timezone = get_setting("general.timezone", "America/Chicago") or "America/Chicago"
 
@@ -121,12 +234,20 @@ def board(department_name: str):
         active_tab="board",
         app_timezone=app_timezone,
         stream_url=url_for("staff_status.board_stream", department_name=department_name),
+        accessible_department_count=len(accessible_departments),
+        is_staff_status_admin=has_staff_status_admin(user_id),
     )
     
 @bp.route("/<department_name>/board/stream")
 @login_required
-@require_permission("staff_status.board.view")
 def board_stream(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
     department_name = department_name.strip()
     q = subscribe(department_name)
 
@@ -151,8 +272,14 @@ def board_stream(department_name: str):
 
 @bp.route("/<department_name>/board/data")
 @login_required
-@require_permission("staff_status.board.view")
 def board_data(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
     rows = get_board_rows_for_department(department_name)
 
     response = jsonify(
@@ -217,13 +344,24 @@ def kiosk_submit(token: str):
 
 @bp.route("/<department_name>/absences", methods=["GET", "POST"])
 @login_required
-@require_permission("staff_status.absences.manage")
 def absences(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    accessible_departments = list_accessible_departments_for_user(user_id)
+    can_operate = can_operate_department(user_id, department_name)
     users = list_active_users_for_department(department_name)
     absence_types = ["sick", "vacation", "personal", "other"]
 
     if request.method == "POST":
-        actor = get_user_by_id(session["user_id"])
+        if not can_operate:
+            abort(403)
+
+        actor = get_user_by_id(user_id)
         if not actor:
             abort(403)
 
@@ -346,21 +484,9 @@ def absences(department_name: str):
         current_view=view,
         current_absence_types=current_absence_types,
         current_user_ids=current_user_ids,
-    )
-
-
-@bp.route("/<department_name>/kiosk-token/rotate", methods=["POST"])
-@login_required
-@require_permission("staff_status.settings.manage")
-def rotate_department_kiosk_token(department_name: str):
-    department = rotate_kiosk_token(department_name)
-    return jsonify(
-        {
-            "ok": True,
-            "department_name": department["department_name"],
-            "kiosk_token": department["kiosk_token"],
-            "kiosk_url": url_for("staff_status.kiosk", token=department["kiosk_token"], _external=True),
-        }
+        accessible_department_count=len(accessible_departments),
+        is_staff_status_admin=has_staff_status_admin(user_id),
+        can_operate=can_operate,
     )
 
 @bp.route("/board/<token>")
@@ -430,3 +556,38 @@ def board_public_data(token: str):
     )
     response.headers["Cache-Control"] = "no-store"
     return response
+
+@bp.route("/settings/<department_name>/rotate-kiosk-token", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.staff_status.manage")
+def rotate_department_kiosk_token_for_settings(department_name: str):
+    department = rotate_kiosk_token(department_name)
+    return jsonify(
+        {
+            "ok": True,
+            "department_name": department["department_name"],
+            "kiosk_token": department["kiosk_token"],
+            "kiosk_url": build_public_url(
+                "staff_status.kiosk",
+                token=department["kiosk_token"],
+            ),
+        }
+    )
+
+
+@bp.route("/settings/<department_name>/rotate-board-token", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.staff_status.manage")
+def rotate_department_board_token_for_settings(department_name: str):
+    department = rotate_board_token(department_name)
+    return jsonify(
+        {
+            "ok": True,
+            "department_name": department["department_name"],
+            "board_token": department["board_token"],
+            "board_url": build_public_url(
+                "staff_status.board_public",
+                token=department["board_token"],
+            ),
+        }
+    )

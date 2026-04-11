@@ -1,0 +1,194 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}SAML Integration - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_integrations') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Integrations</span>
+    </a>
+  </div>
+
+  <div class="settings-page-header">
+    <div>
+      <h1>SAML / Federation</h1>
+      <p class="muted">Configure SAML identity provider settings and attribute mappings.</p>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="settings-form">
+    <div class="settings-narrow-stack">
+      <div class="settings-provider-card">
+        <h2>SAML</h2>
+        <p class="muted">Control SAML-based sign-in integration for Launchpad.</p>
+
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-copy">
+            <strong>Enable SAML</strong>
+            <span>Allow SAML identity provider sign-in for Launchpad.</span>
+          </div>
+
+          <label class="settings-switch">
+            <input type="checkbox" name="saml_enabled" value="1" {% if settings.saml_enabled %}checked{% endif %} />
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="settings-form-section">
+          <h3>Provider Basics</h3>
+
+          <div class="form-field">
+            <label for="saml_idp_type">IdP Type</label>
+            <select id="saml_idp_type" name="saml_idp_type">
+              <option value="generic" {% if settings.saml_idp_type == "generic" %}selected{% endif %}>Generic</option>
+              <option value="microsoft" {% if settings.saml_idp_type == "microsoft" %}selected{% endif %}>Microsoft</option>
+              <option value="google" {% if settings.saml_idp_type == "google" %}selected{% endif %}>Google</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-form-section">
+          <h3>Metadata</h3>
+
+          <div class="form-field">
+            <label for="saml_metadata_url">Metadata URL</label>
+            <input type="text" id="saml_metadata_url" name="saml_metadata_url" value="{{ settings.saml_metadata_url }}" />
+            <small>Optional if you upload a metadata XML file or enter manual IdP details.</small>
+          </div>
+
+          <div class="form-field">
+            <label for="saml_metadata_file">Metadata XML File</label>
+            <label class="settings-file-upload" for="saml_metadata_file">
+              <span class="settings-file-upload-button">Upload File</span>
+              <span class="settings-file-upload-text">Choose a metadata XML file</span>
+            </label>
+            <input
+              type="file"
+              id="saml_metadata_file"
+              name="saml_metadata_file"
+              class="settings-file-input"
+              accept=".xml,text/xml,application/xml"
+            />
+            <small>Optional if you use a Metadata URL or enter manual IdP details.</small>
+          </div>
+        </div>
+
+        <div class="settings-form-section">
+          <h3>Identity Provider Endpoints</h3>
+          <p class="muted">
+            Required only when you are not using Metadata URL or Metadata XML file.
+          </p>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="saml_idp_entity_id">IdP Entity ID</label>
+              <input type="text" id="saml_idp_entity_id" name="saml_idp_entity_id" value="{{ settings.saml_idp_entity_id }}" />
+            </div>
+
+            <div class="form-field">
+              <label for="saml_sso_url">SSO URL</label>
+              <input type="text" id="saml_sso_url" name="saml_sso_url" value="{{ settings.saml_sso_url }}" />
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="saml_slo_url">SLO URL</label>
+            <input type="text" id="saml_slo_url" name="saml_slo_url" value="{{ settings.saml_slo_url }}" />
+            <small>Optional.</small>
+          </div>
+
+          <div class="form-field">
+            <label for="saml_x509_cert">X.509 Certificate</label>
+            <textarea id="saml_x509_cert" name="saml_x509_cert" rows="5">{{ settings.saml_x509_cert }}</textarea>
+          </div>
+        </div>
+
+        <div class="settings-form-section">
+          <h3>Service Provider</h3>
+          <p class="muted">These fields are always required.</p>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="saml_sp_entity_id">SP Entity ID <span class="settings-required">*</span></label>
+              <input type="text" id="saml_sp_entity_id" name="saml_sp_entity_id" value="{{ settings.saml_sp_entity_id }}" />
+            </div>
+
+            <div class="form-field">
+              <label for="saml_acs_url">ACS URL <span class="settings-required">*</span></label>
+              <input type="text" id="saml_acs_url" name="saml_acs_url" value="{{ settings.saml_acs_url }}" />
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="saml_logout_url">Logout URL</label>
+            <input type="text" id="saml_logout_url" name="saml_logout_url" value="{{ settings.saml_logout_url }}" />
+            <small>Optional.</small>
+          </div>
+        </div>
+
+        <div class="settings-form-section">
+          <h3>Attribute Mapping</h3>
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label for="saml_attr_email">Email Attribute</label>
+              <input type="text" id="saml_attr_email" name="saml_attr_email" value="{{ settings.saml_attr_email }}" />
+            </div>
+
+            <div class="form-field">
+              <label for="saml_attr_first_name">First Name Attribute</label>
+              <input type="text" id="saml_attr_first_name" name="saml_attr_first_name" value="{{ settings.saml_attr_first_name }}" />
+            </div>
+
+            <div class="form-field">
+              <label for="saml_attr_last_name">Last Name Attribute</label>
+              <input type="text" id="saml_attr_last_name" name="saml_attr_last_name" value="{{ settings.saml_attr_last_name }}" />
+            </div>
+
+            <div class="form-field">
+              <label for="saml_attr_display_name">Display Name Attribute</label>
+              <input type="text" id="saml_attr_display_name" name="saml_attr_display_name" value="{{ settings.saml_attr_display_name }}" />
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="saml_attr_groups">Groups Attribute</label>
+            <input type="text" id="saml_attr_groups" name="saml_attr_groups" value="{{ settings.saml_attr_groups }}" />
+          </div>
+        </div>
+
+        <div class="settings-provider-actions">
+          <button
+            type="button"
+            class="test-connection-btn"
+            data-provider="saml"
+            data-test-url="{{ url_for('launchpad_ui.settings_authentication_test_connection') }}"
+          >
+            Test Configuration
+          </button>
+        </div>
+
+        <div class="settings-test-result" data-provider-result="saml" hidden></div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+{% endblock %}

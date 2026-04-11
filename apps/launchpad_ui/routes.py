@@ -18,9 +18,13 @@ from . import launchpad_ui_bp
 from apps.staff_status.service import (
     get_department_record,
     list_active_departments_from_users,
-    rotate_kiosk_token,
     upsert_department_settings,
-    rotate_board_token,
+)
+
+from apps.staff_status.access_service import (
+    grant_department_access,
+    revoke_department_access,
+    list_staff_status_access_with_users,
 )
 
 from .permissions import get_visible_settings_sections, get_visible_launchpad_apps
@@ -47,9 +51,11 @@ from modules.core.identity.rbac_service import (
     replace_user_permissions,
     build_permission_catalog,
     build_user_access_summary,
+    get_user_role_keys,
+    remove_role_from_user,
 )
 from modules.core.identity.rbac_db import get_connection as get_rbac_connection
-from modules.core.identity.user_service import get_user_by_id, update_user, create_user
+from modules.core.identity.user_service import get_user_by_id, update_user, create_user, list_users
 from modules.core.settings.settings_service import get_setting, set_setting, get_bool_setting
 
 from tasks.scheduler import configure_jobs
@@ -112,6 +118,7 @@ def _get_snipeops_settings():
     env_token = os.getenv("SNIPE_API_TOKEN", "").strip()
     env_verify_ssl = _to_bool(os.getenv("VERIFY_SSL", "true"), True)
 
+    db_enabled = get_bool_setting("snipeops.enabled", False)
     db_url = (get_setting("snipeops.base_url", "") or "").strip()
     db_token = (get_setting("snipeops.api_token", "") or "").strip()
     db_verify_ssl = get_setting("snipeops.verify_ssl", None)
@@ -125,15 +132,17 @@ def _get_snipeops_settings():
         verify_ssl = _to_bool(db_verify_ssl, True)
 
     token_source = "database" if db_token else ("env" if env_token else "none")
+    is_configured = bool(base_url and api_token)
 
     return {
+        "enabled": db_enabled,
         "base_url": base_url,
         "api_token": api_token,
         "verify_ssl": verify_ssl,
         "has_api_token": bool(api_token),
         "token_source": token_source,
+        "is_configured": is_configured,
     }
-
 
 def _test_snipeit_connection(base_url: str, api_token: str, verify_ssl: bool):
     if not base_url:
@@ -414,6 +423,65 @@ def _test_saml_configuration(form):
 
     return {"ok": True, "message": "Manual SAML configuration looks valid."}
 
+def _authentication_policy_settings():
+    settings = _authentication_settings()
+    return {
+        "local_enabled": settings["local_enabled"],
+        "local_mode": settings["local_mode"],
+        "local_hide_form_when_restricted": settings["local_hide_form_when_restricted"],
+        "primary_method": settings["primary_method"],
+        "require_local_user_for_sso": settings["require_local_user_for_sso"],
+        "match_user_by": settings["match_user_by"],
+        "deny_if_user_not_found": settings["deny_if_user_not_found"],
+        "deny_if_inactive": settings["deny_if_inactive"],
+        "allowed_domains": settings["allowed_domains"],
+        "required_groups": settings["required_groups"],
+        "required_groups_mode": settings["required_groups_mode"],
+        "allow_breakglass_with_sso": settings["allow_breakglass_with_sso"],
+    }
+
+
+def _microsoft_integration_settings():
+    settings = _authentication_settings()
+    return {
+        "microsoft_oidc_enabled": settings["microsoft_oidc_enabled"],
+        "microsoft_client_id": settings["microsoft_client_id"],
+        "microsoft_tenant_id": settings["microsoft_tenant_id"],
+        "microsoft_redirect_uri": settings["microsoft_redirect_uri"],
+    }
+
+
+def _google_integration_settings():
+    settings = _authentication_settings()
+    return {
+        "google_oidc_enabled": settings["google_oidc_enabled"],
+        "google_client_id": settings["google_client_id"],
+        "google_hosted_domain": settings["google_hosted_domain"],
+        "google_redirect_uri": settings["google_redirect_uri"],
+    }
+
+
+def _saml_integration_settings():
+    settings = _authentication_settings()
+    return {
+        "saml_enabled": settings["saml_enabled"],
+        "saml_idp_type": settings["saml_idp_type"],
+        "saml_metadata_url": settings["saml_metadata_url"],
+        "saml_metadata_xml": settings["saml_metadata_xml"],
+        "saml_idp_entity_id": settings["saml_idp_entity_id"],
+        "saml_sso_url": settings["saml_sso_url"],
+        "saml_slo_url": settings["saml_slo_url"],
+        "saml_x509_cert": settings["saml_x509_cert"],
+        "saml_sp_entity_id": settings["saml_sp_entity_id"],
+        "saml_acs_url": settings["saml_acs_url"],
+        "saml_logout_url": settings["saml_logout_url"],
+        "saml_attr_email": settings["saml_attr_email"],
+        "saml_attr_first_name": settings["saml_attr_first_name"],
+        "saml_attr_last_name": settings["saml_attr_last_name"],
+        "saml_attr_display_name": settings["saml_attr_display_name"],
+        "saml_attr_groups": settings["saml_attr_groups"],
+    }
+
 @launchpad_ui_bp.app_context_processor
 def inject_launchpad_navigation():
     visible_apps = []
@@ -551,44 +619,11 @@ def settings_general():
     )
 
 
-@launchpad_ui_bp.route("/settings/snipeops", methods=["GET", "POST"])
+@launchpad_ui_bp.route("/settings/snipeops")
 @login_required
 @require_permission("launchpad.settings.snipeops.view")
 def settings_snipeops():
-    current_settings = _get_snipeops_settings()
-
-    if request.method == "POST":
-        if not _require_manage_permission(
-            "launchpad.settings.snipeops.manage",
-            "You do not have permission to update SnipeOps settings.",
-        ):
-            return redirect(url_for("launchpad_ui.settings_snipeops"))
-
-        base_url = (request.form.get("base_url") or "").strip()
-        verify_ssl = 1 if request.form.get("verify_ssl") == "1" else 0
-        new_api_token = (request.form.get("api_token") or "").strip()
-
-        set_setting("snipeops.base_url", base_url)
-        set_setting("snipeops.verify_ssl", verify_ssl)
-
-        if new_api_token:
-            set_setting("snipeops.api_token", new_api_token, is_sensitive=1)
-
-        flash("SnipeOps settings saved.", "success")
-        return redirect(url_for("launchpad_ui.settings_snipeops"))
-
-    settings = {
-        "base_url": current_settings["base_url"],
-        "verify_ssl": current_settings["verify_ssl"],
-        "has_api_token": current_settings["has_api_token"],
-        "token_source": current_settings["token_source"],
-    }
-
-    return render_template(
-        "launchpad_ui/settings/snipeops.html",
-        active_section="snipeops",
-        settings=settings,
-    )
+    return redirect(url_for("launchpad_ui.settings_integrations_snipeit"))
 
 
 @launchpad_ui_bp.route("/settings/snipeops/test-connection", methods=["POST"])
@@ -623,7 +658,6 @@ def settings_authentication():
         ):
             return redirect(url_for("launchpad_ui.settings_authentication"))
 
-        # Sign-In Methods
         set_setting("auth.local.enabled", 1 if request.form.get("local_enabled") == "1" else 0)
         set_setting("auth.local.mode", (request.form.get("local_mode") or "breakglass_only").strip())
         set_setting(
@@ -631,42 +665,8 @@ def settings_authentication():
             1 if request.form.get("local_hide_form_when_restricted") == "1" else 0,
         )
 
-        set_setting("auth.microsoft_oidc.enabled", 1 if request.form.get("microsoft_oidc_enabled") == "1" else 0)
-        set_setting("auth.microsoft_oidc.client_id", (request.form.get("microsoft_client_id") or "").strip())
-        microsoft_secret = (request.form.get("microsoft_client_secret") or "").strip()
-        if microsoft_secret:
-            set_setting("auth.microsoft_oidc.client_secret", microsoft_secret, is_sensitive=1)
-        set_setting("auth.microsoft_oidc.tenant_id", (request.form.get("microsoft_tenant_id") or "common").strip())
-        set_setting("auth.microsoft_oidc.redirect_uri", (request.form.get("microsoft_redirect_uri") or "").strip())
-
-        set_setting("auth.google_oidc.enabled", 1 if request.form.get("google_oidc_enabled") == "1" else 0)
-        set_setting("auth.google_oidc.client_id", (request.form.get("google_client_id") or "").strip())
-        google_secret = (request.form.get("google_client_secret") or "").strip()
-        if google_secret:
-            set_setting("auth.google_oidc.client_secret", google_secret, is_sensitive=1)
-        set_setting("auth.google_oidc.hosted_domain", (request.form.get("google_hosted_domain") or "").strip())
-        set_setting("auth.google_oidc.redirect_uri", (request.form.get("google_redirect_uri") or "").strip())
-
-        set_setting("auth.saml.enabled", 1 if request.form.get("saml_enabled") == "1" else 0)
-        set_setting("auth.saml.idp_type", (request.form.get("saml_idp_type") or "generic").strip())
-        set_setting("auth.saml.metadata_url", (request.form.get("saml_metadata_url") or "").strip())
-        set_setting("auth.saml.metadata_xml", (request.form.get("saml_metadata_xml") or "").strip(), is_sensitive=1)
-        set_setting("auth.saml.idp_entity_id", (request.form.get("saml_idp_entity_id") or "").strip())
-        set_setting("auth.saml.sso_url", (request.form.get("saml_sso_url") or "").strip())
-        set_setting("auth.saml.slo_url", (request.form.get("saml_slo_url") or "").strip())
-        set_setting("auth.saml.x509_cert", (request.form.get("saml_x509_cert") or "").strip(), is_sensitive=1)
-        set_setting("auth.saml.sp_entity_id", (request.form.get("saml_sp_entity_id") or "").strip())
-        set_setting("auth.saml.acs_url", (request.form.get("saml_acs_url") or "").strip())
-        set_setting("auth.saml.logout_url", (request.form.get("saml_logout_url") or "").strip())
-        set_setting("auth.saml.attr.email", (request.form.get("saml_attr_email") or "email").strip())
-        set_setting("auth.saml.attr.first_name", (request.form.get("saml_attr_first_name") or "first_name").strip())
-        set_setting("auth.saml.attr.last_name", (request.form.get("saml_attr_last_name") or "last_name").strip())
-        set_setting("auth.saml.attr.display_name", (request.form.get("saml_attr_display_name") or "display_name").strip())
-        set_setting("auth.saml.attr.groups", (request.form.get("saml_attr_groups") or "groups").strip())
-
         set_setting("auth.primary_method", (request.form.get("primary_method") or "local").strip())
 
-        # Access Control
         set_setting(
             "auth.access.require_local_user_for_sso",
             1 if request.form.get("require_local_user_for_sso") == "1" else 0,
@@ -694,18 +694,12 @@ def settings_authentication():
         flash("Authentication settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_authentication"))
 
-    settings = _authentication_settings()
-    statuses = {
-        "microsoft_oidc": _provider_status("microsoft_oidc", settings),
-        "google_oidc": _provider_status("google_oidc", settings),
-        "saml": _provider_status("saml", settings),
-    }
+    settings = _authentication_policy_settings()
 
     return render_template(
         "launchpad_ui/settings/authentication.html",
         active_section="authentication",
         settings=settings,
-        statuses=statuses,
     )
 
 
@@ -1246,6 +1240,25 @@ def settings_users_edit(user_id: int):
         direct_permissions = access_summary.get("direct_permissions", []),
         effective_permissions = access_summary.get("effective_permissions", []),
     )
+
+@launchpad_ui_bp.route("/settings/users/<int:user_id>/delete", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.users.manage")
+def settings_users_delete(user_id: int):
+    from modules.core.identity.user_service import delete_user
+
+    try:
+        ok = delete_user(user_id)
+        if ok:
+            flash("User deleted successfully.", "success")
+        else:
+            flash("User not found.", "error")
+    except ValueError as exc:
+        flash(str(exc), "error")
+    except Exception:
+        flash("Unable to delete user.", "error")
+
+    return redirect(url_for("launchpad_ui.settings_users"))
     
 @launchpad_ui_bp.route("/settings/staff-status", methods=["GET", "POST"])
 @login_required
@@ -1258,6 +1271,49 @@ def settings_staff_status():
             "launchpad.settings.staff_status.manage",
             "You do not have permission to update Staff Status settings.",
         ):
+            return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+        action = (request.form.get("action") or "save_settings").strip().lower()
+
+        if action == "add_department_operator":
+            user_id = request.form.get("department_operator_user_id", type=int)
+            department_names = [
+                item.strip()
+                for item in request.form.getlist("department_operator_department_names")
+                if item.strip()
+            ]
+
+            if not user_id:
+                flash("A user must be selected.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+            if not department_names:
+                flash("At least one department must be selected.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+            try:
+                for department_name in department_names:
+                    grant_department_access(user_id, department_name)
+                flash("Department operator assignment(s) added.", "success")
+            except Exception as exc:
+                flash(f"Unable to add department operator assignment(s): {exc}", "error")
+
+            return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+        if action == "remove_department_operator":
+            user_id = request.form.get("department_operator_user_id", type=int)
+            department_name = (request.form.get("department_operator_department_name") or "").strip()
+
+            if not user_id or not department_name:
+                flash("A valid assignment is required.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status"))
+
+            try:
+                revoke_department_access(user_id, department_name)
+                flash("Department operator assignment removed.", "success")
+            except Exception as exc:
+                flash(f"Unable to remove department operator assignment: {exc}", "error")
+
             return redirect(url_for("launchpad_ui.settings_staff_status"))
 
         enabled_departments = request.form.getlist("enabled_departments")
@@ -1288,8 +1344,8 @@ def settings_staff_status():
                 is_enabled=is_enabled,
                 home_location=home_location,
             )
-        configure_jobs()
 
+        configure_jobs()
         flash("Staff Status settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_staff_status"))
 
@@ -1333,53 +1389,187 @@ def settings_staff_status():
         ),
     }
 
+    department_operator_assignments = list_staff_status_access_with_users()
+    assignable_users = list_users(active_only=True)
+
     return render_template(
         "launchpad_ui/settings/staff_status.html",
         active_section="staff_status",
         settings=settings,
         department_rows=department_rows,
+        department_operator_assignments=department_operator_assignments,
+        assignable_users=assignable_users,
     )
-    
-@launchpad_ui_bp.route(
-    "/settings/staff-status/<department_name>/rotate-kiosk-token",
-    methods=["POST"],
-)
-@login_required
-@require_permission("launchpad.settings.staff_status.manage")
-def settings_staff_status_rotate_kiosk_token(department_name: str):
-    department = rotate_kiosk_token(department_name)
 
-    return jsonify(
-        {
-            "ok": True,
-            "department_name": department["department_name"],
-            "kiosk_token": department["kiosk_token"],
-            "kiosk_url": url_for(
-                "staff_status.kiosk",
-                token=department["kiosk_token"],
-                _external=True,
-            ),
-        }
+@launchpad_ui_bp.route("/settings/integrations")
+@login_required
+@require_permission("launchpad.settings.view")
+def settings_integrations():
+    user_permissions = _user_permissions()
+
+    return render_template(
+        "launchpad_ui/settings/integrations.html",
+        active_section="integrations",
+        can_view_microsoft="launchpad.settings.saml.view" in user_permissions,
+        can_view_google="launchpad.settings.saml.view" in user_permissions,
+        can_view_saml="launchpad.settings.saml.view" in user_permissions,
+        can_view_snipeit="launchpad.settings.snipeops.view" in user_permissions,
     )
-    
-@launchpad_ui_bp.route(
-    "/settings/staff-status/<department_name>/rotate-board-token",
-    methods=["POST"],
-)
-@login_required
-@require_permission("launchpad.settings.staff_status.manage")
-def settings_staff_status_rotate_board_token(department_name: str):
-    department = rotate_board_token(department_name)
 
-    return jsonify(
-        {
-            "ok": True,
-            "department_name": department["department_name"],
-            "board_token": department["board_token"],
-            "board_url": url_for(
-                "staff_status.board_public",
-                token=department["board_token"],
-                _external=True,
-            ),
-        }
+
+@launchpad_ui_bp.route("/settings/integrations/microsoft", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.saml.view")
+def settings_integrations_microsoft():
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.saml.manage",
+            "You do not have permission to update Microsoft integration settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_integrations_microsoft"))
+
+        set_setting("auth.microsoft_oidc.enabled", 1 if request.form.get("microsoft_oidc_enabled") == "1" else 0)
+        set_setting("auth.microsoft_oidc.client_id", (request.form.get("microsoft_client_id") or "").strip())
+        microsoft_secret = (request.form.get("microsoft_client_secret") or "").strip()
+        if microsoft_secret:
+            set_setting("auth.microsoft_oidc.client_secret", microsoft_secret, is_sensitive=1)
+        set_setting("auth.microsoft_oidc.tenant_id", (request.form.get("microsoft_tenant_id") or "common").strip())
+        set_setting("auth.microsoft_oidc.redirect_uri", (request.form.get("microsoft_redirect_uri") or "").strip())
+
+        flash("Microsoft integration settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_integrations_microsoft"))
+
+    settings = _microsoft_integration_settings()
+    return render_template(
+        "launchpad_ui/settings/integrations_microsoft.html",
+        active_section="integrations",
+        settings=settings,
+    )
+
+
+@launchpad_ui_bp.route("/settings/integrations/google", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.saml.view")
+def settings_integrations_google():
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.saml.manage",
+            "You do not have permission to update Google integration settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_integrations_google"))
+
+        set_setting("auth.google_oidc.enabled", 1 if request.form.get("google_oidc_enabled") == "1" else 0)
+        set_setting("auth.google_oidc.client_id", (request.form.get("google_client_id") or "").strip())
+        google_secret = (request.form.get("google_client_secret") or "").strip()
+        if google_secret:
+            set_setting("auth.google_oidc.client_secret", google_secret, is_sensitive=1)
+        set_setting("auth.google_oidc.hosted_domain", (request.form.get("google_hosted_domain") or "").strip())
+        set_setting("auth.google_oidc.redirect_uri", (request.form.get("google_redirect_uri") or "").strip())
+
+        flash("Google integration settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_integrations_google"))
+
+    settings = _google_integration_settings()
+    return render_template(
+        "launchpad_ui/settings/integrations_google.html",
+        active_section="integrations",
+        settings=settings,
+    )
+
+
+@launchpad_ui_bp.route("/settings/integrations/saml", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.saml.view")
+def settings_integrations_saml():
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.saml.manage",
+            "You do not have permission to update SAML integration settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_integrations_saml"))
+
+        uploaded_metadata_xml = None
+        uploaded_file = request.files.get("saml_metadata_file")
+
+        if uploaded_file and uploaded_file.filename:
+            try:
+                uploaded_metadata_xml = uploaded_file.read().decode("utf-8")
+            except UnicodeDecodeError:
+                flash("Uploaded metadata file must be valid UTF-8 XML.", "error")
+                return redirect(url_for("launchpad_ui.settings_integrations_saml"))
+
+        set_setting("auth.saml.enabled", 1 if request.form.get("saml_enabled") == "1" else 0)
+        set_setting("auth.saml.idp_type", (request.form.get("saml_idp_type") or "generic").strip())
+        set_setting("auth.saml.metadata_url", (request.form.get("saml_metadata_url") or "").strip())
+
+        metadata_xml_value = uploaded_metadata_xml
+        if metadata_xml_value is None:
+            metadata_xml_value = (get_setting("auth.saml.metadata_xml", "") or "").strip()
+
+        set_setting("auth.saml.metadata_xml", metadata_xml_value, is_sensitive=1)
+
+        set_setting("auth.saml.idp_entity_id", (request.form.get("saml_idp_entity_id") or "").strip())
+        set_setting("auth.saml.sso_url", (request.form.get("saml_sso_url") or "").strip())
+        set_setting("auth.saml.slo_url", (request.form.get("saml_slo_url") or "").strip())
+        set_setting("auth.saml.x509_cert", (request.form.get("saml_x509_cert") or "").strip(), is_sensitive=1)
+        set_setting("auth.saml.sp_entity_id", (request.form.get("saml_sp_entity_id") or "").strip())
+        set_setting("auth.saml.acs_url", (request.form.get("saml_acs_url") or "").strip())
+        set_setting("auth.saml.logout_url", (request.form.get("saml_logout_url") or "").strip())
+        set_setting("auth.saml.attr.email", (request.form.get("saml_attr_email") or "email").strip())
+        set_setting("auth.saml.attr.first_name", (request.form.get("saml_attr_first_name") or "first_name").strip())
+        set_setting("auth.saml.attr.last_name", (request.form.get("saml_attr_last_name") or "last_name").strip())
+        set_setting("auth.saml.attr.display_name", (request.form.get("saml_attr_display_name") or "display_name").strip())
+        set_setting("auth.saml.attr.groups", (request.form.get("saml_attr_groups") or "groups").strip())
+
+        flash("SAML integration settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_integrations_saml"))
+
+    settings = _saml_integration_settings()
+    return render_template(
+        "launchpad_ui/settings/integrations_saml.html",
+        active_section="integrations",
+        settings=settings,
+    )
+
+@launchpad_ui_bp.route("/settings/integrations/snipeit", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.snipeops.view")
+def settings_integrations_snipeit():
+    current_settings = _get_snipeops_settings()
+
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.snipeops.manage",
+            "You do not have permission to update Snipe-IT integration settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_integrations_snipeit"))
+
+        enabled = 1 if request.form.get("snipeit_enabled") == "1" else 0
+        base_url = (request.form.get("base_url") or "").strip()
+        verify_ssl = 1 if request.form.get("verify_ssl") == "1" else 0
+        new_api_token = (request.form.get("api_token") or "").strip()
+
+        set_setting("snipeops.enabled", enabled)
+        set_setting("snipeops.base_url", base_url)
+        set_setting("snipeops.verify_ssl", verify_ssl)
+
+        if new_api_token:
+            set_setting("snipeops.api_token", new_api_token, is_sensitive=1)
+
+        flash("Snipe-IT integration settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_integrations_snipeit"))
+
+    settings = {
+        "snipeit_enabled": current_settings["enabled"],
+        "base_url": current_settings["base_url"],
+        "verify_ssl": current_settings["verify_ssl"],
+        "has_api_token": current_settings["has_api_token"],
+        "token_source": current_settings["token_source"],
+        "is_configured": current_settings["is_configured"],
+    }
+
+    return render_template(
+        "launchpad_ui/settings/integrations_snipeit.html",
+        active_section="integrations",
+        settings=settings,
     )

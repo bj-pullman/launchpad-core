@@ -15,7 +15,22 @@
     </div>
   </div>
 
-  {% if departments %}
+  {% if no_departments_assigned %}
+    <div class="content-card">
+      <div class="empty-state">
+        <h3>No departments assigned</h3>
+        <p class="muted">
+          You do not currently have access to any Staff Status departments. Contact your administrator if you believe this is incorrect.
+        </p>
+
+        {% if is_staff_status_admin %}
+          <p class="muted">
+            <strong>Admin note:</strong> Admins can configure and enable departments in Settings &gt; Staff Status.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  {% elif departments %}
     <div class="card-grid">
       {% for department in departments %}
         <a

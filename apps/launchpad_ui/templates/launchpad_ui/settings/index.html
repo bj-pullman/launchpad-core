@@ -1,27 +1,54 @@
-<!-- index.html -->
+{% extends "launchpad_ui/base.html" %}
 
-{% extends "launchpad_ui/base.html" %} {% block content %}
-<div class="page-header">
-  <h1>Settings</h1>
-  <p class="page-subtitle">Configure Launchpad by category.</p>
-</div>
+{% block title %}Settings - Launchpad{% endblock %}
 
-<div class="settings-layout">
-  <aside class="settings-sidebar">
-    <ul class="settings-nav">
-      {% for section in settings_sections %}
-      <li>
-        <a href="{{ url_for(section.endpoint) }}">{{ section.label }}</a>
-      </li>
-      {% endfor %}
-    </ul>
-  </aside>
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+/>
+{% endblock %}
 
-  <section class="settings-content">
-    <div class="card">
-      <h2>Settings Categories</h2>
-      <p>Select a category from the left.</p>
+{% block content %}
+<div class="settings-page-shell">
+  <div class="settings-page-header">
+    <div>
+      <h1>Settings</h1>
+      <p class="muted">
+        Configure Launchpad platform behavior, integrations, access, and app settings.
+      </p>
     </div>
-  </section>
+  </div>
+
+  <div class="settings-index-grid">
+    {% for section in settings_sections %}
+    <a href="{{ url_for(section.endpoint) }}" class="settings-index-card" data-section="{{ section.key }}">
+      <div class="settings-index-card-title">{{ section.label }}</div>
+      <div class="settings-index-card-body">
+        {% if section.key == "general" %}
+        Organization, support, announcements, and regional preferences.
+        {% elif section.key == "integrations" %}
+        Microsoft, Google, SAML, Snipe-IT, and future third-party platform connections.
+        {% elif section.key == "authentication" %}
+        Sign-in behavior, local access rules, and account access policy.
+        {% elif section.key == "security" %}
+        Security controls, restrictions, and future platform protections.
+        {% elif section.key == "groups" %}
+        Manage permission groups and role-based access structure.
+        {% elif section.key == "users" %}
+        Create, edit, and manage local and SSO-linked user accounts.
+        {% elif section.key == "staff_status" %}
+        Configure Staff Status operational settings and department behavior.
+        {% else %}
+        Open this settings area.
+        {% endif %}
+      </div>
+      <div class="settings-index-card-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
 </div>
 {% endblock %}

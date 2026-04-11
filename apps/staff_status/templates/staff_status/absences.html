@@ -30,80 +30,88 @@
     </div>
   </div>
 
-  <div class="content-card" style="margin-bottom: 16px;">
-    <details class="staff-status-location-create-details">
-      <summary>Add Absence</summary>
+  {% if not can_operate %}
+    <div class="content-card" style="margin-bottom: 16px;">
+      <p class="muted">You have view-only access for this department.</p>
+    </div>
+  {% endif %}
 
-      <div class="optional-details-body" style="margin-top: 16px;">
-        <form method="post" class="settings-form">
-          <div class="form-field">
-            <label for="user_id">User</label>
-            <select id="user_id" name="user_id" required>
-              <option value="">Select a user</option>
-              {% for user in users %}
-                <option value="{{ user.id }}">{{ user.resolved_display_name }}</option>
-              {% endfor %}
-            </select>
-          </div>
+  {% if can_operate %}
+    <div class="content-card" style="margin-bottom: 16px;">
+      <details class="staff-status-location-create-details">
+        <summary>Add Absence</summary>
 
-          <div class="form-grid-equal">
+        <div class="optional-details-body" style="margin-top: 16px;">
+          <form method="post" class="settings-form">
             <div class="form-field">
-              <label for="absence_type">Absence Type</label>
-              <select id="absence_type" name="absence_type" required>
-                {% for absence_type in absence_types %}
-                  <option value="{{ absence_type }}">{{ absence_type|title }}</option>
+              <label for="user_id">User</label>
+              <select id="user_id" name="user_id" required>
+                <option value="">Select a user</option>
+                {% for user in users %}
+                  <option value="{{ user.id }}">{{ user.resolved_display_name }}</option>
                 {% endfor %}
               </select>
             </div>
 
-            <div class="form-field">
-              <label for="duration_mode">Duration</label>
-              <select id="duration_mode" name="duration_mode" required>
-                <option value="quarter_day">1/4 Day</option>
-                <option value="half_day">Half Day</option>
-                <option value="three_quarter_day">3/4 Day</option>
-                <option value="full_day" selected>Full Day</option>
-                <option value="multi_day">Multiple Days</option>
-              </select>
+            <div class="form-grid-equal">
+              <div class="form-field">
+                <label for="absence_type">Absence Type</label>
+                <select id="absence_type" name="absence_type" required>
+                  {% for absence_type in absence_types %}
+                    <option value="{{ absence_type }}">{{ absence_type|title }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label for="duration_mode">Duration</label>
+                <select id="duration_mode" name="duration_mode" required>
+                  <option value="quarter_day">1/4 Day</option>
+                  <option value="half_day">Half Day</option>
+                  <option value="three_quarter_day">3/4 Day</option>
+                  <option value="full_day" selected>Full Day</option>
+                  <option value="multi_day">Multiple Days</option>
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label for="note">Note</label>
+                <input type="text" id="note" name="note">
+              </div>
             </div>
 
-            <div class="form-field">
-              <label for="note">Note</label>
-              <input type="text" id="note" name="note">
+            <div class="form-grid-equal">
+              <div class="form-field">
+                <label for="start_date">Start Date</label>
+                <input type="date" id="start_date" name="start_date" required>
+              </div>
+
+              <div class="form-field" id="end-date-field" hidden>
+                <label for="end_date">End Date</label>
+                <input type="date" id="end_date" name="end_date">
+              </div>
             </div>
-          </div>
 
-          <div class="form-grid-equal">
-            <div class="form-field">
-              <label for="start_date">Start Date</label>
-              <input type="date" id="start_date" name="start_date" required>
+            <div class="form-field" id="days-value-field" hidden>
+              <label for="days_value">Total Days</label>
+              <input
+                type="number"
+                id="days_value"
+                name="days_value"
+                min="0.25"
+                step="0.25"
+                placeholder="4"
+              >
             </div>
 
-            <div class="form-field" id="end-date-field" hidden>
-              <label for="end_date">End Date</label>
-              <input type="date" id="end_date" name="end_date">
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save Absence</button>
             </div>
-          </div>
-
-          <div class="form-field" id="days-value-field" hidden>
-            <label for="days_value">Total Days</label>
-            <input
-              type="number"
-              id="days_value"
-              name="days_value"
-              min="0.25"
-              step="0.25"
-              placeholder="4"
-            >
-          </div>
-
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Absence</button>
-          </div>
-        </form>
-      </div>
-    </details>
-  </div>
+          </form>
+        </div>
+      </details>
+    </div>
+  {% endif %}
 
   <div class="content-card">
     <div class="staff-status-table-header-row">
@@ -283,7 +291,9 @@
                   Created {{ sort_arrow('created_at') }}
                 </a>
               </th>
-              <th>Actions</th>
+              {% if can_operate %}
+                <th>Actions</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody>
@@ -297,89 +307,93 @@
                 <td>{{ item.days_value if item.days_value is not none else "—" }}</td>
                 <td>{{ item.created_by_display_name }}</td>
                 <td>{{ item.created_at|localtime }}</td>
-                <td class="actions-col">
-                  <button
-                    type="button"
-                    class="table-link staff-status-edit-toggle-btn"
-                    data-target="edit-absence-{{ item.id }}"
-                  >
-                    Edit
-                  </button>
-                </td>
+                {% if can_operate %}
+                  <td class="actions-col">
+                    <button
+                      type="button"
+                      class="table-link staff-status-edit-toggle-btn"
+                      data-target="edit-absence-{{ item.id }}"
+                    >
+                      Edit
+                    </button>
+                  </td>
+                {% endif %}
               </tr>
 
-              <tr id="edit-absence-{{ item.id }}" class="staff-status-edit-row" hidden>
-                <td colspan="9">
-                  <div class="staff-status-edit-card">
-                    <form method="post" class="settings-form staff-status-edit-absence-form">
-                      <input type="hidden" name="action" value="update_absence">
-                      <input type="hidden" name="absence_id" value="{{ item.id }}">
+              {% if can_operate %}
+                <tr id="edit-absence-{{ item.id }}" class="staff-status-edit-row" hidden>
+                  <td colspan="9">
+                    <div class="staff-status-edit-card">
+                      <form method="post" class="settings-form staff-status-edit-absence-form">
+                        <input type="hidden" name="action" value="update_absence">
+                        <input type="hidden" name="absence_id" value="{{ item.id }}">
 
-                      <div class="form-grid-equal">
-                        <div class="form-field">
-                          <label>Absence Type</label>
-                          <select name="absence_type">
-                            {% for absence_type in absence_types %}
-                              <option value="{{ absence_type }}" {% if absence_type == item.absence_type %}selected{% endif %}>
-                                {{ absence_type|title }}
-                              </option>
-                            {% endfor %}
-                          </select>
+                        <div class="form-grid-equal">
+                          <div class="form-field">
+                            <label>Absence Type</label>
+                            <select name="absence_type">
+                              {% for absence_type in absence_types %}
+                                <option value="{{ absence_type }}" {% if absence_type == item.absence_type %}selected{% endif %}>
+                                  {{ absence_type|title }}
+                                </option>
+                              {% endfor %}
+                            </select>
+                          </div>
+
+                          <div class="form-field">
+                            <label>Duration</label>
+                            <select name="duration_mode" class="staff-status-edit-duration-mode">
+                              <option value="quarter_day" {% if item.duration_mode == "quarter_day" %}selected{% endif %}>1/4 Day</option>
+                              <option value="half_day" {% if item.duration_mode == "half_day" %}selected{% endif %}>Half Day</option>
+                              <option value="three_quarter_day" {% if item.duration_mode == "three_quarter_day" %}selected{% endif %}>3/4 Day</option>
+                              <option value="full_day" {% if item.duration_mode == "full_day" %}selected{% endif %}>Full Day</option>
+                              <option value="multi_day" {% if item.duration_mode == "multi_day" %}selected{% endif %}>Multiple Days</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div class="form-grid-equal">
+                          <div class="form-field">
+                            <label>Start Date</label>
+                            <input type="date" name="start_date" value="{{ item.start_date }}">
+                          </div>
+
+                          <div class="form-field staff-status-edit-end-date-field" {% if item.duration_mode != "multi_day" %}hidden{% endif %}>
+                            <label>End Date</label>
+                            <input type="date" name="end_date" value="{{ item.end_date }}">
+                          </div>
+                        </div>
+
+                        <div class="form-field staff-status-edit-days-value-field" {% if item.duration_mode != "multi_day" %}hidden{% endif %}>
+                          <label>Total Days</label>
+                          <input
+                            type="number"
+                            step="0.25"
+                            name="days_value"
+                            class="staff-status-edit-days-value-input"
+                            value="{{ item.days_value }}"
+                          >
                         </div>
 
                         <div class="form-field">
-                          <label>Duration</label>
-                          <select name="duration_mode" class="staff-status-edit-duration-mode">
-                            <option value="quarter_day" {% if item.duration_mode == "quarter_day" %}selected{% endif %}>1/4 Day</option>
-                            <option value="half_day" {% if item.duration_mode == "half_day" %}selected{% endif %}>Half Day</option>
-                            <option value="three_quarter_day" {% if item.duration_mode == "three_quarter_day" %}selected{% endif %}>3/4 Day</option>
-                            <option value="full_day" {% if item.duration_mode == "full_day" %}selected{% endif %}>Full Day</option>
-                            <option value="multi_day" {% if item.duration_mode == "multi_day" %}selected{% endif %}>Multiple Days</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div class="form-grid-equal">
-                        <div class="form-field">
-                          <label>Start Date</label>
-                          <input type="date" name="start_date" value="{{ item.start_date }}">
+                          <label>Note</label>
+                          <input type="text" name="note" value="{{ item.note or '' }}">
                         </div>
 
-                        <div class="form-field staff-status-edit-end-date-field" {% if item.duration_mode != "multi_day" %}hidden{% endif %}>
-                          <label>End Date</label>
-                          <input type="date" name="end_date" value="{{ item.end_date }}">
+                        <div class="form-actions">
+                          <button type="submit" class="btn btn-primary">Save Changes</button>
                         </div>
-                      </div>
+                      </form>
 
-                      <div class="form-field staff-status-edit-days-value-field" {% if item.duration_mode != "multi_day" %}hidden{% endif %}>
-                        <label>Total Days</label>
-                        <input
-                          type="number"
-                          step="0.25"
-                          name="days_value"
-                          class="staff-status-edit-days-value-input"
-                          value="{{ item.days_value }}"
-                        >
-                      </div>
-
-                      <div class="form-field">
-                        <label>Note</label>
-                        <input type="text" name="note" value="{{ item.note or '' }}">
-                      </div>
-
-                      <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Save Changes</button>
-                      </div>
-                    </form>
-
-                    <form method="post" style="margin-top: 10px;">
-                      <input type="hidden" name="action" value="delete_absence">
-                      <input type="hidden" name="absence_id" value="{{ item.id }}">
-                      <button type="submit" class="btn btn-secondary">Delete</button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
+                      <form method="post" style="margin-top: 10px;">
+                        <input type="hidden" name="action" value="delete_absence">
+                        <input type="hidden" name="absence_id" value="{{ item.id }}">
+                        <button type="submit" class="btn btn-secondary">Delete</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endif %}
             {% endfor %}
           </tbody>
         </table>

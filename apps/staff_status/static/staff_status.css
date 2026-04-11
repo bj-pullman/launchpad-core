@@ -58,7 +58,7 @@
 
 .staff-status-kiosk-body,
 .staff-status-board-body {
-  margin: 0;
+  margin-top: 10px;
   min-height: 100vh;
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   color: var(--ss-text);
@@ -68,12 +68,12 @@
 .staff-status-kiosk-shell,
 .staff-status-board-shell {
   min-height: 100vh;
-  padding: 24px;
+  padding: 24px, 60px;
 }
 
 .staff-status-kiosk-card,
 .staff-status-board-shell {
-  max-width: 1200px;
+  max-width: 90%;
   margin: 0 auto;
 }
 
@@ -139,7 +139,7 @@
 .staff-status-eyebrow {
   margin: 0 0 8px 0;
   color: var(--ss-accent);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -157,7 +157,7 @@
 .staff-status-kiosk-header h1,
 .staff-status-board-header h1 {
   margin: 0 0 6px 0;
-  font-size: 2rem;
+  font-size: 3rem;
   line-height: 1.1;
 }
 
@@ -165,7 +165,7 @@
 .staff-status-board-subtitle {
   margin: 0;
   color: var(--ss-muted);
-  font-size: 15px;
+  font-size: 1.2rem;
   line-height: 1.4;
 }
 
@@ -177,7 +177,7 @@
   background: var(--ss-panel-soft);
   border: 1px solid var(--ss-border);
   color: var(--ss-muted);
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -322,18 +322,18 @@
   border: 1px solid var(--ss-border);
   background: var(--ss-panel);
   border-radius: 16px;
-  padding: 16px 18px;
+  padding: 28px 32px;
   box-shadow: var(--ss-shadow);
 }
 
 .staff-status-board-name {
-  font-size: 1.2rem;
+  font-size: 2rem;
   font-weight: 700;
   line-height: 1.15;
 }
 
 .staff-status-board-status {
-  font-size: 1rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #1d4ed8;
 }
@@ -343,7 +343,7 @@
 }
 
 .staff-status-board-updated {
-  font-size: 13px;
+  font-size: 1.5rem;
   color: var(--ss-muted);
   text-align: right;
   font-weight: 600;
@@ -358,13 +358,13 @@
 }
 
 .staff-status-board-date {
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--ss-muted);
 }
 
 .staff-status-board-time {
-  font-size: 1.5rem;
+  font-size: 2rem;
   font-weight: 700;
   line-height: 1;
   color: var(--ss-text);
@@ -844,6 +844,115 @@ SORT LINKS
   display: block;
 }
 
+.staff-status-overview-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.staff-status-range-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.staff-status-range-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ss-text);
+  background: #ffffff;
+  border: 1px solid var(--ss-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.staff-status-range-pill:hover {
+  background: rgba(59, 130, 246, 0.05);
+  border-color: rgba(59, 130, 246, 0.16);
+}
+
+.staff-status-range-pill.active {
+  background: rgba(59, 130, 246, 0.10);
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.staff-status-overview-stats .card {
+  min-height: 168px;
+}
+
+.staff-status-stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.staff-status-stat-value-sm {
+  font-size: 1.35rem;
+}
+
+.staff-status-overview-chart-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.staff-status-chart-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.staff-status-chart-card-header h2 {
+  margin: 0 0 4px 0;
+}
+
+.staff-status-chart-wrap {
+  position: relative;
+  height: 320px;
+}
+
+.staff-status-chart-wrap-lg {
+  height: 360px;
+}
+
+.staff-status-chart-empty {
+  margin-top: 12px;
+}
+
+.staff-status-row-warning {
+  background-color: rgba(239, 68, 68, 0.08);
+}
+
+.staff-status-row-warning:hover {
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.staff-status-absence-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.staff-status-date {
+  font-weight: 600;
+}
+
+.staff-status-soon-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.12);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
 @media (max-width: 1100px) {
   .staff-status-kiosk-layout {
     grid-template-columns: 1fr;
@@ -868,6 +977,10 @@ SORT LINKS
 
   .staff-status-table-filters .form-grid-equal {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .staff-status-overview-chart-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -928,5 +1041,25 @@ SORT LINKS
 
   .staff-status-table-filters .btn {
     width: 100%;
+  }
+
+  .staff-status-overview-toolbar {
+    justify-content: flex-start;
+  }
+
+  .staff-status-range-pills {
+    width: 100%;
+  }
+
+  .staff-status-range-pill {
+    flex: 1 1 auto;
+  }
+
+  .staff-status-chart-wrap {
+    height: 280px;
+  }
+
+  .staff-status-chart-wrap-lg {
+    height: 300px;
   }
 }

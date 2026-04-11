@@ -1,0 +1,50 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}SnipeOps Unavailable - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+/>
+{% endblock %}
+
+{% block content %}
+<div class="settings-main-layout">
+  <div class="settings-page-header">
+    <div>
+      <h1>SnipeOps Unavailable</h1>
+      <p class="muted">
+        SnipeOps requires the Snipe-IT integration to be enabled and fully configured before it can be used.
+      </p>
+    </div>
+  </div>
+
+  <div class="settings-narrow-stack">
+    <div class="settings-provider-card">
+      <h2>Integration Required</h2>
+      <p class="muted">
+        The Snipe-IT integration is currently disabled or incomplete.
+      </p>
+
+      <div class="settings-form-section">
+        <div class="empty-state" style="margin-top: 0;">
+          <h3>What needs to be configured</h3>
+          <p class="muted">
+            Make sure Snipe-IT integration is enabled, a Base URL is entered, and an API token is saved.
+          </p>
+        </div>
+      </div>
+
+      <div class="form-actions" style="justify-content: flex-start; margin-top: 18px;">
+        <a href="{{ url_for('launchpad_ui.settings_integrations_snipeit') }}" class="btn btn-primary">
+          Open Snipe-IT Settings
+        </a>
+        <a href="{{ url_for('launchpad_ui.home') }}" class="btn">
+          Back to Home
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

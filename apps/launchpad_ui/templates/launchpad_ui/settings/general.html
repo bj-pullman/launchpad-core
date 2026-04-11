@@ -1,5 +1,3 @@
-<!-- general.html -->
-
 {% extends "launchpad_ui/base.html" %}
 
 {% block title %}General Settings - Launchpad{% endblock %}
@@ -12,17 +10,36 @@
 {% endblock %}
 
 {% block content %}
-<div class="settings-layout">
-  {% include "launchpad_ui/settings/_sidebar.html" %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Settings</span>
+    </a>
+  </div>
 
-  <div class="settings-main settings-main-narrow">
-    <div class="page-header">
-      <div>
-        <h1>General Settings</h1>
-        <p class="muted">Core Launchpad configuration.</p>
-      </div>
+  <div class="settings-page-header">
+    <div>
+      <h1>General Settings</h1>
+      <p class="muted">Core Launchpad configuration and organization defaults.</p>
     </div>
+  </div>
 
+  <form method="post" class="settings-form">
     <div class="settings-tabs">
       <button type="button" class="settings-tab active" data-tab="organization">
         Organization
@@ -38,12 +55,12 @@
       </button>
     </div>
 
-    <div class="content-card">
-      <form method="post" class="settings-form">
-        <div class="settings-tab-panel active" data-panel="organization">
-          <div class="card" style="min-height: 0;">
-            <h2>Organization</h2>
+    <div class="settings-section-stack">
+      <div class="settings-tab-panel active" data-panel="organization">
+        <div class="settings-content-card">
+          <h2>Organization</h2>
 
+          <div class="form-grid">
             <div class="form-field">
               <label for="organization_name">Organization Name</label>
               <input
@@ -66,11 +83,13 @@
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="settings-tab-panel" data-panel="support">
-          <div class="card" style="min-height: 0;">
-            <h2>Support</h2>
+      <div class="settings-tab-panel" data-panel="support">
+        <div class="settings-content-card">
+          <h2>Support</h2>
 
+          <div class="form-grid">
             <div class="form-field">
               <label for="support_email">Support Email</label>
               <input
@@ -92,106 +111,104 @@
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="settings-tab-panel" data-panel="announcements">
-          <div class="card" style="min-height: 0;">
-            <h2>Announcements</h2>
+      <div class="settings-tab-panel" data-panel="announcements">
+        <div class="settings-content-card">
+          <h2>Announcements</h2>
 
-            <label class="checkbox-card">
-              <input
-                type="checkbox"
-                name="announcement_enabled"
-                value="1"
-                {% if settings.announcement_enabled %}checked{% endif %}
-              />
-              <span>Enable Announcement Banner</span>
-            </label>
+          <label class="checkbox-card">
+            <input
+              type="checkbox"
+              name="announcement_enabled"
+              value="1"
+              {% if settings.announcement_enabled %}checked{% endif %}
+            />
+            <span>Enable Announcement Banner</span>
+          </label>
 
-            <div class="form-field" style="margin-top: 16px;">
-              <label for="announcement_text">Announcement Text</label>
-              <textarea
-                id="announcement_text"
-                name="announcement_text"
-                rows="3"
-              >{{ settings.announcement_text or '' }}</textarea>
+          <div class="form-field" style="margin-top: 16px;">
+            <label for="announcement_text">Announcement Text</label>
+            <textarea
+              id="announcement_text"
+              name="announcement_text"
+              rows="4"
+            >{{ settings.announcement_text or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-tab-panel" data-panel="regional">
+        <div class="settings-content-card">
+          <h2>Regional Settings</h2>
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label for="timezone">Time Zone</label>
+              <select id="timezone" name="timezone">
+                {% for tz in timezone_options %}
+                <option
+                  value="{{ tz.value }}"
+                  {% if (settings.timezone or '') == tz.value %}selected{% endif %}
+                >
+                  {{ tz.label }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="language">Preferred Language</label>
+              <select id="language" name="language">
+                {% for language in language_options %}
+                <option
+                  value="{{ language.value }}"
+                  {% if (settings.language or '') == language.value %}selected{% endif %}
+                >
+                  {{ language.label }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label for="date_format">Date Format</label>
+              <select id="date_format" name="date_format">
+                {% for fmt in date_format_options %}
+                <option
+                  value="{{ fmt.value }}"
+                  {% if (settings.date_format or '') == fmt.value %}selected{% endif %}
+                >
+                  {{ fmt.label }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="time_format">Time Format</label>
+              <select id="time_format" name="time_format">
+                {% for fmt in time_format_options %}
+                <option
+                  value="{{ fmt.value }}"
+                  {% if (settings.time_format or '') == fmt.value %}selected{% endif %}
+                >
+                  {{ fmt.label }}
+                </option>
+                {% endfor %}
+              </select>
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="settings-tab-panel" data-panel="regional">
-          <div class="card" style="min-height: 0;">
-            <h2>Regional Settings</h2>
-
-            <div class="form-grid-equal">
-              <div class="form-field">
-                <label for="timezone">Time Zone</label>
-                <select id="timezone" name="timezone">
-                  {% for tz in timezone_options %}
-                  <option
-                    value="{{ tz.value }}"
-                    {% if (settings.timezone or '') == tz.value %}selected{% endif %}
-                  >
-                    {{ tz.label }}
-                  </option>
-                  {% endfor %}
-                </select>
-              </div>
-
-              <div class="form-field">
-                <label for="language">Preferred Language</label>
-                <select id="language" name="language">
-                  {% for language in language_options %}
-                  <option
-                    value="{{ language.value }}"
-                    {% if (settings.language or '') == language.value %}selected{% endif %}
-                  >
-                    {{ language.label }}
-                  </option>
-                  {% endfor %}
-                </select>
-              </div>
-            </div>
-
-            <div class="form-grid-equal">
-              <div class="form-field">
-                <label for="date_format">Date Format</label>
-                <select id="date_format" name="date_format">
-                  {% for fmt in date_format_options %}
-                  <option
-                    value="{{ fmt.value }}"
-                    {% if (settings.date_format or '') == fmt.value %}selected{% endif %}
-                  >
-                    {{ fmt.label }}
-                  </option>
-                  {% endfor %}
-                </select>
-              </div>
-
-              <div class="form-field">
-                <label for="time_format">Time Format</label>
-                <select id="time_format" name="time_format">
-                  {% for fmt in time_format_options %}
-                  <option
-                    value="{{ fmt.value }}"
-                    {% if (settings.time_format or '') == fmt.value %}selected{% endif %}
-                  >
-                    {{ fmt.label }}
-                  </option>
-                  {% endfor %}
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">
-            Save General Settings
-          </button>
-        </div>
-      </form>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
     </div>
-  </div>
+  </form>
 </div>
 {% endblock %}
 
