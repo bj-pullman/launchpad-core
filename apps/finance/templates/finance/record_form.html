@@ -1,0 +1,241 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+    <div class="finance-back-row">
+        <a href="{{ url_for('finance.records', department_name=department_name) }}" class="finance-back-link">
+            <span class="finance-back-link-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+            </svg>
+            </span>
+            <span>Records</span>
+        </a>
+    </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{% if form_mode == "edit" %}Edit Record{% else %}Add Record{% endif %}</h1>
+      <p class="page-subtitle">{{ department_name }} finance record entry.</p>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-form-header">
+      <div>
+        <h3 class="finance-form-title">
+          {% if form_mode == "edit" %}Edit Record{% else %}New Record{% endif %}
+        </h3>
+        <p class="finance-form-subtitle">Complete the core finance record details below.</p>
+      </div>
+
+      <div class="finance-status-wrap">
+        <span class="finance-status-chip" id="finance-status-chip">Status</span>
+        <select id="status" name="status" class="finance-status-select" required form="finance-record-form">
+          <option value="active" {% if form_mode == "edit" and record.status == "active" %}selected{% endif %}>Active</option>
+          <option value="pending_renewal" {% if form_mode == "edit" and record.status == "pending_renewal" %}selected{% endif %}>Pending Renewal</option>
+          <option value="renewed" {% if form_mode == "edit" and record.status == "renewed" %}selected{% endif %}>Renewed</option>
+          <option value="expired" {% if form_mode == "edit" and record.status == "expired" %}selected{% endif %}>Expired</option>
+          <option value="cancelled" {% if form_mode == "edit" and record.status == "cancelled" %}selected{% endif %}>Cancelled</option>
+          <option value="archived" {% if form_mode == "edit" and record.status == "archived" %}selected{% endif %}>Archived</option>
+        </select>
+      </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="finance-form" id="finance-record-form">
+
+      <div class="finance-form-section">
+        <h4 class="finance-form-section-title">Basic Information</h4>
+      </div>
+
+      <div class="finance-form-grid">
+        <div class="finance-field">
+          <label for="record_type">Record Type</label>
+          <select id="record_type" name="record_type" required>
+            <option value="renewal" {% if form_mode == "edit" and record.record_type == "renewal" %}selected{% endif %}>Renewal</option>
+            <option value="purchase" {% if form_mode == "edit" and record.record_type == "purchase" %}selected{% endif %}>Purchase</option>
+          </select>
+        </div>
+
+        <div class="finance-field finance-field-span-2">
+          <label for="title">Item / Service Name</label>
+          <input type="text" id="title" name="title" required value="{{ record.title if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="vendor_id">Vendor</label>
+          <select id="vendor_id" name="vendor_id">
+            <option value="">Select Vendor</option>
+            {% for vendor in vendors %}
+              <option value="{{ vendor.id }}" {% if form_mode == "edit" and record.vendor_id == vendor.id %}selected{% endif %}>
+                {{ vendor.vendor_name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="finance-field">
+          <label for="category_id">Category</label>
+          <select id="category_id" name="category_id">
+            <option value="">Select Category</option>
+            {% for category in categories %}
+              <option value="{{ category.id }}" {% if form_mode == "edit" and record.category_id == category.id %}selected{% endif %}>
+                {{ category.category_name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="finance-form-section">
+        <h4 class="finance-form-section-title">Financial Details</h4>
+      </div>
+
+      <div class="finance-form-grid">
+        <div class="finance-field">
+          <label for="cost">Cost</label>
+          <input type="text" inputmode="decimal" id="cost" name="cost" value="{{ record.cost if form_mode == 'edit' and record.cost else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="account_code">Account Code</label>
+          <input type="text" id="account_code" name="account_code" value="{{ record.account_code if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="po_number">PO Number</label>
+          <input type="text" id="po_number" name="po_number" value="{{ record.po_number if form_mode == 'edit' else '' }}">
+        </div>
+      </div>
+
+      <div class="finance-form-section">
+        <h4 class="finance-form-section-title">Term &amp; Renewal</h4>
+      </div>
+
+      <div class="finance-form-grid">
+        <div class="finance-field">
+          <label for="purchase_date">Purchase Date</label>
+          <input type="date" id="purchase_date" name="purchase_date" value="{{ record.purchase_date if form_mode == 'edit' and record.purchase_date else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label>Term</label>
+          <div class="finance-inline-pair">
+            <input
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              id="term_length"
+              name="term_length"
+              placeholder="Length"
+              value="{{ record.term_length if form_mode == 'edit' and record.term_length else '' }}"
+            >
+            <select id="term_unit" name="term_unit">
+              <option value="">Unit</option>
+              <option value="months" {% if form_mode == "edit" and record.term_unit == "months" %}selected{% endif %}>Months</option>
+              <option value="years" {% if form_mode == "edit" and record.term_unit == "years" %}selected{% endif %}>Years</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="finance-field">
+          <label for="use_purchase_date_as_start">Start Date Source</label>
+          <select id="use_purchase_date_as_start" name="use_purchase_date_as_start">
+            <option value="1" {% if form_mode != "edit" or record.use_purchase_date_as_start %}selected{% endif %}>Use Purchase Date</option>
+            <option value="0" {% if form_mode == "edit" and not record.use_purchase_date_as_start %}selected{% endif %}>Use Different Start Date</option>
+          </select>
+        </div>
+
+        <div class="finance-field" id="service_start_date_wrap">
+          <label for="service_start_date">Service Start Date</label>
+          <input type="date" id="service_start_date" name="service_start_date" value="{{ record.service_start_date if form_mode == 'edit' and record.service_start_date else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="expiration_date">Expiration Date</label>
+          <input type="date" id="expiration_date" name="expiration_date" value="{{ record.expiration_date if form_mode == 'edit' and record.expiration_date else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="renewal_date">Renewal Date</label>
+          <input type="date" id="renewal_date" name="renewal_date" value="{{ record.renewal_date if form_mode == 'edit' and record.renewal_date else '' }}">
+        </div>
+      </div>
+
+    <div class="finance-form-section">
+    <h4 class="finance-form-section-title">Communication</h4>
+    </div>
+
+    <div class="finance-communication-grid">
+        <div class="finance-field finance-field-small">
+            <label for="notify_days_before">Notify Days Before</label>
+            <input
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            id="notify_days_before"
+            name="notify_days_before"
+            value="{{ record.notify_days_before if form_mode == 'edit' else 30 }}"
+            >
+        </div>
+
+        <div class="finance-field">
+            <label for="notification_recipients">Notification Recipients</label>
+            <textarea id="notification_recipients" name="notification_recipients" rows="4">{{ record.notification_recipients if form_mode == 'edit' else '' }}</textarea>
+        </div>
+
+        <div class="finance-field">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="4">{{ record.notes if form_mode == 'edit' else '' }}</textarea>
+        </div>
+    </div>
+
+      <div class="finance-form-section">
+        <h4 class="finance-form-section-title">Attachments</h4>
+      </div>
+
+      <div class="finance-form-grid">
+        <div class="finance-field finance-field-span-3">
+          <label for="attachment_files">Attachments (PDF)</label>
+          <div class="finance-file-upload">
+            <label class="finance-file-label">
+              <span class="finance-file-button">Choose PDF Files</span>
+              <span class="finance-file-name" id="finance-file-name">No files selected</span>
+              <input
+                type="file"
+                id="attachment_files"
+                name="attachment_files"
+                accept="application/pdf,.pdf"
+                multiple
+              >
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="finance-form-actions">
+        <a class="btn btn-secondary finance-action-link"
+           href="{{ url_for('finance.records', department_name=department_name) }}">
+          Cancel
+        </a>
+
+        <button type="submit" class="btn btn-primary finance-action-button">
+          {% if form_mode == "edit" %}Save Changes{% else %}Save Record{% endif %}
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

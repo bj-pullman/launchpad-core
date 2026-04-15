@@ -1573,3 +1573,9 @@ def settings_integrations_snipeit():
         active_section="integrations",
         settings=settings,
     )
+
+@launchpad_ui_bp.route("/settings/finance", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.finance.view")
+def settings_finance():
+    return render_template("launchpad_ui/settings/finance.html")

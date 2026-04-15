@@ -1,0 +1,71 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  <div class="finance-subnav">
+    <a
+      href="{{ url_for('finance.department_overview', department_name=department_name) }}"
+      class="{% if active_tab == 'overview' %}active{% endif %}"
+    >Overview</a>
+    <a
+      href="{{ url_for('finance.records', department_name=department_name) }}"
+      class="{% if active_tab == 'records' %}active{% endif %}"
+    >Records</a>
+    <a
+      href="{{ url_for('finance.vendors', department_name=department_name) }}"
+      class="{% if active_tab == 'vendors' %}active{% endif %}"
+    >Vendors</a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }}</h1>
+      <p class="page-subtitle">Finance dashboard overview.</p>
+    </div>
+
+    {% if can_manage %}
+      <div class="page-header-actions">
+        <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name) }}">Import</a>
+        <a class="btn btn-primary" href="{{ url_for('finance.record_create', department_name=department_name) }}">Add Record</a>
+        <a class="btn btn-primary" href="{{ url_for('finance.vendor_create', department_name=department_name) }}">Add Vendor</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="finance-alert">
+    <strong>Admin note:</strong> {{ explicit_permissions_notice }}
+  </div>
+
+  <div class="finance-stats">
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Total Records</div>
+      <div class="finance-stat-value">{{ dashboard_summary.total_records }}</div>
+    </div>
+
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Renewals Due in 30 Days</div>
+      <div class="finance-stat-value">{{ dashboard_summary.renewals_due_30 }}</div>
+    </div>
+
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Active Vendors</div>
+      <div class="finance-stat-value">{{ dashboard_summary.active_vendors }}</div>
+    </div>
+  </div>
+
+  <div class="content-card">
+    {% if can_view_budget %}
+      <p class="muted">Budget module access is enabled for your account.</p>
+    {% else %}
+      <p class="muted">Budget module access is not assigned for your account.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

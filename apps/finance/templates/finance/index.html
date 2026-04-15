@@ -1,0 +1,42 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  <div class="page-header">
+    <div>
+      <h1>Finance</h1>
+      <p class="page-subtitle">Department-aware renewals, purchasing, imports, and budgets.</p>
+    </div>
+  </div>
+
+  <div class="finance-alert">
+    <strong>Admin note:</strong> {{ explicit_permissions_notice }}
+  </div>
+
+  <div class="content-card">
+    {% if no_departments_assigned %}
+      <div class="finance-empty">
+        <h3>No Finance departments assigned</h3>
+        <p>Your Finance access is enabled, but no departments are assigned yet.</p>
+      </div>
+    {% else %}
+      <div class="card-grid">
+        {% for department in departments %}
+          <a class="card" href="{{ url_for('finance.department_overview', department_name=department.department_name) }}">
+            <div class="card-title">{{ department.department_name }}</div>
+            <div class="card-body">Open Finance for this department.</div>
+            <div class="card-cta">Open</div>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

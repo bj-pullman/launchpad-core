@@ -12,6 +12,8 @@ from apps.launchpad_ui import launchpad_ui_bp
 from apps.snipeops.blueprint import bp as snipeops_bp
 from apps.staff_status.blueprint import bp as staff_status_bp
 from apps.staff_status.db import init_staff_status_db
+from apps.finance.blueprint import bp as finance_bp
+from apps.finance.db import init_finance_db
 
 from modules.core.auth.blueprint import bp as auth_bp
 from modules.core.auth import routes as auth_routes  # noqa: F401
@@ -65,6 +67,7 @@ def create_app() -> Flask:
     init_settings_db()
     init_rbac_db()
     init_staff_status_db()
+    init_finance_db()
 
     seed_permissions()
     ensure_default_local_admin()
@@ -229,6 +232,7 @@ def create_app() -> Flask:
     app.register_blueprint(snipeops_bp)
     app.register_blueprint(setup_bp)
     app.register_blueprint(staff_status_bp)
+    app.register_blueprint(finance_bp)
     
     should_start_scheduler = True
 

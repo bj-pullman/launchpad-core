@@ -1,0 +1,104 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+
+    <div class="finance-back-row">
+        <a href="{{ url_for('finance.vendors', department_name=department_name) }}" class="finance-back-link">
+            <span class="finance-back-link-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+            </svg>
+            </span>
+            <span>Vendors</span>
+        </a>
+    </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{% if form_mode == "edit" %}Edit Vendor{% else %}Add Vendor{% endif %}</h1>
+      <p class="page-subtitle">{{ department_name }} vendor details.</p>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <form method="post" class="finance-form">
+      <div class="finance-form-grid">
+        <div class="finance-field finance-field-span-2">
+          <label for="vendor_name">Vendor Name</label>
+          <input type="text" id="vendor_name" name="vendor_name" required value="{{ vendor.vendor_name if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="vendor_code">Vendor Code</label>
+          <input type="text" id="vendor_code" name="vendor_code" value="{{ vendor.vendor_code if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="website">Website</label>
+          <input type="text" id="website" name="website" value="{{ vendor.website if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="main_phone">Main Phone</label>
+          <input type="text" id="main_phone" name="main_phone" value="{{ vendor.main_phone if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="billing_email">Billing Email</label>
+          <input type="email" id="billing_email" name="billing_email" value="{{ vendor.billing_email if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="support_email">Support Email</label>
+          <input type="email" id="support_email" name="support_email" value="{{ vendor.support_email if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="sales_contact_name">Sales Contact Name</label>
+          <input type="text" id="sales_contact_name" name="sales_contact_name" value="{{ vendor.sales_contact_name if form_mode == 'edit' else '' }}">
+        </div>
+
+        <div class="finance-field">
+          <label for="sales_contact_email">Sales Contact Email</label>
+          <input type="email" id="sales_contact_email" name="sales_contact_email" value="{{ vendor.sales_contact_email if form_mode == 'edit' else '' }}">
+        </div>
+
+        {% if form_mode == "edit" %}
+        <div class="finance-field">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            <option value="active" {% if vendor.status == "active" or not vendor.status %}selected{% endif %}>Active</option>
+            <option value="archived" {% if vendor.status == "archived" %}selected{% endif %}>Archived</option>
+            <option value="deleted" {% if vendor.status == "deleted" %}selected{% endif %}>Deleted</option>
+          </select>
+        </div>
+        {% endif %}
+
+        <div class="finance-field finance-field-span-3">
+          <label for="notes">Notes</label>
+          <textarea id="notes" name="notes" rows="4">{{ vendor.notes if form_mode == 'edit' else '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="finance-form-actions">
+        <a class="btn btn-secondary finance-action-link"
+           href="{% if form_mode == 'edit' %}{{ url_for('finance.vendor_detail', vendor_id=vendor.id) }}{% else %}{{ url_for('finance.vendors', department_name=department_name) }}{% endif %}">
+          Cancel
+        </a>
+
+        <button type="submit" class="btn btn-primary finance-action-button">
+          {% if form_mode == "edit" %}Save Changes{% else %}Save Vendor{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

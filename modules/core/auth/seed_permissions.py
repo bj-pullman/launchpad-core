@@ -13,6 +13,13 @@ def seed_permissions():
     create_role("viewer", "Viewer", "Basic Launchpad access only", is_system=1)
     create_role("staff_status_admin", "Staff Status Admin", "Full Staff Status administration", is_system=1)
 
+    create_role("finance_viewer", "Finance Viewer", "Finance read-only access", is_system=1)
+    create_role("finance_operator", "Finance Operator", "Finance records and operations access", is_system=1)
+    create_role("finance_admin", "Finance Admin", "Finance administration access", is_system=1)
+    create_role("finance_budget_viewer", "Finance Budget Viewer", "Finance budget read-only access", is_system=1)
+    create_role("finance_budget_operator", "Finance Budget Operator", "Finance budget operations access", is_system=1)
+    create_role("finance_budget_admin", "Finance Budget Admin", "Finance full budget administration", is_system=1)
+
     # Permissions
     permission_keys = [
         # Launchpad home
@@ -46,10 +53,15 @@ def seed_permissions():
         # Users settings
         ("launchpad.settings.users.view", "Users Settings"),
         ("launchpad.settings.users.manage", "Manage Users Settings"),
-        
+
         # Staff Status settings
         ("launchpad.settings.staff_status.view", "Staff Status Settings"),
         ("launchpad.settings.staff_status.manage", "Manage Staff Status Settings"),
+
+        # Finance settings
+        ("launchpad.settings.finance.view", "Finance Settings View"),
+        ("launchpad.settings.finance.operator", "Finance Settings Operator"),
+        ("launchpad.settings.finance.admin", "Finance Settings Admin"),
 
         # SnipeOps app access
         ("snipeops.home.view", "SnipeOps Home"),
@@ -58,17 +70,41 @@ def seed_permissions():
         ("snipeops.import_by_scan.manage", "Manage Import by Scan"),
         ("snipeops.snipe_catalog.view", "Snipe Catalog"),
         ("snipeops.snipe_catalog.manage", "Manage Snipe Catalog"),
-        
+
         # Staff Status app access
         ("staff_status.app.view", "Staff Status App View"),
         ("staff_status.view", "Staff Status View"),
         ("staff_status.operator", "Staff Status Operator"),
         ("staff_status.admin", "Staff Status Admin"),
 
-        # Future apps
+        # Finance app access
         ("finance.home.view", "Finance Home"),
-        ("finance.home.manage", "Manage Finance Home"),
 
+        ("finance.view", "Finance View"),
+        ("finance.operator", "Finance Operator"),
+        ("finance.admin", "Finance Admin"),
+
+        ("finance.records.view", "Finance Records View"),
+        ("finance.records.operator", "Finance Records Operator"),
+        ("finance.records.admin", "Finance Records Admin"),
+
+        ("finance.vendors.view", "Finance Vendors View"),
+        ("finance.vendors.operator", "Finance Vendors Operator"),
+        ("finance.vendors.admin", "Finance Vendors Admin"),
+
+        ("finance.imports.view", "Finance Imports View"),
+        ("finance.imports.operator", "Finance Imports Operator"),
+        ("finance.imports.admin", "Finance Imports Admin"),
+
+        ("finance.reports.view", "Finance Reports View"),
+        ("finance.reports.operator", "Finance Reports Operator"),
+        ("finance.reports.admin", "Finance Reports Admin"),
+
+        ("finance.budget.view", "Finance Budget View"),
+        ("finance.budget.operator", "Finance Budget Operator"),
+        ("finance.budget.admin", "Finance Budget Admin"),
+
+        # Future apps
         ("user360.home.view", "User360 Home"),
         ("user360.home.manage", "Manage User360 Home"),
 
@@ -118,9 +154,13 @@ def seed_permissions():
 
         "launchpad.settings.users.view",
         "launchpad.settings.users.manage",
-        
+
         "launchpad.settings.staff_status.view",
         "launchpad.settings.staff_status.manage",
+
+        "launchpad.settings.finance.view",
+        "launchpad.settings.finance.operator",
+        "launchpad.settings.finance.admin",
     ]
 
     for key in launchpad_admin_permissions:
@@ -136,7 +176,7 @@ def seed_permissions():
 
     for key in snipeops_user_permissions:
         assign_permission_to_role("snipeops_user", key)
-        
+
     # Staff Status Admin
     staff_status_admin_permissions = [
         "launchpad.home.view",
@@ -148,3 +188,97 @@ def seed_permissions():
 
     for key in staff_status_admin_permissions:
         assign_permission_to_role("staff_status_admin", key)
+
+    # Finance Viewer
+    finance_viewer_permissions = [
+        "launchpad.home.view",
+        "finance.home.view",
+        "finance.view",
+        "finance.records.view",
+        "finance.vendors.view",
+        "finance.imports.view",
+        "finance.reports.view",
+    ]
+
+    for key in finance_viewer_permissions:
+        assign_permission_to_role("finance_viewer", key)
+
+    # Finance Operator
+    finance_operator_permissions = [
+        "launchpad.home.view",
+        "finance.home.view",
+        "finance.view",
+        "finance.operator",
+        "finance.records.view",
+        "finance.records.operator",
+        "finance.vendors.view",
+        "finance.vendors.operator",
+        "finance.imports.view",
+        "finance.imports.operator",
+        "finance.reports.view",
+        "finance.reports.operator",
+        "launchpad.settings.finance.view",
+    ]
+
+    for key in finance_operator_permissions:
+        assign_permission_to_role("finance_operator", key)
+
+    # Finance Admin
+    finance_admin_permissions = [
+        "launchpad.home.view",
+        "finance.home.view",
+        "finance.view",
+        "finance.operator",
+        "finance.admin",
+        "finance.records.view",
+        "finance.records.operator",
+        "finance.records.admin",
+        "finance.vendors.view",
+        "finance.vendors.operator",
+        "finance.vendors.admin",
+        "finance.imports.view",
+        "finance.imports.operator",
+        "finance.imports.admin",
+        "finance.reports.view",
+        "finance.reports.operator",
+        "finance.reports.admin",
+        "launchpad.settings.finance.view",
+        "launchpad.settings.finance.operator",
+        "launchpad.settings.finance.admin",
+    ]
+
+    for key in finance_admin_permissions:
+        assign_permission_to_role("finance_admin", key)
+
+    # Finance Budget Viewer
+    finance_budget_viewer_permissions = [
+        "launchpad.home.view",
+        "finance.home.view",
+        "finance.budget.view",
+    ]
+
+    for key in finance_budget_viewer_permissions:
+        assign_permission_to_role("finance_budget_viewer", key)
+
+    # Finance Budget Operator
+    finance_budget_operator_permissions = [
+        "launchpad.home.view",
+        "finance.home.view",
+        "finance.budget.view",
+        "finance.budget.operator",
+    ]
+
+    for key in finance_budget_operator_permissions:
+        assign_permission_to_role("finance_budget_operator", key)
+
+    # Finance Budget Admin
+    finance_budget_admin_permissions = [
+        "launchpad.home.view",
+        "finance.home.view",
+        "finance.budget.view",
+        "finance.budget.operator",
+        "finance.budget.admin",
+    ]
+
+    for key in finance_budget_admin_permissions:
+        assign_permission_to_role("finance_budget_admin", key)

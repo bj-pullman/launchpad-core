@@ -328,6 +328,33 @@ BUTTONS
   background: rgba(59,130,246,.04);
 }
 
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border: 1px solid #dc2626;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.btn-danger:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220,38,38,.25);
+}
+
+.btn-success {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.btn-success:hover {
+  background: #15803d;
+  border-color: #15803d;
+}
+
 /* ------------------------------
 SETTINGS PAGE
 ------------------------------ */
@@ -752,6 +779,7 @@ RESPONSIVE
   background: #fff;
   box-shadow: var(--shadow);
   font-weight: 600;
+  transition: opacity 0.3s ease;
 }
 
 .flash-success{
