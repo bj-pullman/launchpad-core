@@ -958,23 +958,36 @@ def upload_attachment(record_id: int):
     if not can_manage_department(user_id, department_name):
         abort(403)
 
-    upload = request.files.get("attachment_file")
-    document_type = (request.form.get("document_type") or "").strip() or "other"
+    upload = request.files.get("attachment_files")
+    document_type = (request.form.get("document_type") or "").strip()
+
+    if not document_type:
+        flash("Please choose an attachment type.", "error")
+        return redirect(url_for("finance.record_detail", record_id=record_id))
 
     if not upload or not upload.filename:
-        abort(400)
+        flash("No attachment selected.", "error")
+        return redirect(url_for("finance.record_detail", record_id=record_id))
 
     file_bytes = upload.read()
     mime_type = upload.mimetype or ""
 
-    save_attachment(
-        finance_record_id=record_id,
-        original_filename=upload.filename,
-        file_bytes=file_bytes,
-        mime_type=mime_type,
-        document_type=document_type,
-        uploaded_by_user_id=user_id,
-    )
+    if not file_bytes:
+        flash("The selected attachment was empty.", "error")
+        return redirect(url_for("finance.record_detail", record_id=record_id))
+
+    try:
+        save_attachment(
+            finance_record_id=record_id,
+            original_filename=upload.filename,
+            file_bytes=file_bytes,
+            mime_type=mime_type,
+            document_type=document_type,
+            uploaded_by_user_id=user_id,
+        )
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("finance.record_detail", record_id=record_id))
 
     flash("Attachment uploaded successfully.", "success")
     return redirect(url_for("finance.record_detail", record_id=record_id))
@@ -1427,6 +1440,7 @@ def imports_validate(department_name: str, run_id: int):
 
             flash(
                 f"Import finished. Created {result['created_rows']} record(s), "
+                f"created {result['vendors_created']} vendor(s), "
                 f"skipped {result['skipped_rows']}, errors {result['error_rows']}.",
                 "success",
             )

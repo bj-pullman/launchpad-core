@@ -1,0 +1,386 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}Finance Settings - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}" />
+{% endblock %}
+
+{% block content %}
+{% set active_finance_tab = active_finance_tab or "notifications" %}
+
+<div class="finance-settings-layout">
+  <div class="finance-settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Settings</span>
+    </a>
+  </div>
+
+  <div class="finance-settings-header">
+    <div>
+      <h1>Finance Settings</h1>
+      <p class="muted">
+        Configure renewal notification behavior, sender defaults, branding, and email template preview.
+      </p>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="finance-settings-form" novalidate>
+    <input
+      type="hidden"
+      name="active_finance_tab"
+      id="active_finance_tab"
+      value="{{ active_finance_tab }}"
+    />
+
+    <div class="finance-settings-tabs settings-tabs">
+      <button
+        type="button"
+        class="settings-tab {% if active_finance_tab == 'notifications' %}active{% endif %}"
+        data-tab="notifications"
+      >
+        Notifications
+      </button>
+      <button
+        type="button"
+        class="settings-tab {% if active_finance_tab == 'template' %}active{% endif %}"
+        data-tab="template"
+      >
+        Template
+      </button>
+    </div>
+
+    <div class="finance-settings-stack">
+      <div
+        class="settings-tab-panel {% if active_finance_tab == 'notifications' %}active{% endif %}"
+        data-panel="notifications"
+      >
+        <div class="finance-settings-card settings-provider-card">
+          <h2>Notification Defaults</h2>
+          <p class="muted">
+            Set the sender, recipients, and renewal reminder behavior used by Finance notifications.
+          </p>
+
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-copy">
+              <strong>Enable Finance Notifications</strong>
+              <span>Allow Launchpad to generate and send Finance renewal notifications.</span>
+            </div>
+
+            <label class="settings-switch">
+              <input
+                type="checkbox"
+                name="notifications_enabled"
+                value="1"
+                {% if settings.notifications_enabled %}checked{% endif %}
+              />
+              <span class="settings-switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="finance-settings-grid">
+            <div class="form-field">
+              <label for="sender_email">Sender Email Address</label>
+              <input
+                type="email"
+                id="sender_email"
+                name="sender_email"
+                value="{{ settings.sender_email or '' }}"
+                placeholder="noreply@myorganization.org"
+              />
+              <small>Displayed as the sender for Finance notifications.</small>
+            </div>
+
+            <div class="form-field">
+              <label for="default_recipients">Default Recipient Email(s)</label>
+              <input
+                type="text"
+                id="default_recipients"
+                name="default_recipients"
+                value="{{ settings.default_recipients or '' }}"
+                placeholder="purchasing@myorganization.org, finance@myorganization.org"
+              />
+              <small>Comma-separated fallback recipients when a record does not define its own recipients.</small>
+            </div>
+          </div>
+
+          <div class="finance-settings-grid">
+            <div class="form-field">
+              <label for="default_days_before">Default Days Before Renewal</label>
+              <input
+                type="number"
+                id="default_days_before"
+                name="default_days_before"
+                min="1"
+                step="1"
+                value="{{ settings.default_days_before or '30' }}"
+              />
+            </div>
+
+            <div class="form-field">
+              <label for="subject_prefix">Email Subject Prefix</label>
+              <input
+                type="text"
+                id="subject_prefix"
+                name="subject_prefix"
+                value="{{ settings.subject_prefix or '' }}"
+                placeholder="Renewal Reminder"
+              />
+            </div>
+          </div>
+
+          <div class="finance-settings-checklist">
+            <label class="checkbox-card finance-settings-checkbox">
+              <input
+                type="checkbox"
+                name="use_record_recipients_first"
+                value="1"
+                {% if settings.use_record_recipients_first %}checked{% endif %}
+              />
+              <span>Use record notification recipients first</span>
+            </label>
+
+            <label class="checkbox-card finance-settings-checkbox">
+              <input
+                type="checkbox"
+                name="fallback_to_default_recipients"
+                value="1"
+                {% if settings.fallback_to_default_recipients %}checked{% endif %}
+              />
+              <span>Fallback to default recipients when record recipients are missing</span>
+            </label>
+          </div>
+
+        <div class="finance-settings-test-actions">
+            <button
+                type="submit"
+                name="action"
+                value="send_test_email"
+                class="btn btn-secondary"
+            >
+                Send Test Email
+            </button>
+        </div>
+
+          <div class="finance-settings-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="settings-tab-panel {% if active_finance_tab == 'template' %}active{% endif %}"
+        data-panel="template"
+      >
+        <div class="finance-settings-card">
+          <h2>Template Builder</h2>
+          <p class="muted">
+            Choose branding and which record details should appear in the notification.
+          </p>
+
+          <div class="finance-template-top-grid">
+            <div class="finance-template-top-card">
+              <h3>Branding</h3>
+
+              <div class="form-field">
+                <label for="notification_logo">Notification Logo</label>
+                <input
+                  type="file"
+                  id="notification_logo"
+                  name="notification_logo"
+                  class="settings-file-input"
+                  accept=".png,.jpg,.jpeg,.webp,.svg"
+                />
+
+                <label for="notification_logo" class="settings-file-upload finance-settings-logo-upload">
+                  <span class="settings-file-upload-button">Choose Logo</span>
+                  <span
+                    class="settings-file-upload-text"
+                    id="notification-logo-file-text"
+                    data-default-text="{% if settings.logo_original_name %}Current logo: {{ settings.logo_original_name }}{% else %}No logo selected{% endif %}"
+                  >
+                    {% if settings.logo_original_name %}
+                      Current logo: {{ settings.logo_original_name }}
+                    {% else %}
+                      No logo selected
+                    {% endif %}
+                  </span>
+                </label>
+
+                <small>Accepted: PNG, JPG, JPEG, WEBP, SVG</small>
+              </div>
+
+              <div class="form-field">
+                <label for="logo_width">Logo Width (px)</label>
+                <input
+                  type="number"
+                  id="logo_width"
+                  name="logo_width"
+                  min="80"
+                  max="500"
+                  step="1"
+                  value="{{ settings.logo_width or '180' }}"
+                />
+              </div>
+
+              <div class="form-field">
+                <label for="template_header">Header Title</label>
+                <input
+                  type="text"
+                  id="template_header"
+                  name="template_header"
+                  value="{{ settings.template_header or '' }}"
+                />
+              </div>
+
+              <div class="form-field">
+                <label for="template_intro">Intro Text</label>
+                <input
+                  type="text"
+                  id="template_intro"
+                  name="template_intro"
+                  value="{{ settings.template_intro or '' }}"
+                  placeholder="The following finance record is approaching renewal."
+                />
+              </div>
+
+              <div class="form-field">
+                <label for="template_footer">Footer Text</label>
+                <input
+                  type="text"
+                  id="template_footer"
+                  name="template_footer"
+                  value="{{ settings.template_footer or '' }}"
+                  placeholder="This message was generated by Launchpad Finance notifications."
+                />
+              </div>
+            </div>
+
+            <div class="finance-template-top-card">
+              <h3>Record Details to Include</h3>
+
+              <div class="finance-settings-include-grid">
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_title" value="1" {% if settings.include_title %}checked{% endif %}>
+                  <span>Title</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_department_name" value="1" {% if settings.include_department_name %}checked{% endif %}>
+                  <span>Department</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_vendor_name" value="1" {% if settings.include_vendor_name %}checked{% endif %}>
+                  <span>Vendor</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_category_name" value="1" {% if settings.include_category_name %}checked{% endif %}>
+                  <span>Category</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_renewal_date" value="1" {% if settings.include_renewal_date %}checked{% endif %}>
+                  <span>Renewal Date</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_expiration_date" value="1" {% if settings.include_expiration_date %}checked{% endif %}>
+                  <span>Expiration Date</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_cost" value="1" {% if settings.include_cost %}checked{% endif %}>
+                  <span>Cost</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_po_number" value="1" {% if settings.include_po_number %}checked{% endif %}>
+                  <span>PO Number</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_account_code" value="1" {% if settings.include_account_code %}checked{% endif %}>
+                  <span>Account Code</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_notes" value="1" {% if settings.include_notes %}checked{% endif %}>
+                  <span>Notes</span>
+                </label>
+
+                <label class="checkbox-card finance-settings-checkbox">
+                  <input type="checkbox" name="include_record_link" value="1" {% if settings.include_record_link %}checked{% endif %}>
+                  <span>Record Link</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="finance-template-preview-block">
+            <div class="finance-settings-preview-header">
+              <h3>Preview</h3>
+              <p class="muted">Live preview using sample Finance record data.</p>
+            </div>
+
+            <div class="finance-notification-preview">
+              <div class="finance-notification-preview-toolbar">
+                <span class="finance-notification-preview-label">Preview Subject</span>
+                <div class="finance-notification-preview-subject"></div>
+              </div>
+
+              <div class="finance-notification-preview-body">
+                <div class="finance-notification-preview-logo-wrap" id="finance-preview-logo-wrap" {% if not settings.logo_path %}hidden{% endif %}>
+                  <img
+                    src="{% if settings.logo_path %}{{ url_for('static', filename=settings.logo_path) }}{% endif %}"
+                    alt="Finance notification logo"
+                    class="finance-notification-preview-logo"
+                    id="finance-preview-logo"
+                    style="max-width: {{ settings.logo_width or '180' }}px;"
+                  />
+                </div>
+
+                <h3 id="finance-preview-header">{{ settings.template_header or "Renewal Reminder" }}</h3>
+                <p class="finance-notification-preview-intro" id="finance-preview-intro">
+                  {{ settings.template_intro or "The following finance record is approaching renewal." }}
+                </p>
+
+                <div class="finance-notification-preview-content" id="finance-notification-preview-content">
+                  {% for line in preview_lines %}
+                    <p>
+                      <strong>{{ line.label }}:</strong>
+                      {% if line.is_link %}
+                        <a href="{{ line.value }}" target="_blank" rel="noopener noreferrer">{{ line.value }}</a>
+                      {% else %}
+                        {{ line.value }}
+                      {% endif %}
+                    </p>
+                  {% endfor %}
+                </div>
+
+                <div class="finance-notification-preview-footer" id="finance-preview-footer">
+                  {{ settings.template_footer or "This message was generated by Launchpad Finance notifications." }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="finance-settings-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+{% endblock %}

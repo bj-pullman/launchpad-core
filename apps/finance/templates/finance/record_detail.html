@@ -116,18 +116,20 @@
         action="{{ url_for('finance.upload_attachment', record_id=record.id) }}"
         enctype="multipart/form-data"
         class="finance-form"
+        novalidate
       >
         <div class="finance-form-grid">
           <div class="finance-field">
             <label for="document_type">Document Type</label>
-            <select id="document_type" name="document_type">
-              <option value="contract">Contract</option>
-              <option value="invoice">Invoice</option>
-              <option value="quote">Quote</option>
-              <option value="renewal_notice">Renewal Notice</option>
-              <option value="purchase_order">Purchase Order</option>
-              <option value="other" selected>Other</option>
-            </select>
+              <select id="document_type" name="document_type" required>
+                <option value="" selected disabled>Choose type</option>
+                <option value="contract">Contract</option>
+                <option value="invoice">Invoice</option>
+                <option value="quote">Quote</option>
+                <option value="renewal_notice">Renewal Notice</option>
+                <option value="purchase_order">Purchase Order</option>
+                <option value="other">Other</option>
+              </select>
           </div>
 
           <div class="finance-field finance-field-span-3">

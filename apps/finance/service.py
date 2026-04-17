@@ -1839,24 +1839,25 @@ def get_or_create_vendor_for_import(
     *,
     vendor_name: str | None = None,
     vendor_code: str | None = None,
-) -> int | None:
+) -> tuple[int | None, bool]:
     vendor_name = normalize_text(vendor_name)
     vendor_code = normalize_text(vendor_code)
 
     if not vendor_name and not vendor_code:
-        return None
+        return None, False
 
     existing = find_vendor_for_import(vendor_name=vendor_name, vendor_code=vendor_code)
     if existing:
-        return existing["id"]
+        return existing["id"], False
 
     if vendor_name:
-        return create_vendor(
+        vendor_id = create_vendor(
             vendor_name=vendor_name,
             vendor_code=vendor_code,
         )
+        return vendor_id, True
 
-    return None
+    return None, False
 
 
 def execute_records_import(
@@ -1892,6 +1893,7 @@ def execute_records_import(
     created_rows = 0
     skipped_rows = 0
     error_rows = 0
+    vendors_created = 0
 
     update_import_run_results(
         run_id,
@@ -1930,10 +1932,13 @@ def execute_records_import(
                 )
                 continue
 
-            vendor_id = get_or_create_vendor_for_import(
+            vendor_id, vendor_was_created = get_or_create_vendor_for_import(
                 vendor_name=mapped.get("vendor_name"),
                 vendor_code=mapped.get("vendor_code"),
             )
+
+            if vendor_was_created:
+                vendors_created += 1
 
             term_length = None
             if mapped.get("term_length"):
@@ -1987,7 +1992,8 @@ def execute_records_import(
             )
 
     run_notes = (
-        f"Import completed. Created: {created_rows}, "
+        f"Import completed. Created records: {created_rows}, "
+        f"Created vendors: {vendors_created}, "
         f"Skipped: {skipped_rows}, Errors: {error_rows}."
     )
 
@@ -2015,6 +2021,7 @@ def execute_records_import(
         "updated_rows": 0,
         "skipped_rows": skipped_rows,
         "error_rows": error_rows,
+        "vendors_created": vendors_created,
         "status": final_status,
         "run_notes": run_notes,
     }

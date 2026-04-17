@@ -145,6 +145,32 @@
       </div>
     </a>
     {% endif %}
+
+    {% if can_view_email %}
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_email') }}"
+      class="integration-brand-card"
+    >
+      <div class="integration-brand-logo-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+          <path d="m3 7 9 6 9-6"></path>
+        </svg>
+      </div>
+
+      <div class="integration-brand-title">Email / SMTP</div>
+
+      <div class="integration-brand-body">
+        Configure outbound email delivery used by Finance notifications and future Launchpad email workflows.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open Settings</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+    {% endif %}
+    
   </div>
 </div>
 {% endblock %}
