@@ -66,6 +66,7 @@ from .service import (
     get_import_profile_field_map,
     validate_records_import,
     infer_import_field_map,
+    maybe_send_renewal_notification_for_record,
 )
 
 @bp.route("/")
@@ -264,7 +265,16 @@ def record_create(department_name: str):
                 uploaded_by_user_id=user_id,
             )
 
-        flash("Record created successfully.", "success")
+        sent_now, send_message = maybe_send_renewal_notification_for_record(
+            record_id,
+            changed_by_user_id=user_id,
+        )
+
+        if sent_now:
+            flash(f"Record created successfully. {send_message}", "success")
+        else:
+            flash("Record created successfully.", "success")
+
         return redirect(url_for("finance.record_detail", record_id=record_id))
 
     return render_template(
@@ -360,7 +370,16 @@ def record_edit(record_id: int):
             changed_by_user_id=user_id,
         )
 
-        flash("Record updated successfully.", "success")
+        sent_now, send_message = maybe_send_renewal_notification_for_record(
+            record_id,
+            changed_by_user_id=user_id,
+        )
+
+        if sent_now:
+            flash(f"Record updated successfully. {send_message}", "success")
+        else:
+            flash("Record updated successfully.", "success")
+
         return redirect(url_for("finance.record_detail", record_id=record_id))
 
     return render_template(
@@ -1441,6 +1460,7 @@ def imports_validate(department_name: str, run_id: int):
             flash(
                 f"Import finished. Created {result['created_rows']} record(s), "
                 f"created {result['vendors_created']} vendor(s), "
+                f"sent {result.get('notifications_sent', 0)} notification(s), "
                 f"skipped {result['skipped_rows']}, errors {result['error_rows']}.",
                 "success",
             )

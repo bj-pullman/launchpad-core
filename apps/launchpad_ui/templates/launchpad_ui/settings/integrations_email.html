@@ -130,12 +130,44 @@
               <small>Optional display name for future email features.</small>
             </div>
           </div>
+
+          <div class="email-settings-actions">
+            <div class="email-test-group">
+              <div class="form-field">
+                <label for="test_email_recipient">Test Recipient Email</label>
+                <input
+                  type="email"
+                  id="test_email_recipient"
+                  name="test_email_recipient"
+                  value="{{ settings.test_email_recipient or '' }}"
+                  placeholder="you@yourorg.org"
+                />
+                <small>Used by the Send Test Email button to verify SMTP delivery.</small>
+              </div>
+
+              <button
+                type="submit"
+                name="action"
+                value="send_test_email"
+                class="btn btn-secondary"
+              >
+                Send Test Email
+              </button>
+            </div>
         </div>
       </div>
-
-      <div class="form-actions">
-        <button type="submit" name="action" value="save_settings" class="btn btn-primary">Save Changes</button>
       </div>
+
+        <div class="email-save-group">
+          <button
+            type="submit"
+            name="action"
+            value="save_settings"
+            class="btn btn-primary"
+          >
+            Save Changes
+          </button>
+        </div>
     </div>
   </form>
 </div>

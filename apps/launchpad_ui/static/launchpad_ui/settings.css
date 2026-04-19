@@ -159,6 +159,14 @@
   background: linear-gradient(to bottom, #ffffff, #f0fdfa);
 }
 
+.settings-index-card[data-section="finance"]::before {
+  background: #15803d;
+}
+
+.settings-index-card[data-section="finance"]:hover {
+  background: linear-gradient(to bottom, #ffffff, #f0fdf4);
+}
+
 .settings-index-card:hover {
   transform: translateY(-3px);
   border-color: rgba(15, 23, 42, 0.14);
@@ -777,6 +785,14 @@
   background: linear-gradient(to bottom, #ffffff, #f2fcf7);
 }
 
+.integration-brand-card-email::before {
+  background: #2563eb;
+}
+
+.integration-brand-card-email:hover {
+  background: linear-gradient(to bottom, #ffffff, #f1f7ff);
+}
+
 /* Staff Status page normalization */
 .staff-status-department-list,
 .staff-status-kiosk-list {
@@ -1308,8 +1324,50 @@
 
 .finance-settings-test-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: end;
   margin-top: 14px;
+}
+
+.finance-settings-test-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.email-settings-actions {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.email-test-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.email-save-group {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Make test button visually secondary */
+.email-test-group .btn {
+  height: 42px;
+  white-space: nowrap;
+}
+
+/* Space the save button more */
+.email-save-group .btn {
+  min-width: 160px;
 }
 
 @media (max-width: 1000px) {
@@ -1333,6 +1391,14 @@
   }
 
   .finance-settings-actions > * {
+    width: 100%;
+  }
+
+  .finance-settings-test-row {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-settings-test-actions .btn {
     width: 100%;
   }
 }

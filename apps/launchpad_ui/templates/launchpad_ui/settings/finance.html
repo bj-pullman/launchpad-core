@@ -156,16 +156,30 @@
             </label>
           </div>
 
-        <div class="finance-settings-test-actions">
-            <button
+          <div class="finance-settings-test-row">
+            <div class="form-field">
+              <label for="test_recipient_email">Test Recipient Email</label>
+              <input
+                type="email"
+                id="test_recipient_email"
+                name="test_recipient_email"
+                value="{{ settings.test_recipient_email or '' }}"
+                placeholder="you@yourorg.org"
+              />
+              <small>Used by the Send Test Email button to verify the template and delivery flow.</small>
+            </div>
+
+            <div class="finance-settings-test-actions">
+              <button
                 type="submit"
                 name="action"
                 value="send_test_email"
                 class="btn btn-secondary"
-            >
+              >
                 Send Test Email
-            </button>
-        </div>
+              </button>
+            </div>
+          </div>
 
           <div class="finance-settings-actions">
             <button type="submit" class="btn btn-primary">Save Changes</button>

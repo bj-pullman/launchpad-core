@@ -319,6 +319,18 @@ def _provider_status(provider: str, settings: dict) -> str:
 
     return "Disabled"
 
+def _public_base_url() -> str:
+    return (get_setting("general.public_base_url", "") or "").strip().rstrip("/")
+
+def _build_public_url(path: str) -> str:
+    base_url = _public_base_url()
+    clean_path = "/" + (path or "").lstrip("/")
+
+    if not base_url:
+        return clean_path
+
+    return f"{base_url}{clean_path}"
+
 
 def _test_oidc_configuration(provider: str, form):
     if provider == "microsoft_oidc":
@@ -567,6 +579,7 @@ def settings_general():
         footer_text = (request.form.get("footer_text") or "").strip()
         support_email = (request.form.get("support_email") or "").strip()
         helpdesk_url = (request.form.get("helpdesk_url") or "").strip()
+        public_base_url = (request.form.get("public_base_url") or "").strip().rstrip("/")
         announcement_enabled = 1 if request.form.get("announcement_enabled") == "1" else 0
         announcement_text = (request.form.get("announcement_text") or "").strip()
 
@@ -591,6 +604,7 @@ def settings_general():
         set_setting("general.footer_text", footer_text)
         set_setting("general.support_email", support_email)
         set_setting("general.helpdesk_url", helpdesk_url)
+        set_setting("general.public_base_url", public_base_url)
         set_setting("general.announcement_enabled", announcement_enabled)
         set_setting("general.announcement_text", announcement_text)
         set_setting("general.timezone", timezone_value)
@@ -606,6 +620,7 @@ def settings_general():
         "footer_text": get_setting("general.footer_text", "Sheridan School District • Internal Tech Ops"),
         "support_email": get_setting("general.support_email", ""),
         "helpdesk_url": get_setting("general.helpdesk_url", ""),
+        "public_base_url": get_setting("general.public_base_url", ""),
         "announcement_enabled": get_bool_setting("general.announcement_enabled", False),
         "announcement_text": get_setting("general.announcement_text", ""),
         "timezone": get_setting("general.timezone", "America/Chicago"),
@@ -659,12 +674,7 @@ def _format_money_preview(value: str) -> str:
 
 
 def _build_finance_template_preview_context():
-    public_base_url = (get_setting("general.public_base_url", "") or "").strip()
-    if not public_base_url:
-        public_base_url = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
-
-    record_path = "/finance/records/123"
-    record_url = f"{public_base_url}{record_path}" if public_base_url else record_path
+    record_url = _build_public_url("/finance/records/123")
 
     return {
         "title": "Adobe Creative Cloud",
@@ -1926,6 +1936,7 @@ def settings_integrations_email():
         smtp_password = (request.form.get("smtp_password") or "").strip()
         smtp_use_tls = 1 if request.form.get("smtp_use_tls") == "1" else 0
         from_name = (request.form.get("from_name") or "").strip()
+        test_email_recipient = (request.form.get("test_email_recipient") or "").strip()
 
         if enabled and not smtp_host:
             flash("SMTP host is required when email delivery is enabled.", "error")
@@ -1945,6 +1956,48 @@ def settings_integrations_email():
             set_setting("mail.smtp_password", smtp_password, is_sensitive=1)
         set_setting("mail.smtp_use_tls", smtp_use_tls)
         set_setting("mail.from_name", from_name)
+        set_setting("mail.test_recipient", test_email_recipient)
+
+        if action == "send_test_email":
+            if not test_email_recipient:
+                flash("Enter a test recipient email.", "error")
+                return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+            if not smtp_username:
+                flash("SMTP username is required to send a test email.", "error")
+                return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+            try:
+                from modules.core.mail.service import send_mail
+
+                send_mail(
+                    sender_email=smtp_username,
+                    recipient_email=test_email_recipient,
+                    subject="Launchpad Email Test",
+                    text_body="This is a test email from Launchpad SMTP integration.",
+                    html_body="""
+                        <html>
+                          <body style="margin:0; padding:24px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif; color:#0f172a;">
+                            <div style="max-width:640px; margin:0 auto; background:#ffffff; border:1px solid #dbe4ee; border-radius:16px; overflow:hidden;">
+                              <div style="padding:28px;">
+                                <h1 style="margin:0 0 12px; font-size:24px; line-height:1.2; color:#0f172a;">
+                                  Launchpad Email Test
+                                </h1>
+                                <p style="margin:0; font-size:15px; line-height:1.6; color:#475569;">
+                                  Your Email / SMTP integration is working correctly.
+                                </p>
+                              </div>
+                            </div>
+                          </body>
+                        </html>
+                    """,
+                )
+
+                flash(f"Test email sent to {test_email_recipient}.", "success")
+            except Exception as exc:
+                flash(f"Test email failed: {exc}", "error")
+
+            return redirect(url_for("launchpad_ui.settings_integrations_email"))
 
         flash("Email integration settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_integrations_email"))
@@ -1956,6 +2009,7 @@ def settings_integrations_email():
         "smtp_username": get_setting("mail.smtp_username", ""),
         "smtp_use_tls": get_bool_setting("mail.smtp_use_tls", True),
         "from_name": get_setting("mail.from_name", ""),
+        "test_email_recipient": get_setting("mail.test_recipient", ""),
         "has_password": bool((get_setting("mail.smtp_password", "") or "").strip()),
     }
 

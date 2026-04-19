@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
+from apps.finance.notification_service import send_finance_test_email
+from modules.core.settings.settings_service import get_setting, get_bool_setting
 from modules.core.identity.identity_db import get_connection as get_identity_connection
 from .db import get_connection
 import os
@@ -366,7 +368,7 @@ def create_record(
     title = normalize_text(title)
     department_name = normalize_text(department_name)
     record_type = normalize_text(record_type) or "renewal"
-    status = normalize_text(status) or "active"
+    status = (normalize_text(status) or "active").lower()
 
     if not title:
         raise ValueError("title is required")
@@ -498,6 +500,272 @@ def get_record_by_id(record_id: int) -> dict | None:
         ).fetchone()
 
     return dict(row) if row else None
+
+def _parse_iso_date(value: str | None) -> date | None:
+    value = normalize_text(value)
+    if not value:
+        return None
+
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def should_send_renewal_notification_now(
+    *,
+    renewal_date: str | None,
+    notify_days_before: int | None,
+    today: date | None = None,
+    overdue_grace_days: int = 30,
+) -> bool:
+    renewal = _parse_iso_date(renewal_date)
+    if not renewal:
+        return False
+
+    if today is None:
+        today = date.today()
+
+    try:
+        days_before = int(notify_days_before or 0)
+    except (TypeError, ValueError):
+        days_before = 0
+
+    if days_before < 0:
+        days_before = 0
+
+    delta_days = (renewal - today).days
+    return (-overdue_grace_days) <= delta_days <= days_before
+
+
+def build_finance_notification_preview_lines(record: dict) -> list[dict]:
+    lines = []
+
+    field_map = [
+        ("title", "Title", False),
+        ("department_name", "Department", False),
+        ("vendor_name", "Vendor", False),
+        ("category_name", "Category", False),
+        ("renewal_date", "Renewal Date", False),
+        ("expiration_date", "Expiration Date", False),
+        ("cost", "Cost", False),
+        ("po_number", "PO Number", False),
+        ("account_code", "Account Code", False),
+        ("notes", "Notes", False),
+        ("record_url", "Record Link", True),
+    ]
+
+    for key, label, is_link in field_map:
+        value = record.get(key)
+        if value is None or str(value).strip() == "":
+            continue
+
+        lines.append(
+            {
+                "label": label,
+                "value": value,
+                "is_link": is_link,
+            }
+        )
+
+    return lines
+
+
+def build_finance_notification_context(record: dict) -> dict:
+    record_id = record["id"]
+    vendor_name = record.get("vendor_name") or ""
+    category_name = record.get("category_name") or ""
+
+    if not vendor_name and record.get("vendor_id"):
+        vendor = get_vendor_by_id(record["vendor_id"])
+        vendor_name = vendor["vendor_name"] if vendor else ""
+
+    if not category_name and record.get("category_id"):
+        categories = list_categories()
+        category_map = {item["id"]: item["category_name"] for item in categories}
+        category_name = category_map.get(record["category_id"], "")
+
+    renewal = _parse_iso_date(record.get("renewal_date"))
+    today = date.today()
+    days_until_renewal = ""
+    if renewal:
+        days_until_renewal = str((renewal - today).days)
+
+    record_url = f"/records/{record_id}"
+    public_base_url = (get_setting("general.public_base_url", "") or "").strip().rstrip("/")
+    if public_base_url:
+        record_url = f"{public_base_url}/finance/records/{record_id}"
+
+    context = {
+        "title": record.get("title") or "",
+        "department_name": record.get("department_name") or "",
+        "vendor_name": vendor_name,
+        "category_name": category_name,
+        "renewal_date": record.get("renewal_date") or "",
+        "expiration_date": record.get("expiration_date") or "",
+        "cost": record.get("cost") or "",
+        "po_number": record.get("po_number") or "",
+        "account_code": record.get("account_code") or "",
+        "notification_recipients": record.get("notification_recipients") or "",
+        "notes": record.get("notes") or "",
+        "record_url": record_url,
+        "days_until_renewal": days_until_renewal,
+    }
+
+    return context
+
+
+def maybe_send_renewal_notification_for_record(
+    record_id: int,
+    *,
+    changed_by_user_id: int | None = None,
+) -> tuple[bool, str]:
+    record = get_record_by_id(record_id)
+    if not record:
+        return False, "Record not found."
+
+    notifications_enabled = get_bool_setting("finance.notifications.enabled", False)
+    if not notifications_enabled:
+        return False, "Finance notifications are disabled."
+
+    record_status = (record.get("status") or "").strip().lower()
+    if record_status not in {"active", "pending_renewal"}:
+        return False, "Record status is not eligible for renewal notifications."
+
+    renewal_date = record.get("renewal_date")
+    if not should_send_renewal_notification_now(
+        renewal_date=renewal_date,
+        notify_days_before=record.get("notify_days_before"),
+    ):
+        return False, "Record is not within its notification window."
+
+    if has_renewal_notification_been_sent(
+        record_id=record_id,
+        renewal_date=renewal_date,
+    ):
+        return False, "Renewal notification has already been sent for this renewal date."
+
+    sender_email = (get_setting("finance.notifications.sender_email", "") or "").strip()
+    default_recipients = (get_setting("finance.notifications.default_recipients", "") or "").strip()
+    use_record_recipients_first = get_bool_setting(
+        "finance.notifications.use_record_recipients_first",
+        True,
+    )
+    fallback_to_default_recipients = get_bool_setting(
+        "finance.notifications.fallback_to_default_recipients",
+        True,
+    )
+
+    record_recipients = (record.get("notification_recipients") or "").strip()
+
+    recipient_email = ""
+    if use_record_recipients_first and record_recipients:
+        recipient_email = record_recipients
+    elif default_recipients:
+        recipient_email = default_recipients
+
+    if not recipient_email and fallback_to_default_recipients and default_recipients:
+        recipient_email = default_recipients
+
+    if not sender_email:
+        return False, "Finance sender email is not configured."
+
+    if not recipient_email:
+        return False, "No notification recipient is configured for this record."
+
+    template_header = (get_setting("finance.notifications.template_header", "") or "").strip()
+    template_intro = (get_setting("finance.notifications.template_intro", "") or "").strip()
+    template_subject = (get_setting("finance.notifications.template_subject", "") or "").strip()
+    template_footer = (get_setting("finance.notifications.template_footer", "") or "").strip()
+    subject_prefix = (get_setting("finance.notifications.subject_prefix", "") or "").strip()
+
+    preview_context = build_finance_notification_context(record)
+    preview_lines = build_finance_notification_preview_lines(preview_context)
+
+    send_finance_test_email(
+        sender_email=sender_email,
+        recipient_email=recipient_email,
+        subject_template=template_subject,
+        subject_prefix=subject_prefix,
+        template_header=template_header,
+        template_intro=template_intro,
+        template_footer=template_footer,
+        preview_context=preview_context,
+        preview_lines=preview_lines,
+    )
+
+    log_renewal_notification_sent(
+        record_id=record_id,
+        renewal_date=renewal_date,
+        recipient_email=recipient_email,
+        changed_by_user_id=changed_by_user_id,
+    )
+
+    return True, f"Notification sent to {recipient_email}."
+
+def has_renewal_notification_been_sent(
+    *,
+    record_id: int,
+    renewal_date: str | None,
+) -> bool:
+    renewal_date = normalize_text(renewal_date)
+    if not renewal_date:
+        return False
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id
+            FROM finance_record_history
+            WHERE finance_record_id = ?
+              AND event_type = 'renewal_notification_sent'
+              AND summary LIKE ?
+            LIMIT 1
+            """,
+            (record_id, f"Renewal notification sent for renewal date {renewal_date}%"),
+        ).fetchone()
+
+    return row is not None
+
+
+def log_renewal_notification_sent(
+    *,
+    record_id: int,
+    renewal_date: str | None,
+    recipient_email: str,
+    changed_by_user_id: int | None = None,
+):
+    renewal_date = normalize_text(renewal_date)
+    recipient_email = normalize_text(recipient_email)
+
+    if not renewal_date:
+        return
+
+    now = utc_now_iso()
+    summary = f"Renewal notification sent for renewal date {renewal_date}"
+    if recipient_email:
+        summary = f"{summary} to {recipient_email}"
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO finance_record_history (
+                finance_record_id,
+                event_type,
+                summary,
+                changed_by_user_id,
+                changed_at
+            )
+            VALUES (?, 'renewal_notification_sent', ?, ?, ?)
+            """,
+            (
+                record_id,
+                summary,
+                changed_by_user_id,
+                now,
+            ),
+        )
+        conn.commit()
 
 def create_vendor(
     vendor_name: str,
@@ -666,7 +934,7 @@ def update_record(
     title = normalize_text(title)
     department_name = normalize_text(department_name)
     record_type = normalize_text(record_type) or "renewal"
-    status = normalize_text(status) or "active"
+    status = (normalize_text(status) or "active").lower()
 
     if not title:
         raise ValueError("title is required")
@@ -1894,6 +2162,7 @@ def execute_records_import(
     skipped_rows = 0
     error_rows = 0
     vendors_created = 0
+    notifications_sent = 0
 
     update_import_run_results(
         run_id,
@@ -1907,17 +2176,15 @@ def execute_records_import(
         completed=False,
     )
 
-    for index, row in enumerate(rows, start=2):  # row 1 is header
+    for index, row in enumerate(rows, start=2):
         try:
             mapped = {}
             for target_field, source_column in target_to_source.items():
                 mapped[target_field] = normalize_text(row.get(source_column))
 
-            # Default department from current Finance area if not mapped in file
             if default_department_name:
                 mapped["department_name"] = normalize_text(default_department_name)
 
-            # Only require title at this stage; department can fall back to default
             missing_required = []
             if not normalize_text(mapped.get("title")):
                 missing_required.append("title")
@@ -1954,9 +2221,7 @@ def execute_records_import(
                 except ValueError:
                     notify_days_before = 30
 
-            print("IMPORT ROW:", mapped)
-
-            create_record(
+            record_id = create_record(
                 record_type=mapped.get("record_type") or "renewal",
                 title=mapped.get("title") or "",
                 department_name=mapped.get("department_name") or "",
@@ -1979,10 +2244,16 @@ def execute_records_import(
                 created_by_user_id=created_by_user_id,
             )
 
+            sent_now, _ = maybe_send_renewal_notification_for_record(
+                record_id,
+                changed_by_user_id=created_by_user_id,
+            )
+            if sent_now:
+                notifications_sent += 1
+
             created_rows += 1
 
         except Exception as exc:
-            print("IMPORT ERROR:", exc)
             error_rows += 1
             log_import_run_error(
                 run_id=run_id,
@@ -1994,6 +2265,7 @@ def execute_records_import(
     run_notes = (
         f"Import completed. Created records: {created_rows}, "
         f"Created vendors: {vendors_created}, "
+        f"Notifications sent: {notifications_sent}, "
         f"Skipped: {skipped_rows}, Errors: {error_rows}."
     )
 
@@ -2022,6 +2294,7 @@ def execute_records_import(
         "skipped_rows": skipped_rows,
         "error_rows": error_rows,
         "vendors_created": vendors_created,
+        "notifications_sent": notifications_sent,
         "status": final_status,
         "run_notes": run_notes,
     }
