@@ -1142,11 +1142,13 @@ def list_recent_absences_for_department(
 
 def build_public_url(endpoint: str, **values) -> str:
     path = url_for(endpoint, _external=False, **values)
-    base = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
+
+    base = (get_setting("general.public_base_url", "") or "").rstrip("/")
 
     if base:
         return f"{base}{path}"
 
+    # fallback ONLY if not configured
     return url_for(endpoint, _external=True, **values)
 
 OVERVIEW_RANGE_OPTIONS = {

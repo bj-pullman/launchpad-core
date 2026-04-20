@@ -24,13 +24,6 @@
     </div>
   </div>
 
-  <div class="finance-record-tabs">
-    <a href="{{ url_for('finance.imports', department_name=department_name) }}" class="active">Upload</a>
-    <a href="{{ url_for('finance.imports_profiles', department_name=department_name) }}">Profiles</a>
-    <a href="{{ url_for('finance.imports_history', department_name=department_name) }}">History</a>
-    <a href="{{ url_for('finance.imports_sftp', department_name=department_name) }}">SFTP</a>
-  </div>
-
   <div class="content-card">
     <form method="post" class="finance-form">
       <div class="finance-form-grid" style="margin-bottom: 14px;">

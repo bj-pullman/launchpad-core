@@ -10,6 +10,10 @@ from .access_service import (
     has_budget_view,
     has_finance_admin,
     list_accessible_departments_for_user,
+    can_access_department,
+    can_manage_department,
+    has_budget_view,
+    can_access_budget_department,
 )
 from .blueprint import bp
 from .service import (
@@ -67,6 +71,9 @@ from .service import (
     validate_records_import,
     infer_import_field_map,
     maybe_send_renewal_notification_for_record,
+    get_budget_summary_for_department,
+    get_budget_breakdown_for_department,
+    get_budget_year_options_for_department,
 )
 
 @bp.route("/")
@@ -1486,4 +1493,91 @@ def imports_validate(department_name: str, run_id: int):
         run=run,
         validation=validation,
         can_manage=can_manage_department(user_id, department_name),
+    )
+
+@bp.route("/imports/<int:run_id>/errors/export")
+@login_required
+def export_import_errors(run_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    run = get_import_run_by_id(run_id)
+    if not run:
+        abort(404)
+
+    department_name = (run.get("department_name") or "").strip()
+    if department_name and not can_access_department(user_id, department_name):
+        abort(403)
+
+    errors = list_import_run_errors(run_id)
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Row Number", "Source Identifier", "Error Message", "Created At"])
+
+    for item in errors:
+        writer.writerow([
+            item.get("row_number") or "",
+            item.get("source_identifier") or "",
+            item.get("error_message") or "",
+            item.get("created_at") or "",
+        ])
+
+    csv_data = output.getvalue()
+    output.close()
+
+    response = Response(csv_data, mimetype="text/csv")
+    response.headers["Content-Disposition"] = f"attachment; filename=finance-import-errors-run-{run_id}.csv"
+    return response
+
+@bp.route("/<department_name>/budget")
+@login_required
+def budget(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_access_budget_department(user_id, department_name):
+        abort(403)
+
+    year = request.args.get("year", type=int)
+    group_by = (request.args.get("group_by") or "category").strip().lower()
+    q = (request.args.get("q") or "").strip()
+
+    if group_by not in {"category", "vendor", "month"}:
+        group_by = "category"
+
+    year_options = get_budget_year_options_for_department(department_name)
+    if not year and year_options:
+        year = year_options[0]
+
+    summary = get_budget_summary_for_department(
+        department_name=department_name,
+        year=year,
+        q=q,
+    )
+
+    breakdown = get_budget_breakdown_for_department(
+        department_name=department_name,
+        year=year,
+        group_by=group_by,
+        q=q,
+    )
+
+    return render_template(
+        "finance/budget.html",
+        department_name=department_name,
+        active_tab="budget",
+        can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
+        budget_summary=summary,
+        budget_breakdown=breakdown,
+        selected_year=year,
+        year_options=year_options,
+        selected_group_by=group_by,
+        search_query=q,
     )

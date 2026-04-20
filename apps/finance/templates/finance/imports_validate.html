@@ -22,12 +22,34 @@
       <h1>{{ department_name }} Import Validation</h1>
       <p class="page-subtitle">{{ run.original_filename }} • {{ run.import_type|replace("_", " ")|title }}</p>
     </div>
-    {% if can_manage and validation.valid_rows > 0 %}
-      <div class="page-header-actions">
-        <form method="post" class="finance-inline-form" data-confirm="Run this import now?" data-confirm-action="confirm">
-          <button type="submit" class="btn finance-import-btn">Run Import</button>
-        </form>
-      </div>
+  </div>
+
+  <div class="form-actions" style="margin-top: 12px; margin-bottom: 16px;">
+    <a
+      href="{{ url_for('finance.imports', department_name=department_name) }}"
+      class="btn btn-secondary"
+    >
+      Cancel
+    </a>
+
+    <a
+      href="{{ url_for('finance.imports_mapping', department_name=department_name, run_id=run.id) }}"
+      class="btn btn-secondary"
+    >
+      Back to Mapping
+    </a>
+
+    {% if validation.errors %}
+      <a
+        href="{{ url_for('finance.imports', department_name=department_name) }}"
+        class="btn finance-import-btn"
+      >
+        Upload Corrected File
+      </a>
+    {% elif can_manage and validation.valid_rows > 0 %}
+      <form method="post" class="finance-inline-form" data-confirm="Run this import now?" data-confirm-action="confirm">
+        <button type="submit" class="btn finance-import-btn">Run Import</button>
+      </form>
     {% endif %}
   </div>
 
@@ -87,6 +109,17 @@
         <h3 class="finance-section-title">Validation Errors</h3>
         <p class="page-subtitle">These rows will be skipped unless corrected.</p>
       </div>
+
+      {% if validation.errors %}
+        <div class="page-header-actions">
+          <a
+            href="{{ url_for('finance.export_import_errors', run_id=run.id) }}"
+            class="btn finance-import-btn"
+          >
+            Export Errors CSV
+          </a>
+        </div>
+      {% endif %}
     </div>
 
     {% if validation.errors %}

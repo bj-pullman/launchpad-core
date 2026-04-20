@@ -33,6 +33,7 @@ function initFinanceUI() {
   initConfirmModals();
   initFileUploadLabel();
   initTermCalculation();
+  initFinanceBudgetChart()
 }
 
 function initVendorFormToggle() {
@@ -307,5 +308,29 @@ function initFinanceBulkSelection(config) {
     cb.addEventListener("click", function (e) {
       e.stopPropagation();
     });
+  });
+}
+
+function initFinanceBudgetChart() {
+  const canvas = document.getElementById("finance-budget-chart");
+  const data = window.financeBudgetData;
+
+  if (!canvas || !data || !window.Chart) return;
+
+  new Chart(canvas, {
+    type: data.groupBy === "month" ? "line" : "bar",
+    data: {
+      labels: data.labels,
+      datasets: [
+        {
+          label: "Amount Spent",
+          data: data.values
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
   });
 }

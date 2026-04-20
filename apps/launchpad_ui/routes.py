@@ -1,3 +1,4 @@
+# launchpad_ui/routes.py
 import os
 from pathlib import Path
 import secrets
@@ -22,6 +23,7 @@ from apps.staff_status.service import (
     get_department_record,
     list_active_departments_from_users,
     upsert_department_settings,
+    build_public_url as build_staff_status_public_url,
 )
 
 from apps.staff_status.access_service import (
@@ -1532,6 +1534,16 @@ def settings_staff_status():
                 "kiosk_enabled": kiosk_enabled,
                 "kiosk_token": kiosk_token,
                 "board_token": board_token,
+                "kiosk_url": (
+                    build_staff_status_public_url("staff_status.kiosk", token=kiosk_token)
+                    if kiosk_enabled and kiosk_token
+                    else ""
+                ),
+                "board_url": (
+                    build_staff_status_public_url("staff_status.board_public", token=board_token)
+                    if board_token
+                    else ""
+                ),
             }
         )
 

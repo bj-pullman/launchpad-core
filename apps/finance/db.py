@@ -208,10 +208,19 @@ def init_finance_db():
         starter_categories = [
             "Curriculum Software",
             "Maintenance Software",
+            "Productivity Software",
+            "Security Software",
+            "Subscription",
             "Service Agreement",
             "Maintenance Agreement",
-            "Subscription",
-            "Hardware",
+            "Student Devices",
+            "Staff Devices",
+            "Networking Hardware",
+            "Printing",
+            "Infrastructure",
+            "Classroom Technology",
+            "Peripherals",
+            "Professional Services",
             "Other",
         ]
 

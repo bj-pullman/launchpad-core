@@ -202,7 +202,7 @@
                 <input
                   type="text"
                   readonly
-                  value="{% if department.kiosk_enabled and department.kiosk_token %}{{ general_settings.public_base_url }}{{ url_for('staff_status.kiosk', token=department.kiosk_token) }}{% endif %}"
+                  value="{{ department.kiosk_url }}"
                   data-kiosk-url-input="{{ department.department_name }}"
                   placeholder="No kiosk URL generated yet"
                 />
@@ -213,7 +213,7 @@
                 <input
                   type="text"
                   readonly
-                  value="{% if department.board_token %}{{ general_settings.public_base_url }}{{ url_for('staff_status.board_public', token=department.board_token) }}{% endif %}"
+                  value="{{ department.board_url }}"
                   data-board-url-input="{{ department.department_name }}"
                   placeholder="No board URL generated yet"
                 />

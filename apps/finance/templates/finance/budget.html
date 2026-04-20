@@ -1,0 +1,73 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  <div class="finance-subnav">
+    ...
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Budget</h1>
+      <p class="page-subtitle">Budget reporting derived from Finance records.</p>
+    </div>
+  </div>
+
+  <form method="get" class="content-card finance-budget-filters">
+    ...
+  </form>
+
+  <div class="finance-stats">
+    ...
+  </div>
+
+  <div class="content-card">
+    <div class="staff-status-chart-card-header">
+      <div>
+        <h2>Budget Breakdown</h2>
+        <p class="muted">Grouped by {{ selected_group_by }} for {{ selected_year }}.</p>
+      </div>
+    </div>
+    <div class="finance-chart-wrap">
+      <canvas id="finance-budget-chart"></canvas>
+    </div>
+  </div>
+
+  <div class="content-card" style="margin-top:16px;">
+    <h2>Budget Breakdown Table</h2>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>...</thead>
+        <tbody>
+          {% for row in budget_breakdown.rows %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td>${{ "{:,.2f}".format(row.total_spent) }}</td>
+            <td>{{ row.record_count }}</td>
+            <td>${{ "{:,.2f}".format(row.average_spend) }}</td>
+            <td>{{ "{:.1f}".format(row.percent_of_total) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.financeBudgetData = {
+    labels: {{ budget_breakdown.chart_labels | tojson }},
+    values: {{ budget_breakdown.chart_values | tojson }},
+    groupBy: {{ selected_group_by | tojson }}
+  };
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

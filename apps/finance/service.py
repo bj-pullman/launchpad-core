@@ -9,6 +9,8 @@ from pathlib import Path
 import csv
 from io import TextIOWrapper
 from openpyxl import load_workbook
+from collections import defaultdict
+from decimal import Decimal, InvalidOperation
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FINANCE_UPLOADS_DIR = BASE_DIR / "instance" / "finance" / "uploads"
@@ -905,7 +907,23 @@ def list_vendors_all() -> list[dict]:
 
     return [dict(row) for row in rows]
 
+def normalize_vendor_name(value: str | None) -> str | None:
+    value = normalize_text(value)
+    if not value:
+        return None
 
+    v = value.strip()
+
+    # preserve short acronyms (SHI, CDW, B&H)
+    if v.isupper() and len(v) <= 5:
+        return v
+
+    # preserve mixed acronyms like CDW-G
+    if "-" in v and v.upper() == v:
+        return v
+
+    # normal title case
+    return " ".join(word.capitalize() for word in v.split())
 
 def update_record(
     *,
@@ -2108,7 +2126,7 @@ def get_or_create_vendor_for_import(
     vendor_name: str | None = None,
     vendor_code: str | None = None,
 ) -> tuple[int | None, bool]:
-    vendor_name = normalize_text(vendor_name)
+    vendor_name = normalize_vendor_name(vendor_name)
     vendor_code = normalize_text(vendor_code)
 
     if not vendor_name and not vendor_code:
@@ -2207,6 +2225,12 @@ def execute_records_import(
             if vendor_was_created:
                 vendors_created += 1
 
+            category = find_category_for_import(mapped.get("category_name"))
+            if mapped.get("category_name") and not category:
+                raise ValueError(f"Category not found: {mapped.get('category_name')}")
+
+            category_id = category["id"] if category else None
+
             term_length = None
             if mapped.get("term_length"):
                 try:
@@ -2226,7 +2250,7 @@ def execute_records_import(
                 title=mapped.get("title") or "",
                 department_name=mapped.get("department_name") or "",
                 vendor_id=vendor_id,
-                category_id=None,
+                category_id=category_id,
                 account_code=mapped.get("account_code"),
                 po_number=mapped.get("po_number"),
                 purchase_date=mapped.get("purchase_date"),
@@ -2337,6 +2361,17 @@ def get_import_profile_field_map(profile_id: int) -> dict[str, str]:
 
     return result
 
+def clear_import_run_errors(run_id: int):
+    with get_connection() as conn:
+        conn.execute(
+            """
+            DELETE FROM finance_import_run_errors
+            WHERE run_id = ?
+            """,
+            (run_id,),
+        )
+        conn.commit()
+
 
 def validate_records_import(
     *,
@@ -2360,6 +2395,10 @@ def validate_records_import(
             continue
         target_to_source[mapping["target_field_name"]] = mapping["source_column_name"]
 
+    # Clear any previously stored validation/execution errors for this run
+    # so the table/export matches the current validation pass.
+    clear_import_run_errors(run_id)
+
     preview_rows = []
     errors = []
     valid_rows = 0
@@ -2376,9 +2415,11 @@ def validate_records_import(
 
         row_errors = []
 
+        # Required field validation
         if not normalize_text(mapped.get("title")):
             row_errors.append("Missing required field: title")
 
+        # Vendor validation / preview
         vendor_name = normalize_text(mapped.get("vendor_name"))
         vendor_code = normalize_text(mapped.get("vendor_code"))
         if vendor_name or vendor_code:
@@ -2389,14 +2430,52 @@ def validate_records_import(
             if not existing_vendor and vendor_name:
                 vendors_to_create += 1
 
+        # Category validation
+        category_name = normalize_text(mapped.get("category_name"))
+        if category_name:
+            existing_category = find_category_for_import(category_name)
+            if not existing_category:
+                row_errors.append(f"Category not found: {category_name}")
+
+        # Optional sanity checks you can keep or remove later
+        if mapped.get("term_length"):
+            try:
+                int(str(mapped["term_length"]).strip())
+            except ValueError:
+                row_errors.append(f"Invalid term_length: {mapped.get('term_length')}")
+
+        if mapped.get("notify_days_before"):
+            try:
+                int(str(mapped["notify_days_before"]).strip())
+            except ValueError:
+                row_errors.append(
+                    f"Invalid notify_days_before: {mapped.get('notify_days_before')}"
+                )
+
+        source_identifier = (
+            mapped.get("title")
+            or row.get(next(iter(row.keys()), ""), "")
+            or f"Row {index}"
+        )
+
         if row_errors:
             skipped_rows += 1
+            error_message = "; ".join(row_errors)
+
             errors.append(
                 {
                     "row_number": index,
-                    "source_identifier": mapped.get("title") or row.get(next(iter(row.keys()), ""), ""),
-                    "error_message": "; ".join(row_errors),
+                    "source_identifier": source_identifier,
+                    "error_message": error_message,
                 }
+            )
+
+            # Persist validation errors so export/errors table uses same source
+            log_import_run_error(
+                run_id=run_id,
+                row_number=index,
+                source_identifier=source_identifier,
+                error_message=error_message,
             )
         else:
             valid_rows += 1
@@ -2412,6 +2491,24 @@ def validate_records_import(
         "preview_rows": preview_rows,
         "errors": errors,
     }
+
+def find_category_for_import(category_name: str | None) -> dict | None:
+    category_name = normalize_text(category_name)
+    if not category_name:
+        return None
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM finance_categories
+            WHERE LOWER(TRIM(category_name)) = LOWER(TRIM(?))
+            LIMIT 1
+            """,
+            (category_name,),
+        ).fetchone()
+
+    return dict(row) if row else None
 
 def normalize_import_header(value: str | None) -> str:
     value = normalize_text(value) or ""
@@ -2482,3 +2579,169 @@ def infer_import_field_map(source_headers: list[str], import_type: str) -> dict[
                 break
 
     return inferred
+
+def parse_cost_to_decimal(value) -> Decimal:
+    if value is None:
+        return Decimal("0")
+
+    if isinstance(value, Decimal):
+        return value
+
+    if isinstance(value, (int, float)):
+        return Decimal(str(value))
+
+    raw = str(value).strip()
+    if not raw:
+        return Decimal("0")
+
+    cleaned = raw.replace("$", "").replace(",", "").strip()
+
+    try:
+        return Decimal(cleaned)
+    except (InvalidOperation, ValueError):
+        return Decimal("0")
+    
+def get_budget_anchor_date(record: dict) -> date | None:
+    for key in ("purchase_date", "renewal_date", "created_at"):
+        value = record.get(key)
+        if not value:
+            continue
+
+        if key == "created_at":
+            try:
+                return datetime.fromisoformat(value).date()
+            except ValueError:
+                continue
+
+        parsed = _parse_iso_date(value)
+        if parsed:
+            return parsed
+
+    return None
+
+def list_budget_records_for_department(
+    department_name: str,
+    year: int | None = None,
+    q: str | None = None,
+) -> list[dict]:
+    rows = list_active_records_for_department(department_name)
+    q_norm = (q or "").strip().lower()
+
+    filtered = []
+    for row in rows:
+        anchor_date = get_budget_anchor_date(row)
+        if year and (not anchor_date or anchor_date.year != year):
+            continue
+
+        if q_norm:
+            haystack = " ".join([
+                str(row.get("title") or ""),
+                str(row.get("vendor_name") or ""),
+                str(row.get("category_name") or ""),
+                str(row.get("account_code") or ""),
+                str(row.get("po_number") or ""),
+                str(row.get("notes") or ""),
+            ]).lower()
+            if q_norm not in haystack:
+                continue
+
+        row = dict(row)
+        row["_budget_anchor_date"] = anchor_date
+        row["_budget_cost"] = parse_cost_to_decimal(row.get("cost"))
+        filtered.append(row)
+
+    return filtered
+
+def get_budget_year_options_for_department(department_name: str) -> list[int]:
+    rows = list_active_records_for_department(department_name)
+    years = set()
+
+    for row in rows:
+        anchor_date = get_budget_anchor_date(row)
+        if anchor_date:
+            years.add(anchor_date.year)
+
+    return sorted(years, reverse=True)
+
+def get_budget_summary_for_department(
+    department_name: str,
+    year: int | None = None,
+    q: str | None = None,
+) -> dict:
+    rows = list_budget_records_for_department(department_name, year=year, q=q)
+    total_spent = sum((row["_budget_cost"] for row in rows), Decimal("0"))
+    record_count = len(rows)
+    average_spend = (total_spent / record_count) if record_count else Decimal("0")
+
+    return {
+        "total_spent": total_spent,
+        "record_count": record_count,
+        "average_spend": average_spend,
+    }
+
+def get_budget_breakdown_for_department(
+    department_name: str,
+    year: int | None = None,
+    group_by: str = "category",
+    q: str | None = None,
+) -> dict:
+    rows = list_budget_records_for_department(department_name, year=year, q=q)
+    buckets = defaultdict(lambda: {
+        "label": "",
+        "total_spent": Decimal("0"),
+        "record_count": 0,
+        "records": [],
+    })
+
+    for row in rows:
+        if group_by == "vendor":
+            label = row.get("vendor_name") or "Unassigned Vendor"
+        elif group_by == "month":
+            anchor = row.get("_budget_anchor_date")
+            label = anchor.strftime("%Y-%m") if anchor else "No Date"
+        else:
+            label = row.get("category_name") or "Unassigned Category"
+
+        bucket = buckets[label]
+        bucket["label"] = label
+        bucket["total_spent"] += row["_budget_cost"]
+        bucket["record_count"] += 1
+        bucket["records"].append(row)
+
+    total_spent = sum((item["total_spent"] for item in buckets.values()), Decimal("0"))
+    results = []
+
+    for label, item in sorted(
+        buckets.items(),
+        key=lambda kv: (kv[1]["total_spent"], kv[0]),
+        reverse=True,
+    ):
+        average_spend = (
+            item["total_spent"] / item["record_count"]
+            if item["record_count"] else Decimal("0")
+        )
+        percent_of_total = (
+            (item["total_spent"] / total_spent) * Decimal("100")
+            if total_spent else Decimal("0")
+        )
+
+        results.append({
+            "label": item["label"],
+            "total_spent": item["total_spent"],
+            "record_count": item["record_count"],
+            "average_spend": average_spend,
+            "percent_of_total": percent_of_total,
+        })
+
+    chart_labels = [item["label"] for item in results]
+    chart_values = [float(item["total_spent"]) for item in results]
+
+    top_bucket = results[0] if results else None
+
+    return {
+        "rows": results,
+        "chart_labels": chart_labels,
+        "chart_values": chart_values,
+        "top_bucket": top_bucket,
+        "group_by": group_by,
+    }
