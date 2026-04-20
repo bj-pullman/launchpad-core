@@ -1,0 +1,73 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  <div class="finance-back-row">
+    <a href="{{ url_for('finance.department_overview', department_name=department_name) }}" class="finance-back-link">
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Overview</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Import Profiles</h1>
+      <p class="page-subtitle">Saved mapping profiles for repeat imports.</p>
+    </div>
+  </div>
+
+  <div class="finance-record-tabs">
+    <a href="{{ url_for('finance.imports', department_name=department_name) }}"
+       class="{% if import_tab == 'upload' %}active{% endif %}">Upload</a>
+    <a href="{{ url_for('finance.imports_profiles', department_name=department_name) }}"
+       class="{% if import_tab == 'profiles' %}active{% endif %}">Profiles</a>
+    <a href="{{ url_for('finance.imports_history', department_name=department_name) }}"
+       class="{% if import_tab == 'history' %}active{% endif %}">History</a>
+    <a href="{{ url_for('finance.imports_sftp', department_name=department_name) }}"
+       class="{% if import_tab == 'sftp' %}active{% endif %}">SFTP</a>
+  </div>
+
+  <div class="content-card">
+    {% if profiles %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Source Type</th>
+              <th>Target Area</th>
+              <th>Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for profile in profiles %}
+              <tr>
+                <td>{{ profile.profile_name }}</td>
+                <td>{{ profile.source_type|replace("_", " ")|title }}</td>
+                <td>{{ profile.target_area|replace("_", " ")|title }}</td>
+                <td>{{ "Yes" if profile.is_active else "No" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No import profiles yet</h3>
+        <p>Create profiles after the first mapping workflow is in place.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

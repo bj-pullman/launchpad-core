@@ -12,6 +12,8 @@ from apps.launchpad_ui import launchpad_ui_bp
 from apps.snipeops.blueprint import bp as snipeops_bp
 from apps.staff_status.blueprint import bp as staff_status_bp
 from apps.staff_status.db import init_staff_status_db
+from apps.finance.blueprint import bp as finance_bp
+from apps.finance.db import init_finance_db
 
 from modules.core.auth.blueprint import bp as auth_bp
 from modules.core.auth import routes as auth_routes  # noqa: F401
@@ -65,6 +67,7 @@ def create_app() -> Flask:
     init_settings_db()
     init_rbac_db()
     init_staff_status_db()
+    init_finance_db()
 
     seed_permissions()
     ensure_default_local_admin()
@@ -75,7 +78,6 @@ def create_app() -> Flask:
     # -----------------------------
     
     # URL Config
-    app.config["PUBLIC_BASE_URL"] = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
     app.config["PREFERRED_URL_SCHEME"] = os.getenv("PREFERRED_URL_SCHEME", "https")
 
     # Sign-in methods
@@ -116,7 +118,7 @@ def create_app() -> Flask:
     app.config["GOOGLE_OIDC_SCOPES"] = "openid email profile"
     app.config["GOOGLE_OIDC_REDIRECT_URI"] = get_setting(
         "auth.google_oidc.redirect_uri",
-        f"{app.config['PUBLIC_BASE_URL']}/auth/google/callback" if app.config.get("PUBLIC_BASE_URL") else "",
+        f"{app.config['general.public_base_url']}/auth/google/callback" if app.config.get("general.public_base_url") else "",
     )
     app.config["AUTH_GOOGLE_HOSTED_DOMAIN"] = get_setting(
         "auth.google_oidc.hosted_domain", ""
@@ -229,6 +231,7 @@ def create_app() -> Flask:
     app.register_blueprint(snipeops_bp)
     app.register_blueprint(setup_bp)
     app.register_blueprint(staff_status_bp)
+    app.register_blueprint(finance_bp)
     
     should_start_scheduler = True
 
@@ -350,7 +353,6 @@ def create_app() -> Flask:
             "language": get_setting("general.language", "en"),
             "date_format": get_setting("general.date_format", "mdy"),
             "time_format": get_setting("general.time_format", "12h"),
-            "public_base_url": app.config.get("PUBLIC_BASE_URL", ""),
         }
 
         return {

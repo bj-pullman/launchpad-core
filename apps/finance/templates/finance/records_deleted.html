@@ -1,0 +1,126 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  <div class="finance-subnav">
+    <a href="{{ url_for('finance.department_overview', department_name=department_name) }}"
+       class="{% if active_tab == 'overview' %}active{% endif %}">Overview</a>
+    <a href="{{ url_for('finance.records', department_name=department_name) }}"
+       class="{% if active_tab in ['records', 'archived', 'deleted'] %}active{% endif %}">Records</a>
+    <a href="{{ url_for('finance.vendors', department_name=department_name) }}"
+       class="{% if active_tab == 'vendors' %}active{% endif %}">Vendors</a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Deleted Records</h1>
+      <p class="page-subtitle">Deleted finance records retained before purge.</p>
+    </div>
+    {% if can_manage %}
+      <div class="page-header-actions">
+        <form
+          method="post"
+          action="{{ url_for('finance.records_deleted_purge', department_name=department_name) }}"
+          class="finance-inline-form"
+          data-confirm="Purge deleted records older than 30 days?"
+          data-confirm-action="delete"
+        >
+          <button type="submit" class="btn btn-danger">Purge 30+ Days</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="finance-record-tabs">
+    <a href="{{ url_for('finance.records', department_name=department_name) }}"
+       class="{% if active_tab == 'records' %}active{% endif %}">Active</a>
+    <a href="{{ url_for('finance.records_archived', department_name=department_name) }}"
+       class="{% if active_tab == 'archived' %}active{% endif %}">Archived</a>
+    <a href="{{ url_for('finance.records_deleted', department_name=department_name) }}"
+       class="{% if active_tab == 'deleted' %}active{% endif %}">Deleted</a>
+  </div>
+
+  <div class="content-card">
+    {% if records %}
+      {% if can_manage %}
+        <div id="finance-records-bulk-bar" class="finance-bulk-bar" style="display:none;">
+          <div class="finance-bulk-left">
+            <span id="finance-records-bulk-count">0 selected</span>
+          </div>
+
+          <div class="finance-bulk-actions">
+            <form
+              method="post"
+              action="{{ url_for('finance.records_bulk_restore', department_name=department_name) }}"
+              class="finance-inline-form"
+              data-confirm="Restore selected deleted records?"
+              data-confirm-action="confirm"
+            >
+              <input type="hidden" name="ids" id="finance-records-bulk-restore-ids">
+              <button type="submit" class="btn">Restore</button>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              {% if can_manage %}
+                <th class="finance-select-col">
+                  <input type="checkbox" id="finance-records-select-all">
+                </th>
+              {% endif %}
+              <th>Item / Service</th>
+              <th>Vendor</th>
+              <th>Category</th>
+              <th>Renewal Date</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for record in records %}
+              <tr class="finance-row-link" data-href="{{ url_for('finance.record_detail', record_id=record.id) }}">
+                {% if can_manage %}
+                  <td class="finance-select-col">
+                    <input
+                      type="checkbox"
+                      class="finance-row-select finance-records-row-select"
+                      value="{{ record.id }}"
+                    >
+                  </td>
+                {% endif %}
+                <td>
+                  <div class="finance-record-title">{{ record.title }}</div>
+                  <div class="finance-meta">{{ record.record_type|title }}</div>
+                </td>
+                <td>{{ record.vendor_name or "—" }}</td>
+                <td>{{ record.category_name or "—" }}</td>
+                <td>{{ record.renewal_date|localdate if record.renewal_date else "—" }}</td>
+                <td>{{ record.cost if record.cost is not none else "—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No deleted records</h3>
+        <p>There are no deleted finance records for this department.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

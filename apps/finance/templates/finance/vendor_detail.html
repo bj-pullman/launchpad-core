@@ -1,0 +1,137 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+
+    <div class="finance-back-row">
+        <a href="{{ url_for('finance.vendors', department_name=department_name) }}" class="finance-back-link">
+            <span class="finance-back-link-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+            </svg>
+            </span>
+            <span>Vendors</span>
+        </a>
+    </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ vendor.vendor_name }}</h1>
+      <p class="page-subtitle">Vendor detail.</p>
+    </div>
+    <div class="page-header-actions">
+      {% if can_manage %}
+        {% if vendor.status == "archived" or vendor.status == "deleted" %}
+          <form
+            method="post"
+            action="{{ url_for('finance.vendor_restore', vendor_id=vendor.id) }}"
+            class="finance-inline-form"
+            data-confirm="Restore this vendor?"
+            data-confirm-action="confirm"
+          >
+            <button type="submit" class="btn btn-secondary">Restore</button>
+          </form>
+        {% elif vendor.status != "deleted" %}
+          <form
+            method="post"
+            action="{{ url_for('finance.vendor_archive', vendor_id=vendor.id) }}"
+            class="finance-inline-form"
+            data-confirm="Archive this vendor?"
+            data-confirm-action="confirm"
+          >
+            <button type="submit" class="btn btn-secondary">Archive</button>
+          </form>
+        {% endif %}
+
+        {% if vendor.status != "deleted" %}
+          <a class="btn btn-primary" href="{{ url_for('finance.vendor_edit', vendor_id=vendor.id) }}">Edit Vendor</a>
+
+          <form
+            method="post"
+            action="{{ url_for('finance.vendor_delete', vendor_id=vendor.id) }}"
+            class="finance-inline-form"
+            data-confirm="Delete this vendor?"
+            data-confirm-action="delete"
+          >
+            <button type="submit" class="btn btn-danger">Delete</button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="content-card">
+    <div class="table-wrap">
+      <table class="data-table">
+        <tbody>
+          <tr><th>Vendor Name</th><td>{{ vendor.vendor_name }}</td></tr>
+          <tr><th>Vendor Code</th><td>{{ vendor.vendor_code or "—" }}</td></tr>
+          <tr><th>Website</th><td>{{ vendor.website or "—" }}</td></tr>
+          <tr><th>Main Phone</th><td>{{ vendor.main_phone or "—" }}</td></tr>
+          <tr><th>Billing Email</th><td>{{ vendor.billing_email or "—" }}</td></tr>
+          <tr><th>Support Email</th><td>{{ vendor.support_email or "—" }}</td></tr>
+          <tr><th>Sales Contact Name</th><td>{{ vendor.sales_contact_name or "—" }}</td></tr>
+          <tr><th>Sales Contact Email</th><td>{{ vendor.sales_contact_email or "—" }}</td></tr>
+          <tr><th>Status</th><td>{{ (vendor.status or "active")|replace("_", " ")|title }}</td></tr>
+          <tr><th>Notes</th><td>{{ vendor.notes or "—" }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">Related Records</h3>
+        <p class="finance-section-subtitle">Finance records linked to this vendor.</p>
+      </div>
+    </div>
+
+    {% if related_records %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Item / Service</th>
+              <th>Department</th>
+              <th>Category</th>
+              <th>Renewal Date</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for record in related_records %}
+              <tr class="finance-row-link" data-href="{{ url_for('finance.record_detail', record_id=record.id) }}">
+                <td>
+                  <div class="finance-record-title">{{ record.title }}</div>
+                  <div class="finance-meta">{{ record.record_type|title }}</div>
+                </td>
+                <td>{{ record.department_name }}</td>
+                <td>{{ record.category_name or "—" }}</td>
+                <td>{{ record.renewal_date|localdate if record.renewal_date else "—" }}</td>
+                <td>{{ record.cost if record.cost is not none else "—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No related records</h3>
+        <p>No visible finance records are currently linked to this vendor.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

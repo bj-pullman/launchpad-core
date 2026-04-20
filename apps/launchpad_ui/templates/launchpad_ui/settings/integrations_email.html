@@ -1,0 +1,178 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}Email Integration - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_integrations') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Integrations</span>
+    </a>
+  </div>
+
+  <div class="settings-page-header">
+    <div>
+      <h1>Email / SMTP</h1>
+      <p class="muted">Configure the SMTP settings used for Launchpad email delivery and Finance notification test sends.</p>
+    </div>
+  </div>
+
+  <form method="post" id="email-integration-form" class="settings-form" novalidate>
+    <div class="settings-narrow-stack">
+      <div class="settings-provider-card">
+        <h2>Email Delivery</h2>
+        <p class="muted">Control SMTP-based outbound email for Finance notifications and future Launchpad email features.</p>
+
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-copy">
+            <strong>Enable Email Delivery</strong>
+            <span>Allow Launchpad to connect to your SMTP server and send email.</span>
+          </div>
+
+          <label class="settings-switch">
+            <input
+              type="checkbox"
+              name="mail_enabled"
+              value="1"
+              {% if settings.mail_enabled %}checked{% endif %}
+            />
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="settings-form-section">
+          <h3>SMTP Server</h3>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="smtp_host">SMTP Host</label>
+              <input
+                type="text"
+                id="smtp_host"
+                name="smtp_host"
+                value="{{ settings.smtp_host or '' }}"
+                placeholder="smtp.yourserver.org"
+              />
+            </div>
+
+            <div class="form-field">
+              <label for="smtp_port">SMTP Port</label>
+              <input
+                type="number"
+                id="smtp_port"
+                name="smtp_port"
+                min="1"
+                step="1"
+                value="{{ settings.smtp_port or '587' }}"
+                placeholder="587"
+              />
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="smtp_username">SMTP Username</label>
+              <input
+                type="text"
+                id="smtp_username"
+                name="smtp_username"
+                value="{{ settings.smtp_username or '' }}"
+                placeholder="smtp-user"
+              />
+            </div>
+
+            <div class="form-field">
+              <label for="smtp_password">SMTP Password</label>
+              <input
+                type="password"
+                id="smtp_password"
+                name="smtp_password"
+                value=""
+                placeholder="{% if settings.has_password %}Leave blank to keep current password{% else %}Enter SMTP password{% endif %}"
+              />
+              <small>
+                {% if settings.has_password %}
+                  Leave blank to keep the current stored password.
+                {% else %}
+                  Enter the SMTP password used for authentication.
+                {% endif %}
+              </small>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="smtp_use_tls">Use TLS</label>
+              <select id="smtp_use_tls" name="smtp_use_tls">
+                <option value="1" {% if settings.smtp_use_tls %}selected{% endif %}>Enabled</option>
+                <option value="0" {% if not settings.smtp_use_tls %}selected{% endif %}>Disabled</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="from_name">Default From Name</label>
+              <input
+                type="text"
+                id="from_name"
+                name="from_name"
+                value="{{ settings.from_name or '' }}"
+                placeholder="Launchpad"
+              />
+              <small>Optional display name for future email features.</small>
+            </div>
+          </div>
+
+          <div class="email-settings-actions">
+            <div class="email-test-group">
+              <div class="form-field">
+                <label for="test_email_recipient">Test Recipient Email</label>
+                <input
+                  type="email"
+                  id="test_email_recipient"
+                  name="test_email_recipient"
+                  value="{{ settings.test_email_recipient or '' }}"
+                  placeholder="you@yourorg.org"
+                />
+                <small>Used by the Send Test Email button to verify SMTP delivery.</small>
+              </div>
+
+              <button
+                type="submit"
+                name="action"
+                value="send_test_email"
+                class="btn btn-secondary"
+              >
+                Send Test Email
+              </button>
+            </div>
+        </div>
+      </div>
+      </div>
+
+        <div class="email-save-group">
+          <button
+            type="submit"
+            name="action"
+            value="save_settings"
+            class="btn btn-primary"
+          >
+            Save Changes
+          </button>
+        </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+{% endblock %}

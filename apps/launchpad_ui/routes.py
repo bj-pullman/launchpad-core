@@ -1,4 +1,8 @@
+# launchpad_ui/routes.py
 import os
+from pathlib import Path
+import secrets
+import html
 
 import requests
 from flask import (
@@ -19,6 +23,7 @@ from apps.staff_status.service import (
     get_department_record,
     list_active_departments_from_users,
     upsert_department_settings,
+    build_public_url as build_staff_status_public_url,
 )
 
 from apps.staff_status.access_service import (
@@ -54,6 +59,9 @@ from modules.core.identity.rbac_service import (
     get_user_role_keys,
     remove_role_from_user,
 )
+
+from apps.finance.notification_service import send_finance_test_email
+
 from modules.core.identity.rbac_db import get_connection as get_rbac_connection
 from modules.core.identity.user_service import get_user_by_id, update_user, create_user, list_users
 from modules.core.settings.settings_service import get_setting, set_setting, get_bool_setting
@@ -313,6 +321,18 @@ def _provider_status(provider: str, settings: dict) -> str:
 
     return "Disabled"
 
+def _public_base_url() -> str:
+    return (get_setting("general.public_base_url", "") or "").strip().rstrip("/")
+
+def _build_public_url(path: str) -> str:
+    base_url = _public_base_url()
+    clean_path = "/" + (path or "").lstrip("/")
+
+    if not base_url:
+        return clean_path
+
+    return f"{base_url}{clean_path}"
+
 
 def _test_oidc_configuration(provider: str, form):
     if provider == "microsoft_oidc":
@@ -561,6 +581,7 @@ def settings_general():
         footer_text = (request.form.get("footer_text") or "").strip()
         support_email = (request.form.get("support_email") or "").strip()
         helpdesk_url = (request.form.get("helpdesk_url") or "").strip()
+        public_base_url = (request.form.get("public_base_url") or "").strip().rstrip("/")
         announcement_enabled = 1 if request.form.get("announcement_enabled") == "1" else 0
         announcement_text = (request.form.get("announcement_text") or "").strip()
 
@@ -585,6 +606,7 @@ def settings_general():
         set_setting("general.footer_text", footer_text)
         set_setting("general.support_email", support_email)
         set_setting("general.helpdesk_url", helpdesk_url)
+        set_setting("general.public_base_url", public_base_url)
         set_setting("general.announcement_enabled", announcement_enabled)
         set_setting("general.announcement_text", announcement_text)
         set_setting("general.timezone", timezone_value)
@@ -600,6 +622,7 @@ def settings_general():
         "footer_text": get_setting("general.footer_text", "Sheridan School District • Internal Tech Ops"),
         "support_email": get_setting("general.support_email", ""),
         "helpdesk_url": get_setting("general.helpdesk_url", ""),
+        "public_base_url": get_setting("general.public_base_url", ""),
         "announcement_enabled": get_bool_setting("general.announcement_enabled", False),
         "announcement_text": get_setting("general.announcement_text", ""),
         "timezone": get_setting("general.timezone", "America/Chicago"),
@@ -618,6 +641,140 @@ def settings_general():
         time_format_options=time_format_options,
     )
 
+def _finance_notification_logo_dir() -> Path:
+    base_dir = Path(__file__).resolve().parents[2]
+    logo_dir = base_dir / "static" / "finance" / "branding"
+    logo_dir.mkdir(parents=True, exist_ok=True)
+    return logo_dir
+
+
+def _save_finance_notification_logo(upload) -> str:
+    if not upload or not upload.filename:
+        raise ValueError("No logo file selected.")
+
+    suffix = Path(upload.filename).suffix.lower()
+    allowed = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+    if suffix not in allowed:
+        raise ValueError("Unsupported logo type. Allowed: PNG, JPG, JPEG, WEBP, SVG.")
+
+    file_bytes = upload.read()
+    if not file_bytes:
+        raise ValueError("The selected logo file was empty.")
+
+    stored_name = f"finance_notification_logo_{secrets.token_hex(8)}{suffix}"
+    stored_path = _finance_notification_logo_dir() / stored_name
+
+    with open(stored_path, "wb") as f:
+        f.write(file_bytes)
+
+    return f"finance/branding/{stored_name}"
+
+
+def _format_money_preview(value: str) -> str:
+    raw = (value or "").strip()
+    return raw or "$4,500.00"
+
+
+def _build_finance_template_preview_context():
+    record_url = _build_public_url("/finance/records/123")
+
+    return {
+        "title": "Adobe Creative Cloud",
+        "department_name": "Technology",
+        "vendor_name": "Adobe",
+        "category_name": "Software",
+        "renewal_date": "07/01/2026",
+        "expiration_date": "06/30/2026",
+        "cost": "$4,500.00",
+        "po_number": "PO-240156",
+        "account_code": "10-2660-640",
+        "notification_recipients": "tech@sheridanschools.org",
+        "notes": "Annual district renewal for staff licensing.",
+        "record_url": record_url,
+        "days_until_renewal": "45",
+    }
+
+
+def _render_finance_template_tokens(template: str, context: dict) -> str:
+    rendered = template or ""
+    for key, value in context.items():
+        rendered = rendered.replace(f"{{{{ {key} }}}}", str(value or "—"))
+    return rendered
+
+
+def _finance_notification_settings():
+    return {
+        "notifications_enabled": get_bool_setting("finance.notifications.enabled", False),
+        "sender_email": get_setting("finance.notifications.sender_email", ""),
+        "default_recipients": get_setting("finance.notifications.default_recipients", ""),
+        "test_recipient_email": get_setting("finance.notifications.test_recipient_email", ""),
+        "use_record_recipients_first": get_bool_setting(
+            "finance.notifications.use_record_recipients_first",
+            True,
+        ),
+        "fallback_to_default_recipients": get_bool_setting(
+            "finance.notifications.fallback_to_default_recipients",
+            True,
+        ),
+        "default_days_before": get_setting("finance.notifications.default_days_before", "30"),
+        "subject_prefix": get_setting("finance.notifications.subject_prefix", "Renewal Reminder"),
+        "logo_path": get_setting("finance.notifications.logo_path", ""),
+        "logo_width": get_setting("finance.notifications.logo_width", "180"),
+        "template_header": get_setting("finance.notifications.template_header", "Renewal Reminder"),
+        "template_intro": get_setting(
+            "finance.notifications.template_intro",
+            "The following finance record is approaching renewal.",
+        ),
+        "template_subject": get_setting(
+            "finance.notifications.template_subject",
+            "{{ title }} renews on {{ renewal_date }}",
+        ),
+        "template_footer": get_setting(
+            "finance.notifications.template_footer",
+            "This message was generated by Launchpad Finance notifications.",
+        ),
+        "include_title": get_bool_setting("finance.notifications.include_title", True),
+        "include_department_name": get_bool_setting("finance.notifications.include_department_name", True),
+        "include_vendor_name": get_bool_setting("finance.notifications.include_vendor_name", True),
+        "include_category_name": get_bool_setting("finance.notifications.include_category_name", True),
+        "include_renewal_date": get_bool_setting("finance.notifications.include_renewal_date", True),
+        "include_expiration_date": get_bool_setting("finance.notifications.include_expiration_date", True),
+        "include_cost": get_bool_setting("finance.notifications.include_cost", True),
+        "include_po_number": get_bool_setting("finance.notifications.include_po_number", False),
+        "include_account_code": get_bool_setting("finance.notifications.include_account_code", False),
+        "include_notes": get_bool_setting("finance.notifications.include_notes", True),
+        "include_record_link": get_bool_setting("finance.notifications.include_record_link", True),
+        "logo_original_name": get_setting("finance.notifications.logo_original_name", ""),
+    }
+
+def _build_finance_preview_lines(settings: dict, preview_context: dict) -> list[dict]:
+    lines = []
+
+    field_map = [
+        ("include_title", "Title", "title"),
+        ("include_department_name", "Department", "department_name"),
+        ("include_vendor_name", "Vendor", "vendor_name"),
+        ("include_category_name", "Category", "category_name"),
+        ("include_renewal_date", "Renewal Date", "renewal_date"),
+        ("include_expiration_date", "Expiration Date", "expiration_date"),
+        ("include_cost", "Cost", "cost"),
+        ("include_po_number", "PO Number", "po_number"),
+        ("include_account_code", "Account Code", "account_code"),
+        ("include_notes", "Notes", "notes"),
+        ("include_record_link", "Record Link", "record_url"),
+    ]
+
+    for setting_key, label, context_key in field_map:
+        if settings.get(setting_key):
+            lines.append(
+                {
+                    "label": label,
+                    "value": preview_context.get(context_key, "—"),
+                    "is_link": context_key == "record_url",
+                }
+            )
+
+    return lines
 
 @launchpad_ui_bp.route("/settings/snipeops")
 @login_required
@@ -1377,6 +1534,16 @@ def settings_staff_status():
                 "kiosk_enabled": kiosk_enabled,
                 "kiosk_token": kiosk_token,
                 "board_token": board_token,
+                "kiosk_url": (
+                    build_staff_status_public_url("staff_status.kiosk", token=kiosk_token)
+                    if kiosk_enabled and kiosk_token
+                    else ""
+                ),
+                "board_url": (
+                    build_staff_status_public_url("staff_status.board_public", token=board_token)
+                    if board_token
+                    else ""
+                ),
             }
         )
 
@@ -1414,6 +1581,7 @@ def settings_integrations():
         can_view_google="launchpad.settings.saml.view" in user_permissions,
         can_view_saml="launchpad.settings.saml.view" in user_permissions,
         can_view_snipeit="launchpad.settings.snipeops.view" in user_permissions,
+        can_view_email="launchpad.settings.view" in user_permissions,
     )
 
 
@@ -1570,6 +1738,295 @@ def settings_integrations_snipeit():
 
     return render_template(
         "launchpad_ui/settings/integrations_snipeit.html",
+        active_section="integrations",
+        settings=settings,
+    )
+
+@launchpad_ui_bp.route("/settings/finance", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.finance.view")
+def settings_finance():
+    # -----------------------------
+    # Determine active tab
+    # -----------------------------
+    if request.method == "POST":
+        active_finance_tab = (request.form.get("active_finance_tab") or "notifications").strip().lower()
+    else:
+        active_finance_tab = (request.args.get("tab") or "notifications").strip().lower()
+
+    if active_finance_tab not in {"notifications", "template"}:
+        active_finance_tab = "notifications"
+
+    # -----------------------------
+    # POST
+    # -----------------------------
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.finance.manage",
+            "You do not have permission to update Finance settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+        action = (request.form.get("action") or "save_settings").strip().lower()
+
+        notifications_enabled = 1 if request.form.get("notifications_enabled") == "1" else 0
+        use_record_recipients_first = 1 if request.form.get("use_record_recipients_first") == "1" else 0
+        fallback_to_default_recipients = 1 if request.form.get("fallback_to_default_recipients") == "1" else 0
+
+        include_title = 1 if request.form.get("include_title") == "1" else 0
+        include_department_name = 1 if request.form.get("include_department_name") == "1" else 0
+        include_vendor_name = 1 if request.form.get("include_vendor_name") == "1" else 0
+        include_category_name = 1 if request.form.get("include_category_name") == "1" else 0
+        include_renewal_date = 1 if request.form.get("include_renewal_date") == "1" else 0
+        include_expiration_date = 1 if request.form.get("include_expiration_date") == "1" else 0
+        include_cost = 1 if request.form.get("include_cost") == "1" else 0
+        include_po_number = 1 if request.form.get("include_po_number") == "1" else 0
+        include_account_code = 1 if request.form.get("include_account_code") == "1" else 0
+        include_notes = 1 if request.form.get("include_notes") == "1" else 0
+        include_record_link = 1 if request.form.get("include_record_link") == "1" else 0
+
+        sender_email = (request.form.get("sender_email") or "").strip()
+        default_recipients = (request.form.get("default_recipients") or "").strip()
+        test_recipient_email = (request.form.get("test_recipient_email") or "").strip()
+        default_days_before = (request.form.get("default_days_before") or "30").strip()
+        subject_prefix = (request.form.get("subject_prefix") or "").strip()
+        logo_width = (request.form.get("logo_width") or "180").strip()
+
+        template_header = (request.form.get("template_header") or "").strip()
+        template_intro = (request.form.get("template_intro") or "").strip()
+        template_subject = (request.form.get("template_subject") or "").strip()
+        template_footer = (request.form.get("template_footer") or "").strip()
+
+        if notifications_enabled and not sender_email:
+            flash("Sender email address is required when notifications are enabled.", "error")
+            return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+        if notifications_enabled and not default_recipients and not use_record_recipients_first:
+            flash("Enter default recipients or enable record-level recipients first.", "error")
+            return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+        try:
+            int(default_days_before)
+        except ValueError:
+            flash("Default days before renewal must be a whole number.", "error")
+            return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+        try:
+            int(logo_width)
+        except ValueError:
+            flash("Logo width must be a whole number.", "error")
+            return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+        uploaded_logo = request.files.get("notification_logo")
+        if uploaded_logo and uploaded_logo.filename:
+            try:
+                original_logo_name = uploaded_logo.filename
+                logo_path = _save_finance_notification_logo(uploaded_logo)
+                set_setting("finance.notifications.logo_path", logo_path)
+                set_setting("finance.notifications.logo_original_name", original_logo_name)
+            except ValueError as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+        # Save current form values before either sending test email or normal save
+        set_setting("finance.notifications.enabled", notifications_enabled)
+        set_setting("finance.notifications.sender_email", sender_email)
+        set_setting("finance.notifications.default_recipients", default_recipients)
+        set_setting("finance.notifications.test_recipient_email", test_recipient_email)
+        set_setting("finance.notifications.use_record_recipients_first", use_record_recipients_first)
+        set_setting("finance.notifications.fallback_to_default_recipients", fallback_to_default_recipients)
+        set_setting("finance.notifications.default_days_before", default_days_before)
+        set_setting("finance.notifications.subject_prefix", subject_prefix)
+        set_setting("finance.notifications.logo_width", logo_width)
+
+        set_setting("finance.notifications.template_header", template_header)
+        set_setting("finance.notifications.template_intro", template_intro)
+        set_setting("finance.notifications.template_subject", template_subject)
+        set_setting("finance.notifications.template_footer", template_footer)
+
+        set_setting("finance.notifications.include_title", include_title)
+        set_setting("finance.notifications.include_department_name", include_department_name)
+        set_setting("finance.notifications.include_vendor_name", include_vendor_name)
+        set_setting("finance.notifications.include_category_name", include_category_name)
+        set_setting("finance.notifications.include_renewal_date", include_renewal_date)
+        set_setting("finance.notifications.include_expiration_date", include_expiration_date)
+        set_setting("finance.notifications.include_cost", include_cost)
+        set_setting("finance.notifications.include_po_number", include_po_number)
+        set_setting("finance.notifications.include_account_code", include_account_code)
+        set_setting("finance.notifications.include_notes", include_notes)
+        set_setting("finance.notifications.include_record_link", include_record_link)
+
+        if action == "send_test_email":
+            if not sender_email:
+                flash("Sender email is required to send a test email.", "error")
+                return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+            if not test_recipient_email:
+                flash("Test recipient email is required to send a test email.", "error")
+                return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+            try:
+                preview_context = _build_finance_template_preview_context()
+                preview_lines = _build_finance_preview_lines(
+                    {
+                        "include_title": bool(include_title),
+                        "include_department_name": bool(include_department_name),
+                        "include_vendor_name": bool(include_vendor_name),
+                        "include_category_name": bool(include_category_name),
+                        "include_renewal_date": bool(include_renewal_date),
+                        "include_expiration_date": bool(include_expiration_date),
+                        "include_cost": bool(include_cost),
+                        "include_po_number": bool(include_po_number),
+                        "include_account_code": bool(include_account_code),
+                        "include_notes": bool(include_notes),
+                        "include_record_link": bool(include_record_link),
+                    },
+                    preview_context,
+                )
+
+                send_finance_test_email(
+                    sender_email=sender_email,
+                    recipient_email=test_recipient_email,
+                    subject_template=template_subject,
+                    subject_prefix=subject_prefix,
+                    template_header=template_header,
+                    template_intro=template_intro,
+                    template_footer=template_footer,
+                    preview_context=preview_context,
+                    preview_lines=preview_lines,
+                )
+
+                flash(f"Test email sent to {test_recipient_email}.", "success")
+            except Exception as exc:
+                flash(f"Unable to send test email: {exc}", "error")
+
+            return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+        flash("Finance notification settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
+
+    # -----------------------------
+    # GET
+    # -----------------------------
+    settings = _finance_notification_settings()
+    preview_context = _build_finance_template_preview_context()
+
+    preview_subject = _render_finance_template_tokens(
+        settings.get("template_subject", ""),
+        preview_context,
+    )
+
+    preview_lines = _build_finance_preview_lines(settings, preview_context)
+
+    return render_template(
+        "launchpad_ui/settings/finance.html",
+        active_section="finance",
+        active_finance_tab=active_finance_tab,
+        settings=settings,
+        preview_context=preview_context,
+        preview_subject=preview_subject,
+        preview_lines=preview_lines,
+    )
+
+@launchpad_ui_bp.route("/settings/integrations/email", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.view")
+def settings_integrations_email():
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.general.manage",
+            "You do not have permission to update Email integration settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+        action = (request.form.get("action") or "save_settings").strip().lower()
+
+        enabled = 1 if request.form.get("mail_enabled") == "1" else 0
+        smtp_host = (request.form.get("smtp_host") or "").strip()
+        smtp_port = (request.form.get("smtp_port") or "587").strip()
+        smtp_username = (request.form.get("smtp_username") or "").strip()
+        smtp_password = (request.form.get("smtp_password") or "").strip()
+        smtp_use_tls = 1 if request.form.get("smtp_use_tls") == "1" else 0
+        from_name = (request.form.get("from_name") or "").strip()
+        test_email_recipient = (request.form.get("test_email_recipient") or "").strip()
+
+        if enabled and not smtp_host:
+            flash("SMTP host is required when email delivery is enabled.", "error")
+            return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+        try:
+            int(smtp_port)
+        except ValueError:
+            flash("SMTP port must be a whole number.", "error")
+            return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+        set_setting("mail.enabled", enabled)
+        set_setting("mail.smtp_host", smtp_host)
+        set_setting("mail.smtp_port", smtp_port)
+        set_setting("mail.smtp_username", smtp_username)
+        if smtp_password:
+            set_setting("mail.smtp_password", smtp_password, is_sensitive=1)
+        set_setting("mail.smtp_use_tls", smtp_use_tls)
+        set_setting("mail.from_name", from_name)
+        set_setting("mail.test_recipient", test_email_recipient)
+
+        if action == "send_test_email":
+            if not test_email_recipient:
+                flash("Enter a test recipient email.", "error")
+                return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+            if not smtp_username:
+                flash("SMTP username is required to send a test email.", "error")
+                return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+            try:
+                from modules.core.mail.service import send_mail
+
+                send_mail(
+                    sender_email=smtp_username,
+                    recipient_email=test_email_recipient,
+                    subject="Launchpad Email Test",
+                    text_body="This is a test email from Launchpad SMTP integration.",
+                    html_body="""
+                        <html>
+                          <body style="margin:0; padding:24px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif; color:#0f172a;">
+                            <div style="max-width:640px; margin:0 auto; background:#ffffff; border:1px solid #dbe4ee; border-radius:16px; overflow:hidden;">
+                              <div style="padding:28px;">
+                                <h1 style="margin:0 0 12px; font-size:24px; line-height:1.2; color:#0f172a;">
+                                  Launchpad Email Test
+                                </h1>
+                                <p style="margin:0; font-size:15px; line-height:1.6; color:#475569;">
+                                  Your Email / SMTP integration is working correctly.
+                                </p>
+                              </div>
+                            </div>
+                          </body>
+                        </html>
+                    """,
+                )
+
+                flash(f"Test email sent to {test_email_recipient}.", "success")
+            except Exception as exc:
+                flash(f"Test email failed: {exc}", "error")
+
+            return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+        flash("Email integration settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_integrations_email"))
+
+    settings = {
+        "mail_enabled": get_bool_setting("mail.enabled", False),
+        "smtp_host": get_setting("mail.smtp_host", ""),
+        "smtp_port": get_setting("mail.smtp_port", "587"),
+        "smtp_username": get_setting("mail.smtp_username", ""),
+        "smtp_use_tls": get_bool_setting("mail.smtp_use_tls", True),
+        "from_name": get_setting("mail.from_name", ""),
+        "test_email_recipient": get_setting("mail.test_recipient", ""),
+        "has_password": bool((get_setting("mail.smtp_password", "") or "").strip()),
+    }
+
+    return render_template(
+        "launchpad_ui/settings/integrations_email.html",
         active_section="integrations",
         settings=settings,
     )

@@ -1,0 +1,154 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  <div class="finance-back-row">
+    <a href="{{ url_for('finance.imports_mapping', department_name=department_name, run_id=run.id) }}" class="finance-back-link">
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Mapping</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Import Validation</h1>
+      <p class="page-subtitle">{{ run.original_filename }} • {{ run.import_type|replace("_", " ")|title }}</p>
+    </div>
+  </div>
+
+  <div class="form-actions" style="margin-top: 12px; margin-bottom: 16px;">
+    <a
+      href="{{ url_for('finance.imports', department_name=department_name) }}"
+      class="btn btn-secondary"
+    >
+      Cancel
+    </a>
+
+    <a
+      href="{{ url_for('finance.imports_mapping', department_name=department_name, run_id=run.id) }}"
+      class="btn btn-secondary"
+    >
+      Back to Mapping
+    </a>
+
+    {% if validation.errors %}
+      <a
+        href="{{ url_for('finance.imports', department_name=department_name) }}"
+        class="btn finance-import-btn"
+      >
+        Upload Corrected File
+      </a>
+    {% elif can_manage and validation.valid_rows > 0 %}
+      <form method="post" class="finance-inline-form" data-confirm="Run this import now?" data-confirm-action="confirm">
+        <button type="submit" class="btn finance-import-btn">Run Import</button>
+      </form>
+    {% endif %}
+  </div>
+
+  <div class="content-card">
+    <div class="table-wrap">
+      <table class="data-table">
+        <tbody>
+          <tr><th>Total Rows</th><td>{{ validation.total_rows }}</td></tr>
+          <tr><th>Valid Rows</th><td>{{ validation.valid_rows }}</td></tr>
+          <tr><th>Skipped Rows</th><td>{{ validation.skipped_rows }}</td></tr>
+          <tr><th>Vendors To Create</th><td>{{ validation.vendors_to_create }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">Mapped Row Preview</h3>
+        <p class="finance-section-subtitle">First 20 mapped rows before import.</p>
+      </div>
+    </div>
+
+    {% if validation.preview_rows %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              {% for key in validation.preview_rows[0].keys() %}
+                <th>{{ key|replace("_", " ")|title }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in validation.preview_rows %}
+              <tr>
+                {% for value in row.values() %}
+                  <td>{{ value or "—" }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No preview rows</h3>
+        <p>No mapped rows were available for preview.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">Validation Errors</h3>
+        <p class="page-subtitle">These rows will be skipped unless corrected.</p>
+      </div>
+
+      {% if validation.errors %}
+        <div class="page-header-actions">
+          <a
+            href="{{ url_for('finance.export_import_errors', run_id=run.id) }}"
+            class="btn finance-import-btn"
+          >
+            Export Errors CSV
+          </a>
+        </div>
+      {% endif %}
+    </div>
+
+    {% if validation.errors %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Row</th>
+              <th>Source Identifier</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for error in validation.errors %}
+              <tr>
+                <td>{{ error.row_number }}</td>
+                <td>{{ error.source_identifier or "—" }}</td>
+                <td>{{ error.error_message }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No validation errors</h3>
+        <p>The file passed validation and is ready to import.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

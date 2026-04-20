@@ -27,6 +27,12 @@ SETTINGS_SECTIONS = [
         "permission": "launchpad.settings.staff_status.view",
     },
     {
+        "key": "finance",
+        "label": "Finance",
+        "endpoint": "launchpad_ui.settings_finance",
+        "permission": "launchpad.settings.finance.view",
+    },
+    {
         "key": "authentication",
         "label": "Authentication",
         "endpoint": "launchpad_ui.settings_authentication",
@@ -64,7 +70,7 @@ LAUNCHPAD_APPS = [
     {
         "key": "finance",
         "label": "Finance",
-        "description": "Budget, renewals, and purchasing.",
+        "description": "Budget, renewals, purchasing, and finance operations.",
         "endpoint": "finance.index",
         "permission": "finance.home.view",
     },

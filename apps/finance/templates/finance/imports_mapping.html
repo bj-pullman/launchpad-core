@@ -1,0 +1,110 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  <div class="finance-back-row">
+    <a href="{{ url_for('finance.imports', department_name=department_name) }}" class="finance-back-link">
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Upload</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Import Mapping</h1>
+      <p class="page-subtitle">{{ run.original_filename }} • {{ run.import_type|replace("_", " ")|title }}</p>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <form method="post" class="finance-form">
+      <div class="finance-form-grid" style="margin-bottom: 14px;">
+        <div class="finance-field finance-field-span-2">
+          <label class="finance-checkbox-row">
+            <input type="checkbox" name="save_profile" value="1" id="save_profile_toggle">
+            <span>Save this mapping as a reusable profile</span>
+          </label>
+        </div>
+
+        <div class="finance-field finance-field-span-2" id="profile_name_wrap" style="display:none;">
+          <label for="profile_name">Profile Name</label>
+          <input type="text" id="profile_name" name="profile_name" placeholder="Example: ERP Record Export">
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        {% if auto_mapping_used %}
+        <div class="finance-alert">
+            We matched source columns automatically where possible. Review the mappings before continuing.
+        </div>
+        {% endif %}
+        <table class="data-table finance-mapping-table">
+          <thead>
+            <tr>
+              <th>Finance Field</th>
+              <th>Required</th>
+              <th>Source Column</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for field in target_fields %}
+              <tr>
+                <td>
+                  <div class="finance-mapping-field-name">{{ field.label }}</div>
+                  <div class="finance-mapping-help">{{ field.field_name }}</div>
+                </td>
+                <td>
+                  {% if field.required %}
+                    <span class="finance-mapping-required">Required</span>
+                  {% else %}
+                    <span class="finance-mapping-optional">Optional</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <select name="map_{{ field.field_name }}" class="finance-mapping-select">
+                    <option value="">-- Ignore / Not Mapped --</option>
+                    {% for header in source_headers %}
+                      <option value="{{ header }}" {% if selected_mappings.get(field.field_name) == header %}selected{% endif %}>{{ header }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="finance-form-actions">
+        <a class="btn btn-secondary finance-action-link" href="{{ url_for('finance.imports', department_name=department_name) }}">Back</a>
+        <button type="submit" class="btn btn-primary finance-action-button">Continue</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const toggle = document.getElementById("save_profile_toggle");
+  const wrap = document.getElementById("profile_name_wrap");
+  if (!toggle || !wrap) return;
+
+  function sync() {
+    wrap.style.display = toggle.checked ? "" : "none";
+  }
+
+  toggle.addEventListener("change", sync);
+  sync();
+});
+</script>
+{% endblock %}

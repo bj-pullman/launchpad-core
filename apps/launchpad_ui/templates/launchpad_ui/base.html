@@ -4,7 +4,7 @@
   <head>
     <meta charset="utf-8" />
     <title>
-      {% block title %}Lauchpad{%
+      {% block title %}Launchpad{%
       endblock %}
     </title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -87,14 +87,15 @@
     {% endif %}
 
     <main class="page-shell">
-      {% with messages = get_flashed_messages(with_categories=true) %} {% if
-      messages %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
       <div class="flash-stack">
         {% for category, message in messages %}
-        <div class="flash flash-{{ category }}">{{ message }}</div>
+          <div class="flash flash-{{ category }}">{{ message }}</div>
         {% endfor %}
       </div>
-      {% endif %} {% endwith %} {% block content %}{% endblock %}
+    {% endif %}
+    {% endwith %} {% block content %}{% endblock %}
     </main>
 
     <footer class="footer">
@@ -145,5 +146,25 @@
         </div>
       </div>
     </div>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const flashMessages = document.querySelectorAll(".flash");
+
+    if (!flashMessages.length) return;
+
+    setTimeout(function () {
+      flashMessages.forEach(function (msg) {
+        msg.style.transition = "opacity 0.3s ease";
+        msg.style.opacity = "0";
+
+        setTimeout(function () {
+          msg.remove();
+        }, 300);
+      });
+    }, 3000);
+  });
+  </script>
+
   </body>
 </html>

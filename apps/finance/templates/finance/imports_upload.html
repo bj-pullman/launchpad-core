@@ -1,0 +1,111 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  <div class="finance-back-row">
+    <a href="{{ url_for('finance.department_overview', department_name=department_name) }}" class="finance-back-link">
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Overview</span>
+    </a>
+  </div>
+
+<div class="page-header">
+  <div>
+    <h1>{{ department_name }} Import</h1>
+    <p class="page-subtitle">Upload files and start Finance imports.</p>
+  </div>
+  <div class="page-header-actions">
+    <a class="btn btn-secondary" href="{{ url_for('finance.imports_template_download', department_name=department_name, import_type='records') }}">
+      Records Template
+    </a>
+    <a class="btn btn-secondary" href="{{ url_for('finance.imports_template_download', department_name=department_name, import_type='vendors') }}">
+      Vendors Template
+    </a>
+  </div>
+</div>
+
+  <div class="finance-record-tabs">
+    <a href="{{ url_for('finance.imports', department_name=department_name) }}"
+       class="{% if import_tab == 'upload' %}active{% endif %}">Upload</a>
+    <a href="{{ url_for('finance.imports_profiles', department_name=department_name) }}"
+       class="{% if import_tab == 'profiles' %}active{% endif %}">Profiles</a>
+    <a href="{{ url_for('finance.imports_history', department_name=department_name) }}"
+       class="{% if import_tab == 'history' %}active{% endif %}">History</a>
+    <a href="{{ url_for('finance.imports_sftp', department_name=department_name) }}"
+       class="{% if import_tab == 'sftp' %}active{% endif %}">SFTP</a>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">Upload</h3>
+        <p class="finance-section-subtitle">Start a manual import for records or vendors.</p>
+      </div>
+    </div>
+
+    {% if can_manage %}
+      <form method="post" enctype="multipart/form-data" class="finance-form">
+        <div class="finance-form-grid">
+          <div class="finance-field">
+            <label for="import_type">Import Type</label>
+            <select id="import_type" name="import_type">
+              <option value="records">Records</option>
+              <option value="vendors">Vendors</option>
+            </select>
+          </div>
+
+          <div class="finance-field">
+            <label for="profile_id">Optional Saved Profile</label>
+            <select id="profile_id" name="profile_id">
+              <option value="">No Profile</option>
+              {% for profile in profiles %}
+                <option value="{{ profile.id }}">{{ profile.profile_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="finance-field finance-field-span-2">
+            <label for="import_file">Source File</label>
+            <div class="finance-file-upload">
+              <label class="finance-file-label">
+                <span class="finance-file-button">Choose CSV/XLSX</span>
+                <span class="finance-file-name" id="finance-file-name">No file selected</span>
+                <input
+                  type="file"
+                  id="import_file"
+                  name="import_file"
+                  accept=".csv,.xlsx"
+                >
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="finance-form-actions">
+          <button type="submit" class="btn btn-primary finance-action-button">Continue to Mapping</button>
+        </div>
+      </form>
+    {% else %}
+      <div class="finance-empty">
+        <h3>Import access is read-only</h3>
+        <p>Your account can view Finance, but cannot run imports for this department.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

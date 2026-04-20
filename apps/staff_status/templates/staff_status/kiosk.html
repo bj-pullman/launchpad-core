@@ -23,11 +23,25 @@
       </div>
       
       <header class="staff-status-kiosk-header">
-        <p class="staff-status-eyebrow">Department Kiosk</p>
-        <h1>{{ department_name }}</h1>
-        <p class="staff-status-kiosk-subtitle">
-          Select your name and choose your current location.
-        </p>
+        <div class="staff-status-kiosk-header-left">
+          <p class="staff-status-eyebrow">Department Kiosk</p>
+        </div>
+
+        <div class="staff-status-kiosk-header-center">
+          <h1>{{ department_name }}</h1>
+        </div>
+
+        <div class="staff-status-kiosk-header-right">
+          <div class="staff-status-kiosk-actions">
+            <button class="kiosk-refresh-btn" onclick="window.location.reload()" title="Refresh">
+              ⟳
+            </button>
+          </div>
+
+          <p class="staff-status-kiosk-subtitle">
+            Select your name and choose your current location.
+          </p>
+        </div>
       </header>
 
       <form

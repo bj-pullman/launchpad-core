@@ -8,6 +8,8 @@ document.addEventListener("DOMContentLoaded", function () {
   initDeleteConfirmations();
   initSettingsProviderToggles();
   initSettingsFileUploads();
+  initFinanceNotificationLogoPreviewName();
+  initFinanceNotificationTemplateBuilder();
 });
 
 function initSnipeOpsConnectionTest() {
@@ -98,9 +100,8 @@ function initUserFormPasswordToggle() {
 function initSettingsTabs() {
   const tabs = document.querySelectorAll(".settings-tab");
   const panels = document.querySelectorAll(".settings-tab-panel[data-panel]");
-  const savePanels = document.querySelectorAll(
-    ".settings-tab-panel[data-panel-save]"
-  );
+  const savePanels = document.querySelectorAll(".settings-tab-panel[data-panel-save]");
+  const financeTabInput = document.getElementById("active_finance_tab");
 
   if (!tabs.length) {
     return;
@@ -116,20 +117,18 @@ function initSettingsTabs() {
 
       tab.classList.add("active");
 
-      const panel = document.querySelector(
-        `.settings-tab-panel[data-panel="${targetPanel}"]`
-      );
-
+      const panel = document.querySelector(`.settings-tab-panel[data-panel="${targetPanel}"]`);
       if (panel) {
         panel.classList.add("active");
       }
 
-      const savePanel = document.querySelector(
-        `.settings-tab-panel[data-panel-save="${targetPanel}"]`
-      );
-
+      const savePanel = document.querySelector(`.settings-tab-panel[data-panel-save="${targetPanel}"]`);
       if (savePanel) {
         savePanel.classList.add("active");
+      }
+
+      if (financeTabInput) {
+        financeTabInput.value = targetPanel;
       }
     });
   });
@@ -481,5 +480,24 @@ function initSettingsFileUploads() {
         label.classList.remove("settings-file-upload-selected");
       }
     });
+  });
+}
+
+function initFinanceNotificationLogoPreviewName() {
+  const input = document.getElementById("notification_logo");
+  const textEl = document.getElementById("notification-logo-file-text");
+
+  if (!input || !textEl) {
+    return;
+  }
+
+  const defaultText = textEl.dataset.defaultText || textEl.textContent;
+
+  input.addEventListener("change", () => {
+    if (input.files && input.files.length > 0) {
+      textEl.textContent = input.files[0].name;
+    } else {
+      textEl.textContent = defaultText;
+    }
   });
 }
