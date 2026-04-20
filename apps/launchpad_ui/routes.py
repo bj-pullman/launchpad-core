@@ -16,6 +16,7 @@ from werkzeug.routing import BuildError
 from . import launchpad_ui_bp
 
 from apps.staff_status.service import (
+    build_public_url,
     get_department_record,
     list_active_departments_from_users,
     rotate_kiosk_token,
@@ -1354,10 +1355,9 @@ def settings_staff_status_rotate_kiosk_token(department_name: str):
             "ok": True,
             "department_name": department["department_name"],
             "kiosk_token": department["kiosk_token"],
-            "kiosk_url": url_for(
+            "kiosk_url": build_public_url(
                 "staff_status.kiosk",
                 token=department["kiosk_token"],
-                _external=True,
             ),
         }
     )
@@ -1376,10 +1376,26 @@ def settings_staff_status_rotate_board_token(department_name: str):
             "ok": True,
             "department_name": department["department_name"],
             "board_token": department["board_token"],
-            "board_url": url_for(
+            "board_url": build_public_url(
                 "staff_status.board_public",
                 token=department["board_token"],
-                _external=True,
-            ),
+            )
         }
     )
+    
+@launchpad_ui_bp.route("/debug/proxy")
+def debug_proxy():
+    return jsonify({
+        "host": request.host,
+        "scheme": request.scheme,
+        "url_root": request.url_root,
+        "is_secure": request.is_secure,
+        "forwarded_proto": request.headers.get("X-Forwarded-Proto"),
+        "forwarded_host": request.headers.get("X-Forwarded-Host"),
+        "forwarded_for": request.headers.get("X-Forwarded-For"),
+        "session_cookie_secure": current_app.config.get("SESSION_COOKIE_SECURE"),
+        "session_cookie_samesite": current_app.config.get("SESSION_COOKIE_SAMESITE"),
+        "has_session_user": bool(session.get("user_id")),
+        "authenticated_at": session.get("authenticated_at"),
+        "last_activity": session.get("last_activity"),
+    })

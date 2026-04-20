@@ -67,7 +67,7 @@ function initStaffStatusBoard() {
   if (!grid) return;
 
   const dataUrl = grid.dataset.dataUrl;
-  const refreshSeconds = Number(grid.dataset.refreshSeconds || "5");
+  const refreshSeconds = Number(grid.dataset.refreshSeconds || "30");
   const boardTimezone = grid.dataset.timezone || "America/Chicago";
   const streamUrl = grid.dataset.streamUrl;
 
@@ -123,7 +123,7 @@ function initStaffStatusBoard() {
       timeEl.textContent = new Intl.DateTimeFormat([], {
         hour: "numeric",
         minute: "2-digit",
-        second: "2-digit",
+        // second: "2-digit",
         timeZone: boardTimezone
       }).format(now);
     }
@@ -183,11 +183,13 @@ function initStaffStatusBoard() {
   }
 
   updateClock();
-  window.setInterval(updateClock, 1000);
+  // window.setInterval(updateClock, 1000);
 
-  connectStream();
+  // connectStream();
 
   // Keep a fallback poll in case SSE disconnects silently.
+  // window.setInterval(doRefreshBoard, refreshSeconds * 1000);
+  doRefreshBoard();
   window.setInterval(doRefreshBoard, refreshSeconds * 1000);
 }
 

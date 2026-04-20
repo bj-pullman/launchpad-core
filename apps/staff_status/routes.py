@@ -4,6 +4,7 @@ from modules.core.settings.settings_service import get_setting
 
 from .blueprint import bp
 from .service import (
+    build_public_url,
     create_absence,
     create_location,
     delete_absence,
@@ -359,7 +360,7 @@ def rotate_department_kiosk_token(department_name: str):
             "ok": True,
             "department_name": department["department_name"],
             "kiosk_token": department["kiosk_token"],
-            "kiosk_url": url_for("staff_status.kiosk", token=department["kiosk_token"], _external=True),
+            "kiosk_url": build_public_url("staff_status.kiosk", token=department["kiosk_token"]),
         }
     )
 
