@@ -148,10 +148,19 @@
 .staff-status-kiosk-header,
 .staff-status-board-header {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+.staff-status-board-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 8px;
+  min-width: 260px;
 }
 
 .staff-status-kiosk-header h1,
@@ -172,14 +181,73 @@
 .staff-status-board-refresh {
   display: inline-flex;
   align-items: center;
-  padding: 8px 12px;
+  font-size: 1.15rem;
+  padding: 10px 14px;
   border-radius: 999px;
   background: var(--ss-panel-soft);
   border: 1px solid var(--ss-border);
   color: var(--ss-muted);
-  font-size: 1rem;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.staff-status-url-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+.staff-status-url-card {
+  width: 100%;
+}
+
+.staff-status-url-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.staff-status-url-card-header h2 {
+  margin: 0 0 4px 0;
+}
+
+.staff-status-url-card-header p {
+  margin: 0;
+}
+
+.staff-status-url-grid input[readonly] {
+  width: 100%;
+  border: 1px solid var(--ss-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  background: #f8fafc;
+  color: var(--ss-text);
+}
+
+.staff-status-url-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: var(--ss-accent);
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+}
+
+.staff-status-url-btn:hover {
+  background: #1d4ed8;
+  color: #ffffff;
+  text-decoration: none;
 }
 
 .staff-status-kiosk-layout {
@@ -407,13 +475,13 @@
 }
 
 .staff-status-board-date {
-  font-size: 1rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--ss-muted);
 }
 
 .staff-status-board-time {
-  font-size: 2rem;
+  font-size: 2.6rem;
   font-weight: 700;
   line-height: 1;
   color: var(--ss-text);
@@ -1144,6 +1212,14 @@ SORT LINKS
 
   .staff-status-chart-wrap-lg {
     height: 300px;
+  }
+  
+  .staff-status-url-card-header {
+    flex-direction: column;
+  }
+
+  .staff-status-url-btn {
+    width: 100%;
   }
 }
 

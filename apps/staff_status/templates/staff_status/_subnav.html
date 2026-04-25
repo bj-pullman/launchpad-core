@@ -35,4 +35,10 @@
   >
     Locations
   </a>
+  <a
+  href="{{ url_for('staff_status.urls', department_name=department_name) }}"
+  class="{% if active_tab == 'urls' %}active{% endif %}"
+  >
+    URLs
+  </a>
 </nav>

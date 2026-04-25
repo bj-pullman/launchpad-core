@@ -66,6 +66,13 @@ from modules.core.identity.rbac_db import get_connection as get_rbac_connection
 from modules.core.identity.user_service import get_user_by_id, update_user, create_user, list_users
 from modules.core.settings.settings_service import get_setting, set_setting, get_bool_setting
 
+from modules.core.api_keys.service import (
+    create_api_key,
+    list_api_keys,
+    revoke_api_key,
+    delete_api_key,
+)
+
 from tasks.scheduler import configure_jobs
 
 
@@ -2029,4 +2036,73 @@ def settings_integrations_email():
         "launchpad_ui/settings/integrations_email.html",
         active_section="integrations",
         settings=settings,
+    )
+
+@launchpad_ui_bp.route("/settings/integrations/api", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.snipeops.view")
+def settings_integrations_api():
+    generated_key = session.pop("generated_api_key", None)
+    user_id = session.get("user_id")
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip()
+
+        if action == "create_api_key":
+            if not _require_manage_permission(
+                "launchpad.settings.snipeops.manage",
+                "You do not have permission to manage integrations.",
+            ):
+                return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+            friendly_name = (request.form.get("friendly_name") or "").strip()
+
+            try:
+                generated_key = create_api_key(
+                    friendly_name=friendly_name,
+                    created_by_user_id=user_id,
+                )
+                session["generated_api_key"] = generated_key
+                flash("API key created. Copy it now; it will not be shown again.", "success")
+            except ValueError as exc:
+                flash(str(exc), "error")
+
+            return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+        if action == "revoke_api_key":
+            if not _require_manage_permission(
+                "launchpad.settings.snipeops.manage",
+                "You do not have permission to manage integrations.",
+            ):
+                return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+            api_key_id = request.form.get("api_key_id", type=int)
+            if api_key_id:
+                revoke_api_key(
+                    api_key_id=api_key_id,
+                    revoked_by_user_id=user_id,
+                )
+                flash("API key revoked.", "success")
+
+            return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+        if action == "delete_api_key":
+            if not _require_manage_permission(
+                "launchpad.settings.snipeops.manage",
+                "You do not have permission to manage integrations.",
+            ):
+                return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+            api_key_id = request.form.get("api_key_id", type=int)
+            if api_key_id:
+                delete_api_key(api_key_id=api_key_id)
+                flash("API key deleted.", "success")
+
+            return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+    return render_template(
+        "launchpad_ui/settings/integrations_api.html",
+        active_section="integrations",
+        api_keys=list_api_keys(),
+        generated_key=generated_key,
     )

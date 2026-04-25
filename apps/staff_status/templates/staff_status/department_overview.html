@@ -66,7 +66,54 @@
       </div>
     </div>
   </div>
+  <div class="content-card" style="margin-top: 16px;">
+      <div class="staff-status-chart-card-header">
+        <div>
+          <h2>Upcoming Absences</h2>
+          <p class="muted">Planned time away for the upcoming schedule window.</p>
+        </div>
+      </div>
 
+      {% if upcoming_absences %}
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Staff</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for absence in upcoming_absences %}
+                <tr
+                  class="
+                    {% if absence.start_date and absence.start_date <= highlight_7_day %}
+                      staff-status-row-warning
+                    {% endif %}
+                  "
+                >
+                  <td>{{ absence.user_display_name }}</td>
+                  <td>
+                    <div class="staff-status-absence-cell">
+                      <span class="staff-status-date">{{ absence.start_date }}</span>
+                      {% if absence.start_date <= highlight_7_day %}
+                        <span class="staff-status-soon-label">Soon</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>{{ absence.end_date }}</td>
+                  <td>{{ absence.days_value or "—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted">No upcoming absences scheduled.</p>
+      {% endif %}
+    </div>
   <div class="card-grid staff-status-overview-chart-grid" style="margin-top: 16px;">
     <div class="content-card">
       <div class="staff-status-chart-card-header">
@@ -106,57 +153,7 @@
       </p>
     </div>
   </div>
-
-  <div class="content-card" style="margin-top: 16px;">
-    <div class="staff-status-chart-card-header">
-      <div>
-        <h2>Upcoming Absences</h2>
-        <p class="muted">Planned time away for the upcoming schedule window.</p>
-      </div>
-    </div>
-
-    {% if upcoming_absences %}
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Staff</th>
-              <th>Start</th>
-              <th>End</th>
-              <th>Days</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for absence in upcoming_absences %}
-              <tr
-                class="
-                  {% if absence.start_date and absence.start_date <= highlight_7_day %}
-                    staff-status-row-warning
-                  {% endif %}
-                "
-              >
-                <td>{{ absence.user_display_name }}</td>
-                <td>
-                  <div class="staff-status-absence-cell">
-                    <span class="staff-status-date">{{ absence.start_date }}</span>
-                    {% if absence.start_date <= highlight_7_day %}
-                      <span class="staff-status-soon-label">Soon</span>
-                    {% endif %}
-                  </div>
-                </td>
-                <td>{{ absence.end_date }}</td>
-                <td>{{ absence.days_value or "—" }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p class="muted">No upcoming absences scheduled.</p>
-    {% endif %}
-  </div>
 </div>
-
 <script>
   window.staffStatusOverviewData = {{ overview_analytics | tojson }};
 </script>

@@ -74,6 +74,12 @@ from .service import (
     get_budget_summary_for_department,
     get_budget_breakdown_for_department,
     get_budget_year_options_for_department,
+    validate_transactions_import,
+    execute_transactions_import,
+    list_transactions_for_department,
+    get_transaction_by_id,
+    mark_transaction_promoted,
+    bulk_update_transactions_review_status,
 )
 
 @bp.route("/")
@@ -157,14 +163,33 @@ def records(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
+    q = (request.args.get("q") or "").strip()
+    vendor_q = (request.args.get("vendor_q") or "").strip()
+    category_id = request.args.get("category_id", type=int)
+    page = request.args.get("page", default=1, type=int)
+
+    record_page = list_active_records_for_department(
+        department_name,
+        q=q,
+        category_id=category_id,
+        vendor_q=vendor_q,
+        page=page,
+        per_page=100,
+    )
+
     return render_template(
         "finance/records.html",
         department_name=department_name,
         active_tab="records",
-        records=list_active_records_for_department(department_name),
+        records=record_page["rows"],
+        record_page=record_page,
+        categories=list_categories(),
+        selected_q=q,
+        selected_vendor_q=vendor_q,
+        selected_category_id=category_id,
         can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
     )
-
 
 @bp.route("/<department_name>/records/archived")
 @login_required
@@ -176,12 +201,32 @@ def records_archived(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
+    q = (request.args.get("q") or "").strip()
+    vendor_q = (request.args.get("vendor_q") or "").strip()
+    category_id = request.args.get("category_id", type=int)
+    page = request.args.get("page", default=1, type=int)
+
+    record_page = list_archived_records_for_department(
+        department_name,
+        q=q,
+        category_id=category_id,
+        vendor_q=vendor_q,
+        page=page,
+        per_page=100,
+    )
+
     return render_template(
         "finance/records_archived.html",
         department_name=department_name,
         active_tab="archived",
-        records=list_archived_records_for_department(department_name),
+        records=record_page["rows"],
+        record_page=record_page,
+        categories=list_categories(),
+        selected_q=q,
+        selected_vendor_q=vendor_q,
+        selected_category_id=category_id,
         can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
     )
 
 
@@ -195,12 +240,32 @@ def records_deleted(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
+    q = (request.args.get("q") or "").strip()
+    vendor_q = (request.args.get("vendor_q") or "").strip()
+    category_id = request.args.get("category_id", type=int)
+    page = request.args.get("page", default=1, type=int)
+
+    record_page = list_deleted_records_for_department(
+        department_name,
+        q=q,
+        category_id=category_id,
+        vendor_q=vendor_q,
+        page=page,
+        per_page=100,
+    )
+
     return render_template(
         "finance/records_deleted.html",
         department_name=department_name,
         active_tab="deleted",
-        records=list_deleted_records_for_department(department_name),
+        records=record_page["rows"],
+        record_page=record_page,
+        categories=list_categories(),
+        selected_q=q,
+        selected_vendor_q=vendor_q,
+        selected_category_id=category_id,
         can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
     )
 
 
@@ -590,15 +655,26 @@ def vendors(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
+    q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", default=1, type=int)
+
+    vendor_page = list_active_vendors(
+        q=q,
+        page=page,
+        per_page=100,
+    )
+
     return render_template(
         "finance/vendors.html",
         department_name=department_name,
         active_tab="vendors",
         vendor_tab="active",
-        vendors=list_active_vendors(),
+        vendors=vendor_page["rows"],
+        vendor_page=vendor_page,
+        selected_vendor_q=q,
         can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
     )
-
 
 @bp.route("/<department_name>/vendors/archived")
 @login_required
@@ -610,13 +686,25 @@ def vendors_archived(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
+    q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", default=1, type=int)
+
+    vendor_page = list_archived_vendors(
+        q=q,
+        page=page,
+        per_page=100,
+    )
+
     return render_template(
         "finance/vendors_archived.html",
         department_name=department_name,
         active_tab="vendors",
         vendor_tab="archived",
-        vendors=list_archived_vendors(),
+        vendors=vendor_page["rows"],
+        vendor_page=vendor_page,
+        selected_vendor_q=q,
         can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
     )
 
 
@@ -630,13 +718,25 @@ def vendors_deleted(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
+    q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", default=1, type=int)
+
+    vendor_page = list_deleted_vendors(
+        q=q,
+        page=page,
+        per_page=100,
+    )
+
     return render_template(
         "finance/vendors_deleted.html",
         department_name=department_name,
         active_tab="vendors",
         vendor_tab="deleted",
-        vendors=list_deleted_vendors(),
+        vendors=vendor_page["rows"],
+        vendor_page=vendor_page,
+        selected_vendor_q=q,
         can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
     )
 
 
@@ -1136,7 +1236,7 @@ def imports(department_name: str):
         profile_id = request.form.get("profile_id", type=int)
         upload = request.files.get("import_file")
 
-        if import_type not in {"records", "vendors"}:
+        if import_type not in {"records", "vendors", "transactions"}:
             flash("Please choose a valid import type.", "error")
             return redirect(url_for("finance.imports", department_name=department_name))
 
@@ -1323,17 +1423,37 @@ def imports_mapping(department_name: str, run_id: int):
                     created_by_user_id=user_id,
                 )
 
+        existing_profile_fields = {}
+        if profile_id:
+            existing_profile_fields = {
+                item["target_field_name"]: item
+                for item in get_import_profile_fields(profile_id)
+            }
+
         mappings = []
+
         for field in target_fields:
-            selected_source = (request.form.get(f"map_{field['field_name']}") or "").strip()
+            field_name = field["field_name"]
+            selected_source = (request.form.get(f"map_{field_name}") or "").strip()
+
+            existing_field = existing_profile_fields.get(field_name, {})
+
+            transform_rule = existing_field.get("transform_rule")
+            default_value = existing_field.get("default_value")
+
+            if existing_field:
+                required = bool(existing_field.get("required"))
+            else:
+                required = bool(field["required"])
+
             mappings.append(
                 {
-                    "source_column_name": selected_source or None,
-                    "target_field_name": field["field_name"],
-                    "transform_rule": None,
-                    "default_value": None,
-                    "required": field["required"],
-                    "ignore_field": not bool(selected_source),
+                    "source_column_name": selected_source or existing_field.get("source_column_name"),
+                    "target_field_name": field_name,
+                    "transform_rule": transform_rule,
+                    "default_value": default_value,
+                    "required": required,
+                    "ignore_field": not bool(selected_source or existing_field.get("source_column_name")),
                 }
             )
 
@@ -1435,16 +1555,23 @@ def imports_validate(department_name: str, run_id: int):
             url_for("finance.imports_mapping", department_name=department_name, run_id=run_id)
         )
 
-    if run["import_type"] != "records":
-        flash("Record validation is built first. Vendor validation is next.", "error")
+    if run["import_type"] == "transactions":
+        validation = validate_transactions_import(
+            run_id=run_id,
+            profile_id=profile_id,
+            default_department_name=department_name,
+            preview_limit=20,
+        )
+    elif run["import_type"] == "records":
+        validation = validate_records_import(
+            run_id=run_id,
+            profile_id=profile_id,
+            default_department_name=department_name,
+            preview_limit=20,
+        )
+    else:
+        flash("Vendor validation is next.", "error")
         return redirect(url_for("finance.imports", department_name=department_name))
-
-    validation = validate_records_import(
-        run_id=run_id,
-        profile_id=profile_id,
-        default_department_name=department_name,
-        preview_limit=20,
-    )
 
     if request.method == "POST":
         if not can_manage_department(user_id, department_name):
@@ -1457,6 +1584,23 @@ def imports_validate(department_name: str, run_id: int):
             )
 
         try:
+            if run["import_type"] == "transactions":
+                result = execute_transactions_import(
+                    run_id=run_id,
+                    profile_id=profile_id,
+                    default_department_name=department_name,
+                    created_by_user_id=user_id,
+                )
+
+                flash(
+                    f"Import finished. Created {result['created_rows']} transaction(s), "
+                    f"created {result['vendors_created']} vendor(s), "
+                    f"skipped {result['skipped_rows']}, errors {result['error_rows']}.",
+                    "success",
+                )
+
+                return redirect(url_for("finance.transactions", department_name=department_name))
+
             result = execute_records_import(
                 run_id=run_id,
                 profile_id=profile_id,
@@ -1471,13 +1615,8 @@ def imports_validate(department_name: str, run_id: int):
                 f"skipped {result['skipped_rows']}, errors {result['error_rows']}.",
                 "success",
             )
-            
-            if run["import_type"] == "records":
-                return redirect(url_for("finance.records", department_name=department_name))
-            elif run["import_type"] == "vendors":
-                return redirect(url_for("finance.vendors", department_name=department_name))
 
-            return redirect(url_for("finance.imports_history", department_name=department_name))
+            return redirect(url_for("finance.records", department_name=department_name))
 
         except Exception as exc:
             flash(f"Import execution failed: {exc}", "error")
@@ -1580,4 +1719,180 @@ def budget(department_name: str):
         year_options=year_options,
         selected_group_by=group_by,
         search_query=q,
+    )       
+
+@bp.route("/<department_name>/transactions")
+@login_required
+def transactions(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    review_status = (request.args.get("review_status") or "").strip() or None
+    transaction_type = (request.args.get("transaction_type") or "").strip() or None
+    vendor_q = (request.args.get("vendor_q") or "").strip() or None
+    page = request.args.get("page", default=1, type=int)
+
+    transaction_page = list_transactions_for_department(
+        department_name,
+        review_status=review_status,
+        transaction_type=transaction_type,
+        vendor_q=vendor_q,
+        page=page,
+        per_page=100,
     )
+
+    return render_template(
+        "finance/transactions.html",
+        department_name=department_name,
+        active_tab="transactions",
+        transactions=transaction_page["rows"],
+        transaction_page=transaction_page,
+        selected_review_status=review_status,
+        selected_transaction_type=transaction_type,
+        vendor_q=vendor_q or "",
+        can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route("/transactions/<int:transaction_id>")
+@login_required
+def transaction_detail(transaction_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    transaction = get_transaction_by_id(transaction_id)
+    if not transaction:
+        abort(404)
+
+    department_name = transaction["department_name"]
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    return render_template(
+        "finance/transaction_detail.html",
+        transaction=transaction,
+        department_name=department_name,
+        active_tab="transactions",
+        can_manage=can_manage_department(user_id, department_name),
+        vendors=list_vendors_all(),
+        categories=list_categories(),
+    )
+
+
+@bp.route("/transactions/<int:transaction_id>/promote", methods=["POST"])
+@login_required
+def transaction_promote(transaction_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    transaction = get_transaction_by_id(transaction_id)
+    if not transaction:
+        abort(404)
+
+    department_name = transaction["department_name"]
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    title = (request.form.get("title") or transaction.get("title") or "").strip()
+    record_type = (
+        request.form.get("record_type")
+        or transaction.get("suggested_record_type")
+        or "renewal"
+    ).strip()
+
+    vendor_id = request.form.get("vendor_id", type=int) or transaction.get("vendor_id")
+    category_id = request.form.get("category_id", type=int)
+
+    cost = (
+        request.form.get("cost")
+        or transaction.get("expenditure_amount")
+        or ""
+    ).strip()
+
+    record_id = create_record(
+        record_type=record_type,
+        title=title,
+        department_name=department_name,
+        vendor_id=vendor_id,
+        category_id=category_id,
+        account_code=transaction.get("account_code"),
+        po_number=transaction.get("po_number"),
+        purchase_date=transaction.get("purchase_date"),
+        service_start_date="",
+        use_purchase_date_as_start=True,
+        term_length=None,
+        term_unit="",
+        expiration_date="",
+        renewal_date=(request.form.get("renewal_date") or "").strip(),
+        notify_days_before=30,
+        notification_recipients="",
+        status="active",
+        cost=cost,
+        notes=(
+            f"Promoted from Finance Transaction #{transaction_id}\n\n"
+            f"Description: {transaction.get('description') or ''}\n"
+            f"Transaction Type: {transaction.get('transaction_type') or ''}\n"
+            f"Encumbrance Amount: {transaction.get('encumbrance_amount') or ''}\n"
+            f"Cumulative Balance: {transaction.get('cumulative_balance') or ''}"
+        ),
+        created_by_user_id=user_id,
+    )
+
+    mark_transaction_promoted(transaction_id, record_id)
+
+    flash("Transaction promoted to Finance Record.", "success")
+    return redirect(url_for("finance.record_detail", record_id=record_id))
+
+@bp.route("/<department_name>/transactions/bulk-review-status", methods=["POST"])
+@login_required
+def transactions_bulk_review_status(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    ids = request.form.get("ids", "")
+    action = (request.form.get("action") or "").strip()
+
+    transaction_ids = [
+        int(item)
+        for item in ids.split(",")
+        if item.strip().isdigit()
+    ]
+
+    if action == "ignore":
+        updated = bulk_update_transactions_review_status(
+            transaction_ids=transaction_ids,
+            department_name=department_name,
+            review_status="ignored",
+        )
+        flash(f"{updated} transaction(s) marked ignored.", "success")
+
+    elif action == "needs_review":
+        updated = bulk_update_transactions_review_status(
+            transaction_ids=transaction_ids,
+            department_name=department_name,
+            review_status="needs_review",
+        )
+        flash(f"{updated} transaction(s) moved back to needs review.", "success")
+
+    else:
+        flash("Choose a valid bulk action.", "error")
+
+    return redirect(url_for("finance.transactions", department_name=department_name))

@@ -36,7 +36,7 @@
     <div>
       <h1>Staff Status Settings</h1>
       <p class="muted">
-        Configure enabled departments, kiosk URLs, board refresh timing, daily reset behavior, and department operators.
+        Configure enabled departments, kiosk URLs, daily reset behavior, and department operators.
       </p>
     </div>
   </div>
@@ -84,19 +84,6 @@
                 name="daily_reset_time"
                 value="{{ settings.daily_reset_time }}"
               />
-            </div>
-
-            <div class="form-field">
-              <label for="board_refresh_seconds">Board Refresh Seconds</label>
-              <input
-                type="number"
-                min="5"
-                max="300"
-                id="board_refresh_seconds"
-                name="board_refresh_seconds"
-                value="{{ settings.board_refresh_seconds }}"
-              />
-              <small>Used by the department board auto-refresh endpoint.</small>
             </div>
           </div>
         </div>

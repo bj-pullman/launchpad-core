@@ -10,12 +10,32 @@
 {% block content %}
 <div class="page-shell finance-shell">
   <div class="finance-subnav">
-    <a href="{{ url_for('finance.department_overview', department_name=department_name) }}"
-       class="{% if active_tab == 'overview' %}active{% endif %}">Overview</a>
-    <a href="{{ url_for('finance.records', department_name=department_name) }}"
-       class="{% if active_tab in ['records', 'archived', 'deleted'] %}active{% endif %}">Records</a>
-    <a href="{{ url_for('finance.vendors', department_name=department_name) }}"
-       class="{% if active_tab == 'vendors' %}active{% endif %}">Vendors</a>
+    <a
+      href="{{ url_for('finance.department_overview', department_name=department_name) }}"
+      class="{% if active_tab == 'overview' %}active{% endif %}"
+    >Overview</a>
+
+    <a
+      href="{{ url_for('finance.records', department_name=department_name) }}"
+      class="{% if active_tab == 'records' %}active{% endif %}"
+    >Records</a>
+
+    <a
+      href="{{ url_for('finance.transactions', department_name=department_name) }}"
+      class="{% if active_tab == 'transactions' %}active{% endif %}"
+    >Transactions</a>
+
+    <a
+      href="{{ url_for('finance.vendors', department_name=department_name) }}"
+      class="{% if active_tab == 'vendors' %}active{% endif %}"
+    >Vendors</a>
+
+    {% if can_view_budget %}
+      <a
+        href="{{ url_for('finance.budget', department_name=department_name) }}"
+        class="{% if active_tab == 'budget' %}active{% endif %}"
+      >Budget</a>
+    {% endif %}
   </div>
 
   <div class="page-header">
@@ -38,6 +58,49 @@
        class="{% if active_tab == 'archived' %}active{% endif %}">Archived</a>
     <a href="{{ url_for('finance.records_deleted', department_name=department_name) }}"
        class="{% if active_tab == 'deleted' %}active{% endif %}">Deleted</a>
+  </div>
+
+  <div class="content-card finance-filter-card">
+    <form method="get" class="finance-record-filters">
+      <div class="form-field">
+        <label>Search Anything</label>
+        <input
+          type="text"
+          name="q"
+          value="{{ selected_q or '' }}"
+          placeholder="Title, PO, account, notes..."
+        >
+      </div>
+
+      <div class="form-field">
+        <label>Category</label>
+        <select name="category_id">
+          <option value="">All Categories</option>
+          {% for category in categories %}
+            <option value="{{ category.id }}" {% if selected_category_id == category.id %}selected{% endif %}>
+              {{ category.category_name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label>Vendor Contains</label>
+        <input
+          type="text"
+          name="vendor_q"
+          value="{{ selected_vendor_q or '' }}"
+          placeholder="Vendor name..."
+        >
+      </div>
+
+      <div class="finance-filter-actions">
+        <button class="btn btn-primary">Filter</button>
+        <a class="btn btn-ghost" href="{{ url_for('finance.records', department_name=department_name) }}">
+          Reset
+        </a>
+      </div>
+    </form>
   </div>
 
   <div class="content-card">
@@ -74,6 +137,12 @@
         </div>
       {% endif %}
 
+      {% if record_page %}
+        <p class="finance-pagination-meta finance-pagination-meta-top">
+          Showing page {{ record_page.page }} of {{ record_page.total_pages }}
+          · {{ record_page.total }} record(s)
+        </p>
+      {% endif %}
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -115,6 +184,50 @@
           </tbody>
         </table>
       </div>
+
+      {% if record_page and record_page.total_pages > 1 %}
+        <div class="finance-pagination">
+          <div class="finance-pagination-meta">
+            Showing page {{ record_page.page }} of {{ record_page.total_pages }}
+            · {{ record_page.total }} record(s)
+          </div>
+
+          <div class="finance-pagination-actions">
+            {% if record_page.has_prev %}
+              <a
+                class="btn"
+                href="{{ url_for(
+                  request.endpoint,
+                  department_name=department_name,
+                  q=selected_q or '',
+                  category_id=selected_category_id or '',
+                  vendor_q=selected_vendor_q or '',
+                  page=record_page.prev_page
+                ) }}"
+              >
+                Previous
+              </a>
+            {% endif %}
+
+            {% if record_page.has_next %}
+              <a
+                class="btn btn-primary"
+                href="{{ url_for(
+                  request.endpoint,
+                  department_name=department_name,
+                  q=selected_q or '',
+                  category_id=selected_category_id or '',
+                  vendor_q=selected_vendor_q or '',
+                  page=record_page.next_page
+                ) }}"
+              >
+                Next
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+      
     {% else %}
       <div class="finance-empty">
         <h3>No active records</h3>

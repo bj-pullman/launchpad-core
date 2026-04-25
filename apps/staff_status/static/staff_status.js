@@ -67,15 +67,13 @@ function initStaffStatusBoard() {
   if (!grid) return;
 
   const dataUrl = grid.dataset.dataUrl;
-  const refreshSeconds = Number(grid.dataset.refreshSeconds || "5");
+  const refreshSeconds = Number(grid.dataset.refreshSeconds || "30");
   const boardTimezone = grid.dataset.timezone || "America/Chicago";
-  const streamUrl = grid.dataset.streamUrl;
 
   const dateEl = document.getElementById("staff-status-board-date");
   const timeEl = document.getElementById("staff-status-board-time");
 
   let refreshInFlight = false;
-  let refreshPending = false;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -130,10 +128,7 @@ function initStaffStatusBoard() {
   }
 
   async function doRefreshBoard() {
-    if (refreshInFlight) {
-      refreshPending = true;
-      return;
-    }
+    if (refreshInFlight || !dataUrl) return;
 
     refreshInFlight = true;
 
@@ -149,45 +144,14 @@ function initStaffStatusBoard() {
         renderRows(payload.rows);
       }
     } catch (error) {
-      // ignore transient failures
+      // Ignore transient failures.
     } finally {
       refreshInFlight = false;
-
-      if (refreshPending) {
-        refreshPending = false;
-        doRefreshBoard();
-      }
     }
-  }
-
-  function connectStream() {
-    if (!streamUrl) return;
-
-    const source = new EventSource(streamUrl);
-
-    source.onmessage = function (event) {
-      try {
-        const payload = JSON.parse(event.data);
-
-        if (payload.type === "department_updated") {
-          doRefreshBoard();
-        }
-      } catch (error) {
-        // ignore malformed events
-      }
-    };
-
-    source.onerror = function () {
-      // EventSource auto-reconnects on its own
-    };
   }
 
   updateClock();
   window.setInterval(updateClock, 1000);
-
-  connectStream();
-
-  // Keep a fallback poll in case SSE disconnects silently.
   window.setInterval(doRefreshBoard, refreshSeconds * 1000);
 }
 

@@ -36,6 +36,7 @@ from .service import (
     update_location,
     update_user_status,
     build_public_url,
+    get_department_record,
 )
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.identity.user_service import get_user_by_id
@@ -223,7 +224,7 @@ def board(department_name: str):
         abort(403)
 
     accessible_departments = list_accessible_departments_for_user(user_id)
-    refresh_seconds = int(get_setting("staff_status.board_refresh_seconds", "5") or "5")
+    refresh_seconds = 30
     app_timezone = get_setting("general.timezone", "America/Chicago") or "America/Chicago"
 
     return render_template(
@@ -496,7 +497,7 @@ def board_public(token: str):
         abort(404)
 
     department_name = department["department_name"]
-    refresh_seconds = int(get_setting("staff_status.board_refresh_seconds", "5") or "5")
+    refresh_seconds = 30
     app_timezone = get_setting("general.timezone", "America/Chicago") or "America/Chicago"
 
     return render_template(
@@ -590,4 +591,42 @@ def rotate_department_board_token_for_settings(department_name: str):
                 token=department["board_token"],
             ),
         }
+    )
+
+@bp.route("/<department_name>/urls")
+@login_required
+def urls(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    accessible_departments = list_accessible_departments_for_user(user_id)
+    department = get_department_record(department_name) or {}
+
+    kiosk_url = None
+    board_url = None
+
+    if department.get("kiosk_token"):
+        kiosk_url = build_public_url(
+            "staff_status.kiosk",
+            token=department["kiosk_token"],
+        )
+
+    if department.get("board_token"):
+        board_url = build_public_url(
+            "staff_status.board_public",
+            token=department["board_token"],
+        )
+
+    return render_template(
+        "staff_status/urls.html",
+        department_name=department_name,
+        active_tab="urls",
+        kiosk_url=kiosk_url,
+        board_url=board_url,
+        accessible_department_count=len(accessible_departments),
+        is_staff_status_admin=has_staff_status_admin(user_id),
     )

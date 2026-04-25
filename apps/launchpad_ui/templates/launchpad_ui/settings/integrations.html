@@ -170,7 +170,40 @@
       </div>
     </a>
     {% endif %}
-    
+
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_api') }}"
+      class="integration-brand-card integration-brand-card-api"
+    >
+      <div class="integration-brand-logo-wrap">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="34"
+          height="34"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.9"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1"></path>
+          <path d="M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1"></path>
+        </svg>
+      </div>
+
+      <div class="integration-brand-title">API Keys</div>
+
+      <div class="integration-brand-body">
+        Create and manage API keys for automated integrations such as Finance imports and external system connections.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+
   </div>
 </div>
 {% endblock %}

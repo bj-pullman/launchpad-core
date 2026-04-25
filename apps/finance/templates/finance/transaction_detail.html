@@ -1,0 +1,193 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+
+    <div class="finance-back-row">
+        <a href="{{ url_for('finance.transactions', department_name=department_name) }}" class="finance-back-link">
+            <span class="finance-back-link-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+            </svg>
+            </span>
+            <span>Transactions</span>
+        </a>
+    </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ transaction.title or "Transaction Detail" }}</h1>
+      <p class="page-subtitle">
+        Review imported activity and promote meaningful items into Finance Records.
+      </p>
+    </div>
+  </div>
+
+    <div class="content-card">
+    <div class="finance-detail-header">
+        <div>
+        <h2>{{ transaction.title or "Untitled Transaction" }}</h2>
+        <p class="finance-meta">
+            {{ transaction.transaction_type|replace("_", " ")|title if transaction.transaction_type else "Other" }}
+            ·
+            {{ transaction.review_status|replace("_", " ")|title if transaction.review_status else "Needs Review" }}
+        </p>
+        </div>
+    </div>
+
+    <div class="finance-transaction-summary-grid">
+        <div class="finance-summary-tile">
+        <span>Date</span>
+        <strong>{{ transaction.purchase_date or "—" }}</strong>
+        </div>
+
+        <div class="finance-summary-tile">
+        <span>Spent</span>
+        <strong>{{ transaction.expenditure_amount or "0.00" }}</strong>
+        </div>
+
+        <div class="finance-summary-tile">
+        <span>Encumbered</span>
+        <strong>{{ transaction.encumbrance_amount or "0.00" }}</strong>
+        </div>
+
+        <div class="finance-summary-tile">
+        <span>Balance</span>
+        <strong>{{ transaction.cumulative_balance or "0.00" }}</strong>
+        </div>
+    </div>
+
+    <div class="finance-detail-section">
+        <h3>Transaction Details</h3>
+
+        <div class="finance-detail-table">
+        <div>
+            <span>Vendor</span>
+            <strong>{{ transaction.vendor_name or "—" }}</strong>
+        </div>
+
+        <div>
+            <span>Vendor Code</span>
+            <strong>{{ transaction.vendor_code or "—" }}</strong>
+        </div>
+
+        <div>
+            <span>PO Number</span>
+            <strong>{{ transaction.po_number or "—" }}</strong>
+        </div>
+
+        <div>
+            <span>Account Code</span>
+            <strong>{{ transaction.account_code or "—" }}</strong>
+        </div>
+
+        <div>
+            <span>Fund</span>
+            <strong>{{ transaction.fund or "—" }}</strong>
+        </div>
+
+        <div>
+            <span>Budget Unit</span>
+            <strong>{{ transaction.budget_unit or "—" }}</strong>
+        </div>
+
+        <div>
+            <span>Suggested Record Type</span>
+            <strong>{{ transaction.suggested_record_type or "—" }}</strong>
+        </div>
+
+        <div>
+            <span>Source Row</span>
+            <strong>{{ transaction.source_row_number or "—" }}</strong>
+        </div>
+        </div>
+    </div>
+
+    <div class="finance-detail-section">
+        <h3>Description</h3>
+        <p class="finance-description-box">
+        {{ transaction.description or "No description provided." }}
+        </p>
+    </div>
+    </div>
+
+  {% if can_manage and transaction.review_status != "promoted" %}
+    <div class="content-card">
+      <h2>Promote to Finance Record</h2>
+      <p class="page-subtitle">
+        Use this when the transaction represents something that should be tracked long-term.
+      </p>
+
+      <form method="post" action="{{ url_for('finance.transaction_promote', transaction_id=transaction.id) }}">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Record Title</label>
+            <input name="title" required value="{{ transaction.title or '' }}">
+          </div>
+
+          <div class="form-field">
+            <label>Record Type</label>
+            <select name="record_type">
+              {% set suggested = transaction.suggested_record_type or "renewal" %}
+              <option value="renewal" {% if suggested == "renewal" %}selected{% endif %}>Renewal</option>
+              <option value="subscription" {% if suggested == "subscription" %}selected{% endif %}>Subscription</option>
+              <option value="service_contract" {% if suggested == "service_contract" %}selected{% endif %}>Service Contract</option>
+              <option value="purchase" {% if suggested == "purchase" %}selected{% endif %}>Purchase</option>
+              <option value="blanket_po" {% if suggested == "blanket_po" %}selected{% endif %}>Blanket PO</option>
+              <option value="change_order" {% if suggested == "change_order" %}selected{% endif %}>Change Order</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label>Vendor</label>
+            <select name="vendor_id">
+              <option value="">No vendor</option>
+              {% for vendor in vendors %}
+                <option value="{{ vendor.id }}" {% if transaction.vendor_id == vendor.id %}selected{% endif %}>
+                  {{ vendor.vendor_name }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label>Category</label>
+            <select name="category_id">
+              <option value="">No category</option>
+              {% for category in categories %}
+                <option value="{{ category.id }}">{{ category.category_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label>Cost</label>
+            <input name="cost" value="{{ transaction.expenditure_amount or '' }}">
+          </div>
+
+          <div class="form-field">
+            <label>Renewal Date</label>
+            <input type="date" name="renewal_date">
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary">Promote to Record</button>
+        </div>
+      </form>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

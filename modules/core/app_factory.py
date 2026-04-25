@@ -14,6 +14,7 @@ from apps.staff_status.blueprint import bp as staff_status_bp
 from apps.staff_status.db import init_staff_status_db
 from apps.finance.blueprint import bp as finance_bp
 from apps.finance.db import init_finance_db
+from apps.finance.api_routes import finance_api_bp
 
 from modules.core.auth.blueprint import bp as auth_bp
 from modules.core.auth import routes as auth_routes  # noqa: F401
@@ -29,6 +30,8 @@ from modules.core.setup.blueprint import bp as setup_bp
 from modules.core.auth.bootstrap_admin import ensure_default_local_admin
 from modules.core.utils.time import format_system_time, utc_now
 from modules.core.settings.settings_service import get_setting, get_bool_setting
+from modules.core.api_keys.service import init_api_keys_db
+from modules.core.bootstrap.finance_seed import ensure_efinance_daily_import_profile
 
 from tasks.scheduler import configure_jobs
 
@@ -68,6 +71,11 @@ def create_app() -> Flask:
     init_rbac_db()
     init_staff_status_db()
     init_finance_db()
+
+    # Seed Finance defaults (safe/idempotent)
+    ensure_efinance_daily_import_profile()
+    
+    init_api_keys_db()
 
     seed_permissions()
     ensure_default_local_admin()
@@ -232,6 +240,7 @@ def create_app() -> Flask:
     app.register_blueprint(setup_bp)
     app.register_blueprint(staff_status_bp)
     app.register_blueprint(finance_bp)
+    app.register_blueprint(finance_api_bp)
     
     should_start_scheduler = True
 
@@ -361,3 +370,4 @@ def create_app() -> Flask:
         }
 
     return app
+

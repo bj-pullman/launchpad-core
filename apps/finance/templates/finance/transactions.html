@@ -1,0 +1,274 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+
+  <div class="finance-subnav">
+    <a
+      href="{{ url_for('finance.department_overview', department_name=department_name) }}"
+      class="{% if active_tab == 'overview' %}active{% endif %}"
+    >Overview</a>
+
+    <a
+      href="{{ url_for('finance.records', department_name=department_name) }}"
+      class="{% if active_tab == 'records' %}active{% endif %}"
+    >Records</a>
+
+    <a
+      href="{{ url_for('finance.transactions', department_name=department_name) }}"
+      class="{% if active_tab == 'transactions' %}active{% endif %}"
+    >Transactions</a>
+
+    <a
+      href="{{ url_for('finance.vendors', department_name=department_name) }}"
+      class="{% if active_tab == 'vendors' %}active{% endif %}"
+    >Vendors</a>
+
+    {% if can_view_budget %}
+      <a
+        href="{{ url_for('finance.budget', department_name=department_name) }}"
+        class="{% if active_tab == 'budget' %}active{% endif %}"
+      >Budget</a>
+    {% endif %}
+  </div>
+
+    <div class="page-header">
+    <div>
+        <h1>{{ department_name }} Transactions</h1>
+        <p class="page-subtitle">
+        Imported ERP activity. Review transactions and promote meaningful items into Finance Records.
+        </p>
+    </div>
+
+    {% if can_manage %}
+        <div class="page-header-actions">
+            <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name) }}">
+            Import Transactions
+            </a>
+        </div>
+    {% endif %}
+    </div>
+
+    <div class="content-card finance-filter-card">
+        <form method="get" class="finance-transaction-filters">
+            <div class="form-field">
+            <label>Review Status</label>
+            <select name="review_status">
+                <option value="">All</option>
+                <option value="needs_review" {% if selected_review_status == "needs_review" %}selected{% endif %}>Needs Review</option>
+                <option value="promoted" {% if selected_review_status == "promoted" %}selected{% endif %}>Promoted</option>
+                <option value="ignored" {% if selected_review_status == "ignored" %}selected{% endif %}>Ignored</option>
+            </select>
+            </div>
+
+            <div class="form-field">
+            <label>Transaction Type</label>
+            <select name="transaction_type">
+                <option value="">All</option>
+                <option value="purchase" {% if selected_transaction_type == "purchase" %}selected{% endif %}>Purchase</option>
+                <option value="encumbrance" {% if selected_transaction_type == "encumbrance" %}selected{% endif %}>Encumbrance</option>
+                <option value="encumbrance_release" {% if selected_transaction_type == "encumbrance_release" %}selected{% endif %}>Encumbrance Release</option>
+                <option value="blanket_po" {% if selected_transaction_type == "blanket_po" %}selected{% endif %}>Blanket PO</option>
+                <option value="change_order" {% if selected_transaction_type == "change_order" %}selected{% endif %}>Change Order</option>
+                <option value="credit_refund" {% if selected_transaction_type == "credit_refund" %}selected{% endif %}>Credit / Refund</option>
+                <option value="tax_fee" {% if selected_transaction_type == "tax_fee" %}selected{% endif %}>Tax / Fee</option>
+                <option value="other" {% if selected_transaction_type == "other" %}selected{% endif %}>Other</option>
+            </select>
+            </div>
+
+            <div class="form-field finance-filter-vendor">
+            <label>Vendor Contains</label>
+            <input
+                type="text"
+                name="vendor_q"
+                value="{{ vendor_q or '' }}"
+                placeholder="Type vendor name..."
+            >
+            </div>
+
+            <div class="finance-filter-actions">
+            <button class="btn btn-primary">Filter</button>
+            <a class="btn btn-ghost" href="{{ url_for('finance.transactions', department_name=department_name) }}">
+            Reset
+            </a>
+            </div>
+        </form>
+    </div>
+
+    <div class="content-card">
+    <div class="finance-section-header">
+        <div>
+        <h2>Transactions</h2>
+        {% if transaction_page %}
+            <p class="finance-pagination-meta finance-pagination-meta-top">
+                Showing page {{ transaction_page.page }} of {{ transaction_page.total_pages }}
+                · {{ transaction_page.total }} transaction(s)
+            </p>
+        {% endif %}
+        </div>
+    </div>
+
+    {% if transactions %}
+        {% if can_manage %}
+        <div id="finance-transactions-bulk-bar" class="finance-bulk-bar" style="display:none;">
+            <div class="finance-bulk-left">
+            <span id="finance-transactions-bulk-count">0 selected</span>
+            </div>
+
+            <div class="finance-bulk-actions">
+            <form
+                method="post"
+                action="{{ url_for('finance.transactions_bulk_review_status', department_name=department_name) }}"
+                class="finance-inline-form"
+                data-confirm="Mark selected transactions as ignored?"
+                data-confirm-action="confirm"
+            >
+                <input type="hidden" name="ids" id="finance-transactions-bulk-ignore-ids">
+                <input type="hidden" name="action" value="ignore">
+                <button type="submit" class="btn">Ignore</button>
+            </form>
+
+            <form
+                method="post"
+                action="{{ url_for('finance.transactions_bulk_review_status', department_name=department_name) }}"
+                class="finance-inline-form"
+                data-confirm="Move selected transactions back to needs review?"
+                data-confirm-action="confirm"
+            >
+                <input type="hidden" name="ids" id="finance-transactions-bulk-review-ids">
+                <input type="hidden" name="action" value="needs_review">
+                <button type="submit" class="btn btn-secondary">Needs Review</button>
+            </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+            <tr>
+                {% if can_manage %}
+                <th class="finance-select-col">
+                    <input type="checkbox" id="finance-transactions-select-all">
+                </th>
+                {% endif %}
+                <th>Date</th>
+                <th>Title</th>
+                <th>Vendor</th>
+                <th>Type</th>
+                <th>Spent</th>
+                <th>Encumbered</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+
+            <tbody>
+            {% for item in transactions %}
+                <tr
+                class="finance-row-link"
+                data-href="{{ url_for('finance.transaction_detail', transaction_id=item.id) }}"
+                >
+                {% if can_manage %}
+                    <td class="finance-select-col">
+                    <input
+                        type="checkbox"
+                        class="finance-row-select finance-transactions-row-select"
+                        value="{{ item.id }}"
+                    >
+                    </td>
+                {% endif %}
+
+                <td>{{ item.purchase_date or "—" }}</td>
+
+                <td>
+                    <div class="finance-record-title">{{ item.title or "Untitled Transaction" }}</div>
+                    <div class="finance-meta">
+                    {% if item.account_code %}Acct {{ item.account_code }}{% endif %}
+                    {% if item.po_number %} · PO {{ item.po_number }}{% endif %}
+                    </div>
+                </td>
+
+                <td>{{ item.vendor_name or "—" }}</td>
+
+                <td>
+                    <span class="finance-pill">
+                    {{ item.transaction_type|replace("_", " ")|title if item.transaction_type else "Other" }}
+                    </span>
+                </td>
+
+                <td>{{ item.expenditure_amount or "0.00" }}</td>
+                <td>{{ item.encumbrance_amount or "0.00" }}</td>
+
+                <td>
+                    <span class="finance-pill">
+                    {{ item.review_status|replace("_", " ")|title if item.review_status else "Needs Review" }}
+                    </span>
+                </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+            {% if transaction_page.total_pages > 1 %}
+            <div class="finance-pagination">
+                <div class="finance-pagination-meta">
+                Showing page {{ transaction_page.page }} of {{ transaction_page.total_pages }}
+                · {{ transaction_page.total }} transaction(s)
+                </div>
+
+                <div class="finance-pagination-actions">
+                {% if transaction_page.has_prev %}
+                    <a
+                    class="btn"
+                    href="{{ url_for(
+                        'finance.transactions',
+                        department_name=department_name,
+                        review_status=selected_review_status or '',
+                        transaction_type=selected_transaction_type or '',
+                        vendor_q=vendor_q or '',
+                        page=transaction_page.prev_page
+                    ) }}"
+                    >
+                    Previous
+                    </a>
+                {% endif %}
+
+                {% if transaction_page.has_next %}
+                    <a
+                    class="btn btn-primary"
+                    href="{{ url_for(
+                        'finance.transactions',
+                        department_name=department_name,
+                        review_status=selected_review_status or '',
+                        transaction_type=selected_transaction_type or '',
+                        vendor_q=vendor_q or '',
+                        page=transaction_page.next_page
+                    ) }}"
+                    >
+                    Next
+                    </a>
+                {% endif %}
+                </div>
+            </div>
+            {% endif %}
+    {% else %}
+        <div class="finance-empty">
+        <h3>No transactions found</h3>
+        <p>Import an ERP transaction file to populate this page.</p>
+        </div>
+    {% endif %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

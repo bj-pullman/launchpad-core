@@ -9,9 +9,13 @@ document.addEventListener("DOMContentLoaded", function () {
   initSettingsProviderToggles();
   initSettingsFileUploads();
   initFinanceNotificationLogoPreviewName();
-  initFinanceNotificationTemplateBuilder();
-});
 
+  if (typeof initFinanceNotificationTemplateBuilder === "function") {
+    initFinanceNotificationTemplateBuilder();
+  }
+
+  initApiKeyCreatedModal();
+});
 function initSnipeOpsConnectionTest() {
   const form = document.getElementById("snipeops-settings-form");
   const testButton = document.getElementById("snipeops-test-btn");
@@ -356,8 +360,7 @@ function initDeleteConfirmations() {
     titleEl.textContent = form.dataset.confirmTitle || "Confirm Action";
     messageEl.textContent =
       form.dataset.confirmMessage || "Are you sure you want to continue?";
-    confirmBtn.textContent =
-      form.dataset.confirmButtonLabel || "Confirm";
+    confirmBtn.textContent = form.dataset.confirmButtonLabel || "Confirm";
 
     modal.hidden = false;
     document.body.classList.add("confirm-modal-open");
@@ -376,11 +379,6 @@ function initDeleteConfirmations() {
 
   deleteForms.forEach((form) => {
     form.addEventListener("submit", function (event) {
-      if (form.dataset.confirmBypassed === "true") {
-        form.dataset.confirmBypassed = "false";
-        return;
-      }
-
       event.preventDefault();
       openModal(form);
     });
@@ -396,8 +394,10 @@ function initDeleteConfirmations() {
       return;
     }
 
-    pendingForm.dataset.confirmBypassed = "true";
-    pendingForm.requestSubmit();
+    const formToSubmit = pendingForm;
+    pendingForm = null;
+
+    formToSubmit.submit();
   });
 
   document.addEventListener("keydown", function (event) {
@@ -499,5 +499,31 @@ function initFinanceNotificationLogoPreviewName() {
     } else {
       textEl.textContent = defaultText;
     }
+  });
+}
+
+function initApiKeyCreatedModal() {
+  const modal = document.getElementById("api-key-modal");
+  const input = document.getElementById("generated-api-key");
+  const copyBtn = document.getElementById("copy-api-key-btn");
+  const closeBtn = document.getElementById("close-api-key-modal-btn");
+
+  if (!modal || !input || !copyBtn || !closeBtn) {
+    return;
+  }
+
+  copyBtn.addEventListener("click", async function () {
+    try {
+      await navigator.clipboard.writeText(input.value);
+      copyBtn.textContent = "Copied";
+    } catch (error) {
+      input.select();
+      document.execCommand("copy");
+      copyBtn.textContent = "Copied";
+    }
+  });
+
+  closeBtn.addEventListener("click", function () {
+    modal.remove();
   });
 }
