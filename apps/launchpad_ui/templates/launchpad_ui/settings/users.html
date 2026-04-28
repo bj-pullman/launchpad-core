@@ -31,82 +31,101 @@
 
     {% if "launchpad.settings.users.manage" in session.get("user_permissions", []) %}
     <div class="users-actions">
-      <a class="btn users-import-btn" href="#">
-        Import
-      </a>
-
-      <a class="btn btn-primary" href="{{ url_for('launchpad_ui.settings_users_new') }}">
-        Add User
-      </a>
+      <a class="btn users-import-btn" href="#">Import</a>
+      <a class="btn btn-primary" href="{{ url_for('launchpad_ui.settings_users_new') }}">Add User</a>
     </div>
     {% endif %}
   </div>
 
-  <div class="settings-section-stack">
+  {% if users %}
+  <div class="settings-content-card users-filter-card">
+    <button
+      type="button"
+      class="btn btn-secondary users-filter-toggle-btn"
+      id="users-filter-toggle"
+      aria-expanded="false"
+      aria-controls="users-filter-panel"
+      onclick="
+        const panel = document.getElementById('users-filter-panel');
+        const isOpening = panel.hidden;
+        panel.hidden = !isOpening;
+        this.setAttribute('aria-expanded', String(isOpening));
+      "
+    >
+      Filters
+    </button>
 
-    {% if users %}
-
-    <div class="settings-content-card users-filter-card">
-      <div class="users-toolbar">
-
-        <div class="users-filter-grid">
-          <div class="form-field">
-            <label for="users-search">Search</label>
-            <input
-              type="search"
-              id="users-search"
-              placeholder="Search username or groups..."
-              autocomplete="off"
-            >
-          </div>
-
-          <div class="form-field">
-            <label for="users-status-filter">Status</label>
-            <select id="users-status-filter">
-              <option value="">All statuses</option>
-              <option value="active">Active</option>
-              <option value="disabled">Disabled</option>
-            </select>
-          </div>
-
-          <div class="form-field">
-            <label for="users-account-filter">Account Type</label>
-            <select id="users-account-filter">
-              <option value="">All account types</option>
-              <option value="local">Local</option>
-              <option value="sso">SSO Only</option>
-            </select>
-          </div>
+    <div
+      id="users-filter-panel"
+      class="users-filter-panel"
+      hidden
+    >
+      <div class="users-filter-grid">
+        <div class="form-field">
+          <label for="users-search">Search</label>
+          <input
+            type="search"
+            id="users-search"
+            placeholder="Search username, department, or groups..."
+            autocomplete="off"
+          >
         </div>
 
-        {% if "launchpad.settings.users.manage" in session.get("user_permissions", []) %}
-        <div
-          class="users-bulk-actions"
-          id="users-bulk-actions"
-          data-bulk-action-url="{{ url_for('launchpad_ui.settings_users_bulk_action') }}"
-          hidden
-        >
-          <div class="form-field">
-            <label for="users-bulk-action">Bulk Update</label>
-            <select id="users-bulk-action">
-              <option value="">Choose action</option>
-              <option value="activate">Activate selected</option>
-              <option value="disable">Disable selected</option>
-              <option value="delete">Delete selected</option>
-            </select>
-          </div>
-
-          <button type="button" class="btn btn-primary users-bulk-apply-btn" id="users-bulk-apply">
-            Apply
-          </button>
+        <div class="form-field">
+          <label for="users-status-filter">Status</label>
+          <select id="users-status-filter">
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="disabled">Disabled</option>
+          </select>
         </div>
-        {% endif %}
 
+        <div class="form-field">
+          <label for="users-account-filter">Account Type</label>
+          <select id="users-account-filter">
+            <option value="">All account types</option>
+            <option value="local">Local</option>
+            <option value="sso">SSO Only</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="users-department-filter">Department</label>
+          <select id="users-department-filter">
+            <option value="">All departments</option>
+            {% for department in departments %}
+              <option value="{{ department|lower }}">{{ department }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
+
+      {% if "launchpad.settings.users.manage" in session.get("user_permissions", []) %}
+      <div
+        class="users-bulk-actions"
+        id="users-bulk-actions"
+        data-bulk-action-url="{{ url_for('launchpad_ui.settings_users_bulk_action') }}"
+        hidden
+      >
+        <div class="form-field">
+          <label for="users-bulk-action">Bulk Update</label>
+          <select id="users-bulk-action">
+            <option value="">Choose action</option>
+            <option value="activate">Activate selected</option>
+            <option value="disable">Disable selected</option>
+            <option value="delete">Delete selected</option>
+          </select>
+        </div>
+
+        <button type="button" class="btn btn-primary users-bulk-apply-btn" id="users-bulk-apply">
+          Apply
+        </button>
+      </div>
+      {% endif %}
     </div>
+  </div>
 
     <div class="settings-content-card">
-
       <div class="users-results-summary">
         Showing <span id="users-visible-count">{{ users|length }}</span> of {{ users|length }} users
       </div>
@@ -122,6 +141,7 @@
               {% endif %}
               <th>User</th>
               <th>Status</th>
+              <th>Department</th>
               <th>Groups</th>
               <th>Last Login</th>
               <th class="table-actions-col">Actions</th>
@@ -133,11 +153,11 @@
             <tr
               class="users-table-row"
               data-edit-url="{{ url_for('launchpad_ui.settings_users_edit', user_id=user.user_id) }}"
-              data-search-text="{{ (user.username ~ ' ' ~ user.groups_display_full)|lower }}"
+              data-search-text="{{ (user.username ~ ' ' ~ user.email ~ ' ' ~ user.department ~ ' ' ~ user.groups_display_full)|lower }}"
               data-status="{% if user.is_active %}active{% else %}disabled{% endif %}"
               data-account-type="{{ user.account_type or 'sso' }}"
+              data-department="{{ (user.department or '')|lower }}"
             >
-
               {% if "launchpad.settings.users.manage" in session.get("user_permissions", []) %}
               <td class="users-select-col">
                 <input
@@ -176,6 +196,19 @@
                 {% endif %}
               </td>
 
+              <td>
+                {% if user.department %}
+                  <span
+                    class="department-pill"
+                    data-department-pill="{{ user.department }}"
+                  >
+                    {{ user.department }}
+                  </span>
+                {% else %}
+                  <span class="muted">None</span>
+                {% endif %}
+              </td>
+
               <td title="{{ user.groups_display_full }}">
                 {% if user.roles %}
                 <div class="role-badges">
@@ -199,7 +232,6 @@
               <td class="table-actions-cell">
                 {% if "launchpad.settings.users.manage" in session.get("user_permissions", []) %}
                 <div class="users-actions">
-
                   <a
                     class="btn btn-sm users-edit-btn"
                     href="{{ url_for('launchpad_ui.settings_users_edit', user_id=user.user_id) }}"
@@ -220,19 +252,16 @@
                       Delete
                     </button>
                   </form>
-
                 </div>
                 {% else %}
                 <span class="muted">View only</span>
                 {% endif %}
               </td>
-
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-
     </div>
 
     {% else %}
@@ -249,7 +278,6 @@
       </div>
     </div>
     {% endif %}
-
   </div>
 </div>
 

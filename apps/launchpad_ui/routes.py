@@ -1103,6 +1103,21 @@ def settings_users():
     users = list_local_users()
 
     for user in users:
+        identity_user = get_user_by_id(user["user_id"]) or {}
+
+        user["email"] = identity_user.get("email") or user.get("email")
+        user["display_name"] = identity_user.get("display_name") or user.get("display_name")
+        user["first_name"] = identity_user.get("first_name")
+        user["last_name"] = identity_user.get("last_name")
+        user["job_title"] = identity_user.get("job_title")
+        user["department"] = identity_user.get("department")
+        user["office_location"] = identity_user.get("office_location")
+
+        user["sick_allowance_days"] = identity_user.get("sick_allowance_days", 12)
+        user["personal_allowance_days"] = identity_user.get("personal_allowance_days", 3)
+        user["vacation_allowance_days"] = identity_user.get("vacation_allowance_days", 10)
+        user["other_allowance_days"] = identity_user.get("other_allowance_days", 0)
+
         groups = get_user_roles(user["user_id"])
         user["roles"] = groups
 
@@ -1113,10 +1128,17 @@ def settings_users():
         user["groups_display_badges"] = groups[:max_groups_shown]
         user["groups_display_remaining"] = max(0, len(groups) - max_groups_shown)
 
+    departments = sorted({
+        (user.get("department") or "").strip()
+        for user in users
+        if (user.get("department") or "").strip()
+    })
+
     return render_template(
         "launchpad_ui/settings/users.html",
         active_section="users",
         users=users,
+        departments=departments,
     )
 
 

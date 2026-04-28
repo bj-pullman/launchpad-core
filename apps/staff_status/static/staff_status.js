@@ -8,6 +8,7 @@ function initStaffStatusScripts() {
   initEditAbsenceForms();
   initAbsenceUserFilterSearch();
   initStaffStatusLocationSorting();
+  initAbsenceExportModal();
 }
 
 function initStaffStatusKiosk() {
@@ -503,5 +504,27 @@ function initStaffStatusLocationSorting() {
     ghostClass: "staff-status-location-sort-ghost",
     chosenClass: "staff-status-location-sort-chosen",
     onEnd: saveOrder
+  });
+}
+
+function initAbsenceExportModal() {
+  const openButton = document.getElementById("absence-export-open");
+  const closeButton = document.getElementById("absence-export-close");
+  const modal = document.getElementById("absence-export-modal");
+
+  if (!openButton || !closeButton || !modal) return;
+
+  openButton.addEventListener("click", function () {
+    modal.hidden = false;
+  });
+
+  closeButton.addEventListener("click", function () {
+    modal.hidden = true;
+  });
+
+  modal.addEventListener("click", function (event) {
+    if (event.target === modal) {
+      modal.hidden = true;
+    }
   });
 }

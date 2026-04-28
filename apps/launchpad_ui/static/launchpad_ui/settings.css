@@ -1482,15 +1482,6 @@
   min-width: 160px;
 }
 
-/* =====================================================
-   USERS PAGE
-   ===================================================== */
-
-/* Filter Card (separate like Finance) */
-.users-filter-card {
-  margin-bottom: 16px;
-}
-
 /* Toolbar Layout */
 .users-toolbar {
   display: flex;
@@ -1500,30 +1491,77 @@
   justify-content: space-between;
 }
 
-/* Filter Grid */
-.users-filter-grid {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(150px, 1fr) minmax(150px, 1fr);
-  gap: 12px;
-  flex: 1;
+.users-filter-card {
+  margin-bottom: 16px;
 }
 
-/* Bulk Actions */
-.users-bulk-actions {
-  display: flex;
-  gap: 10px;
+.users-filter-toggle-btn {
+  width: fit-content;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.users-filter-panel {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.users-filter-panel[hidden] {
+  display: none !important;
+}
+
+.users-filter-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 14px;
   align-items: end;
 }
 
+.users-filter-grid .form-field {
+  gap: 8px;
+}
+
+.users-filter-grid .form-field label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.users-filter-grid input,
+.users-filter-grid select {
+  height: 44px;
+}
+
+.users-bulk-actions {
+  margin-top: 16px;
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  justify-content: flex-start;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.users-bulk-actions[hidden] {
+  display: none !important;
+}
+
 .users-bulk-actions .form-field {
-  min-width: 180px;
+  min-width: 240px;
   margin: 0;
 }
 
-.users-bulk-apply-btn {
-  border-radius: 999px;
+.users-bulk-actions .form-field label {
+  font-size: 14px;
   font-weight: 700;
-  height: 42px;
+}
+
+.users-bulk-apply-btn {
+  height: 44px;
+  border-radius: 12px;
+  font-weight: 700;
 }
 
 /* Import Button */
@@ -1693,6 +1731,22 @@
 
 .users-bulk-modal-open {
   overflow: hidden;
+}
+
+.department-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.users-filter-panel {
+  transition: all 0.2s ease;
 }
 
 /* Responsive */

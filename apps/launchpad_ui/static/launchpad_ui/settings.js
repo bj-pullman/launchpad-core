@@ -12,6 +12,7 @@ function initSettingsScripts() {
   initSettingsFileUploads();
   initFinanceNotificationLogoPreviewName();
   initUsersPage();
+  initDepartmentPills();
 
   if (typeof initFinanceNotificationTemplateBuilder === "function") {
     initFinanceNotificationTemplateBuilder();
@@ -539,6 +540,7 @@ function initUsersPage() {
   const searchInput = document.getElementById("users-search");
   const statusFilter = document.getElementById("users-status-filter");
   const accountFilter = document.getElementById("users-account-filter");
+  const departmentFilter = document.getElementById("users-department-filter");
   const visibleCount = document.getElementById("users-visible-count");
   const selectAll = document.getElementById("users-select-all");
   const bulkActions = document.getElementById("users-bulk-actions");
@@ -560,6 +562,18 @@ function initUsersPage() {
     const query = (searchInput?.value || "").trim().toLowerCase();
     const status = statusFilter?.value || "";
     const accountType = accountFilter?.value || "";
+    const department = departmentFilter?.value || "";
+
+    const filterPanel = document.getElementById("users-filter-panel");
+    const filterToggleBtn = document.getElementById("users-filter-toggle");
+
+    if (filterPanel && (query || status || accountType || department)) {
+      filterPanel.hidden = false;
+
+      if (filterToggleBtn) {
+        filterToggleBtn.setAttribute("aria-expanded", "true");
+      }
+    }
 
     let shown = 0;
 
@@ -567,12 +581,14 @@ function initUsersPage() {
       const rowText = row.dataset.searchText || "";
       const rowStatus = row.dataset.status || "";
       const rowAccountType = row.dataset.accountType || "";
+      const rowDepartment = row.dataset.department || "";
 
       const matchesSearch = !query || rowText.includes(query);
       const matchesStatus = !status || rowStatus === status;
       const matchesAccount = !accountType || rowAccountType === accountType;
+      const matchesDepartment = !department || rowDepartment === department;
 
-      const shouldShow = matchesSearch && matchesStatus && matchesAccount;
+      const shouldShow = matchesSearch && matchesStatus && matchesAccount && matchesDepartment;
 
       row.classList.toggle("users-hidden-by-filter", !shouldShow);
 
@@ -770,6 +786,7 @@ function initUsersPage() {
   if (searchInput) searchInput.addEventListener("input", applyFilters);
   if (statusFilter) statusFilter.addEventListener("change", applyFilters);
   if (accountFilter) accountFilter.addEventListener("change", applyFilters);
+  if (departmentFilter) departmentFilter.addEventListener("change", applyFilters);
 
   if (selectAll) {
     selectAll.addEventListener("change", function () {
@@ -840,4 +857,70 @@ function initUsersPage() {
   });
 
   applyFilters();
+}
+
+function initDepartmentPills() {
+  const pills = document.querySelectorAll("[data-department-pill]");
+  if (!pills.length) return;
+
+  const palette = [
+    { bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe" },
+    { bg: "#ecfdf5", text: "#047857", border: "#bbf7d0" },
+    { bg: "#fefce8", text: "#a16207", border: "#fde68a" },
+    { bg: "#fdf2f8", text: "#be185d", border: "#fbcfe8" },
+    { bg: "#f5f3ff", text: "#6d28d9", border: "#ddd6fe" },
+    { bg: "#fff7ed", text: "#c2410c", border: "#fed7aa" },
+    { bg: "#f0fdfa", text: "#0f766e", border: "#99f6e4" },
+    { bg: "#f8fafc", text: "#334155", border: "#cbd5e1" },
+    { bg: "#eef2ff", text: "#4338ca", border: "#c7d2fe" },
+    { bg: "#f0f9ff", text: "#0369a1", border: "#bae6fd" },
+
+    { bg: "#f7fee7", text: "#4d7c0f", border: "#d9f99d" },
+    { bg: "#fef2f2", text: "#b91c1c", border: "#fecaca" },
+    { bg: "#faf5ff", text: "#7e22ce", border: "#e9d5ff" },
+    { bg: "#fff1f2", text: "#be123c", border: "#fecdd3" },
+    { bg: "#ecfeff", text: "#0e7490", border: "#a5f3fc" },
+    { bg: "#fefce8", text: "#854d0e", border: "#fef08a" },
+    { bg: "#f0fdf4", text: "#166534", border: "#bbf7d0" },
+    { bg: "#fdf4ff", text: "#a21caf", border: "#f5d0fe" },
+    { bg: "#f5f5f4", text: "#57534e", border: "#d6d3d1" },
+    { bg: "#f1f5f9", text: "#0f172a", border: "#cbd5e1" },
+
+    { bg: "#e0f2fe", text: "#075985", border: "#7dd3fc" },
+    { bg: "#dcfce7", text: "#14532d", border: "#86efac" },
+    { bg: "#fae8ff", text: "#86198f", border: "#f0abfc" },
+    { bg: "#ffedd5", text: "#9a3412", border: "#fdba74" },
+    { bg: "#ccfbf1", text: "#115e59", border: "#5eead4" },
+    { bg: "#ede9fe", text: "#5b21b6", border: "#c4b5fd" },
+    { bg: "#fee2e2", text: "#991b1b", border: "#fca5a5" },
+    { bg: "#dbeafe", text: "#1e40af", border: "#93c5fd" },
+    { bg: "#e2e8f0", text: "#334155", border: "#94a3b8" },
+    { bg: "#fef3c7", text: "#92400e", border: "#fcd34d" }
+  ];
+
+  function hashDepartment(value) {
+    let hash = 0;
+    const text = String(value || "").trim().toLowerCase();
+
+    for (let i = 0; i < text.length; i++) {
+      hash = text.charCodeAt(i) + ((hash << 5) - hash);
+      hash = hash & hash;
+    }
+
+    return Math.abs(hash);
+  }
+
+  pills.forEach((pill) => {
+    const department = pill.dataset.departmentPill || pill.textContent || "";
+    const normalizedDepartment = String(department || "").trim().toLowerCase();
+
+    const color =
+      normalizedDepartment === "technology"
+        ? { bg: "#f5f3ff", text: "#6d28d9", border: "#ddd6fe" }
+        : palette[hashDepartment(department) % palette.length];
+
+    pill.style.backgroundColor = color.bg;
+    pill.style.color = color.text;
+    pill.style.borderColor = color.border;
+  });
 }

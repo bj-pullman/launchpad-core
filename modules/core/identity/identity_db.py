@@ -17,6 +17,28 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def ensure_user_absence_allowance_columns():
+    allowance_columns = {
+        "sick_allowance_days": "REAL DEFAULT 12",
+        "personal_allowance_days": "REAL DEFAULT 3",
+        "vacation_allowance_days": "REAL DEFAULT 10",
+        "other_allowance_days": "REAL DEFAULT 0",
+    }
+
+    with get_connection() as conn:
+        existing_columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(users)").fetchall()
+        }
+
+        for column_name, column_type in allowance_columns.items():
+            if column_name not in existing_columns:
+                conn.execute(
+                    f"ALTER TABLE users ADD COLUMN {column_name} {column_type}"
+                )
+
+        conn.commit()
+
 
 def init_identity_db():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -64,5 +86,7 @@ def init_identity_db():
         CREATE INDEX IF NOT EXISTS idx_users_source
         ON users(source_type, source_id);
         """)
+
+        ensure_user_absence_allowance_columns()
 
         conn.commit()
