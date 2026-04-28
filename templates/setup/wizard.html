@@ -1,0 +1,345 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}Setup Wizard - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/setup/setup.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="setup-wizard-shell">
+  <div class="setup-wizard-header">
+    <div>
+      <p class="setup-wizard-eyebrow">Launchpad Setup Wizard</p>
+      <h1>{{ step.title }}</h1>
+      <p>{{ step.summary }}</p>
+    </div>
+
+    <a class="btn btn-secondary" href="{{ url_for('launchpad_ui.home') }}">
+      Exit Setup
+    </a>
+  </div>
+
+  <div class="setup-wizard-layout">
+    <aside class="setup-wizard-sidebar">
+        <div class="setup-wizard-sidebar-title">Setup Progress</div>
+
+        {% for item in steps %}
+            {% if item.key != "review" %}
+            {% set item_status = status.get(item.key, {}) %}
+            {% else %}
+            {% set item_status = {} %}
+            {% endif %}
+
+            <a
+            href="{{ url_for('setup.wizard_step', step_key=item.key) }}"
+            class="setup-wizard-step-link {% if item.key == step_key %}active{% endif %}"
+            >
+            <span class="setup-wizard-step-dot">
+                {% if item_status.completed %}
+                ✓
+                {% elif item_status.skipped %}
+                !
+                {% else %}
+                {{ loop.index }}
+                {% endif %}
+            </span>
+
+            <span class="setup-wizard-step-text">
+                <strong>{{ item.label }}</strong>
+
+                {% if item_status.completed %}
+                <small>Completed</small>
+                {% elif item_status.skipped %}
+                <small>Skipped</small>
+                {% elif item.key == step_key %}
+                <small>Current step</small>
+                {% else %}
+                <small>Not started</small>
+                {% endif %}
+        </span>
+        </a>
+    {% endfor %}
+    </aside>
+
+    <section class="setup-wizard-card">
+      {% if step_key == "organization" %}
+        <form method="post" class="setup-wizard-form">
+          <input type="hidden" name="action" value="save">
+
+          <div class="setup-helper-card">
+            <h2>Why this matters</h2>
+            <p>
+              These settings control organization branding, generated external links, and how dates and times are displayed throughout Launchpad.
+            </p>
+          </div>
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label for="organization_name">Organization Name</label>
+              <input
+                type="text"
+                id="organization_name"
+                name="organization_name"
+                value="{{ organization_settings.organization_name }}"
+                placeholder="Sheridan School District"
+              >
+            </div>
+
+            <div class="form-field">
+              <label for="public_base_url">Public Base URL</label>
+              <input
+                type="url"
+                id="public_base_url"
+                name="public_base_url"
+                value="{{ organization_settings.public_base_url }}"
+                placeholder="https://launchpad.sheridanschools.org"
+              >
+              <small>Used for kiosk links, board links, password setup links, and generated URLs.</small>
+            </div>
+          </div>
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label for="timezone">Timezone</label>
+              <select id="timezone" name="timezone">
+                {% for tz in ["America/Chicago", "America/Denver", "America/New_York", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "UTC"] %}
+                  <option value="{{ tz }}" {% if organization_settings.timezone == tz %}selected{% endif %}>
+                    {{ tz }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="date_format">Date Format</label>
+              <select id="date_format" name="date_format">
+                <option value="mdy" {% if organization_settings.date_format == "mdy" %}selected{% endif %}>MM/DD/YYYY</option>
+                <option value="ymd" {% if organization_settings.date_format == "ymd" %}selected{% endif %}>YYYY-MM-DD</option>
+                <option value="dmy" {% if organization_settings.date_format == "dmy" %}selected{% endif %}>DD/MM/YYYY</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label for="time_format">Time Format</label>
+              <select id="time_format" name="time_format">
+                <option value="12h" {% if organization_settings.time_format == "12h" %}selected{% endif %}>12-hour</option>
+                <option value="24h" {% if organization_settings.time_format == "24h" %}selected{% endif %}>24-hour</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setup-wizard-actions">
+            <button type="button" class="btn btn-secondary setup-skip-btn">
+              Skip for now
+            </button>
+
+            <button type="submit" class="btn btn-primary">
+              Save and Continue
+            </button>
+          </div>
+        </form>
+
+      {% elif step_key == "email" %}
+        <form method="post" class="setup-wizard-form">
+          <input type="hidden" name="action" value="save">
+
+          <div class="setup-helper-card">
+            <h2>Email Integration</h2>
+            <p>
+              Launchpad uses your configured SMTP integration to send account setup links, password reset emails, Finance renewal reminders, and system notifications.
+            </p>
+          </div>
+
+          <div class="setup-readiness-card {% if email_settings.smtp_configured %}ready{% else %}warning{% endif %}">
+            <strong>
+              {% if email_settings.smtp_configured %}
+                SMTP appears configured
+              {% else %}
+                SMTP setup may be incomplete
+              {% endif %}
+            </strong>
+            <span>
+              You can review or update this later in {{ step.settings_later }}.
+            </span>
+          </div>
+
+          <div class="setup-wizard-actions">
+            <button type="button" class="btn btn-secondary setup-skip-btn">
+              Skip for now
+            </button>
+
+            <button type="submit" class="btn btn-primary">
+              Mark Complete and Continue
+            </button>
+          </div>
+        </form>
+
+      {% elif step_key == "authentication" %}
+        <form method="post" class="setup-wizard-form">
+          <input type="hidden" name="action" value="save">
+
+          <div class="setup-helper-card">
+            <h2>Authentication</h2>
+            <p>
+              Configure how users sign in. Local authentication is available for breakglass and local accounts. SSO options can be configured later as your identity workflow matures.
+            </p>
+          </div>
+
+          <div class="setup-info-list">
+            <div><strong>Local auth:</strong> available for local and breakglass accounts.</div>
+            <div><strong>SSO:</strong> configure Google, Microsoft, or SAML later in Settings.</div>
+            <div><strong>Access rules:</strong> domain and group restrictions should be reviewed before broad rollout.</div>
+          </div>
+
+          <div class="setup-wizard-actions">
+            <button type="button" class="btn btn-secondary setup-skip-btn">
+              Skip for now
+            </button>
+
+            <button type="submit" class="btn btn-primary">
+              Mark Complete and Continue
+            </button>
+          </div>
+        </form>
+
+      {% elif step_key == "users" %}
+        <form method="post" class="setup-wizard-form">
+          <input type="hidden" name="action" value="save">
+
+          <div class="setup-helper-card">
+            <h2>User Management</h2>
+            <p>
+              Users can be created manually or imported by CSV. For imports, required fields should include email, username, first name, last name, display name, account type, and department.
+            </p>
+          </div>
+
+          <div class="setup-info-list">
+            <div><strong>Local users:</strong> should receive account setup links instead of emailed passwords.</div>
+            <div><strong>SSO users:</strong> do not need a local password.</div>
+            <div><strong>Email dependency:</strong> invite emails require SMTP to be configured.</div>
+          </div>
+
+          <div class="setup-wizard-actions">
+            <button type="button" class="btn btn-secondary setup-skip-btn">
+              Skip for now
+            </button>
+
+            <button type="submit" class="btn btn-primary">
+              Mark Complete and Continue
+            </button>
+          </div>
+        </form>
+
+      {% elif step_key == "apps" %}
+        <form method="post" class="setup-wizard-form">
+          <input type="hidden" name="action" value="save">
+
+          <div class="setup-helper-card">
+            <h2>Application Readiness</h2>
+            <p>
+              Review each app as you enable it. Some modules rely on integrations, permissions, departments, or public URL settings.
+            </p>
+          </div>
+
+          <div class="setup-info-list">
+            <div><strong>Staff Status:</strong> depends on users, departments, locations, and public URL settings.</div>
+            <div><strong>Finance:</strong> email is needed for renewal notifications.</div>
+            <div><strong>SnipeOps:</strong> requires Snipe-IT URL and API token when enabled.</div>
+          </div>
+
+          <div class="setup-wizard-actions">
+            <button type="button" class="btn btn-secondary setup-skip-btn">
+              Skip for now
+            </button>
+
+            <button type="submit" class="btn btn-primary">
+              Mark Complete and Continue
+            </button>
+          </div>
+        </form>
+
+      {% elif step_key == "review" %}
+        <form method="post" class="setup-wizard-form">
+          <div class="setup-helper-card">
+            <h2>Review Setup</h2>
+            <p>
+              You can finish setup now. Any skipped items can be configured later from Settings.
+            </p>
+          </div>
+
+          <div class="setup-review-list">
+            {% for item in steps %}
+              {% if item.key != "review" %}
+                {% set item_status = status.get(item.key, {}) %}
+                <div class="setup-review-item">
+                  <strong>{{ item.title }}</strong>
+                  {% if item_status.completed %}
+                    <span class="setup-status-pill ready">Completed</span>
+                  {% elif item_status.skipped %}
+                    <span class="setup-status-pill warning">Skipped</span>
+                  {% else %}
+                    <span class="setup-status-pill missing">Not started</span>
+                  {% endif %}
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+
+          <div class="setup-wizard-actions">
+            <a class="btn btn-secondary" href="{{ url_for('setup.wizard_step', step_key='organization') }}">
+              Review Steps
+            </a>
+
+            <button type="submit" class="btn btn-primary">
+              Finish Setup
+            </button>
+          </div>
+        </form>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<div
+  id="setup-skip-modal"
+  class="setup-skip-modal"
+  data-skip-title="{{ step.skip_title }}"
+  data-skip-message="{{ step.skip_message }}"
+  data-settings-later="{{ step.settings_later }}"
+  hidden
+>
+  <div class="setup-skip-modal-backdrop" data-setup-skip-cancel></div>
+
+  <div class="setup-skip-modal-dialog" role="dialog" aria-modal="true">
+    <h2 id="setup-skip-modal-title">Skip this step?</h2>
+    <p id="setup-skip-modal-message"></p>
+
+    <div class="setup-skip-modal-later">
+      <strong>Configure later:</strong>
+      <span id="setup-skip-modal-settings"></span>
+    </div>
+
+    <form method="post" class="setup-skip-modal-actions">
+      <input type="hidden" name="action" value="skip">
+
+      <button type="button" class="btn btn-secondary" data-setup-skip-cancel>
+        Go Back
+      </button>
+
+      <button type="submit" class="btn btn-danger">
+        Skip This Step
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/setup/setup.js') }}"></script>
+{% endblock %}

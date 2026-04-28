@@ -37,6 +37,7 @@ from .service import (
     update_user_status,
     build_public_url,
     get_department_record,
+    reorder_locations_for_department,
 )
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.identity.user_service import get_user_by_id
@@ -213,6 +214,48 @@ def locations(department_name: str):
         can_operate=can_operate,
     )
 
+@bp.route("/<department_name>/locations/reorder", methods=["POST"])
+@login_required
+def locations_reorder(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_operate_department(user_id, department_name):
+        abort(403)
+
+    payload = request.get_json(silent=True) or {}
+    location_ids = payload.get("location_ids") or []
+
+    normalized_location_ids = []
+    for raw_location_id in location_ids:
+        try:
+            location_id = int(raw_location_id)
+        except (TypeError, ValueError):
+            continue
+
+        if location_id > 0:
+            normalized_location_ids.append(location_id)
+
+    if not normalized_location_ids:
+        return jsonify({
+            "ok": False,
+            "error": "No locations were provided.",
+        }), 400
+
+    reorder_locations_for_department(
+        department_name=department_name,
+        location_ids=normalized_location_ids,
+    )
+
+    return jsonify({
+        "ok": True,
+        "updated_count": len(normalized_location_ids),
+    })
+
 @bp.route("/<department_name>/board")
 @login_required
 def board(department_name: str):
@@ -320,27 +363,73 @@ def kiosk_submit(token: str):
         return jsonify({"ok": False, "error": "Invalid kiosk token."}), 404
 
     department_name = department["department_name"]
-    user_id = request.form.get("user_id", type=int)
+
+    user_ids = request.form.getlist("user_ids")
+    if not user_ids:
+        legacy_user_id = request.form.get("user_id", type=int)
+        if legacy_user_id:
+            user_ids = [legacy_user_id]
+
+    normalized_user_ids = []
+    for raw_user_id in user_ids:
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            continue
+
+        if user_id > 0:
+            normalized_user_ids.append(user_id)
+
+    normalized_user_ids = list(dict.fromkeys(normalized_user_ids))
+
     location_labels = request.form.getlist("location_labels")
 
-    if not user_id:
-        return jsonify({"ok": False, "error": "A user must be selected."}), 400
+    if not normalized_user_ids:
+        return jsonify({"ok": False, "error": "At least one user must be selected."}), 400
+
     if not location_labels:
         return jsonify({"ok": False, "error": "At least one location must be selected."}), 400
 
-    update_user_status(
-        user_id=user_id,
-        department_name=department_name,
-        location_labels=location_labels,
-        committed_by_user_id=None,
-        committed_by_display_name=f"Kiosk:{department_name}",
-        updated_by_source="kiosk_token",
-        source_ip=request.headers.get("X-Forwarded-For", request.remote_addr),
-        source_device=request.user_agent.string[:255] if request.user_agent else None,
-    )
+    active_department_users = list_active_users_for_department(department_name)
+    allowed_user_ids = {int(user["id"]) for user in active_department_users}
+
+    selected_user_ids = [
+        user_id
+        for user_id in normalized_user_ids
+        if user_id in allowed_user_ids
+    ]
+
+    if not selected_user_ids:
+        return jsonify({
+            "ok": False,
+            "error": "No valid users were selected for this department.",
+        }), 400
+
+    source_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    source_device = request.user_agent.string[:255] if request.user_agent else None
+
+    updated_count = 0
+
+    for user_id in selected_user_ids:
+        update_user_status(
+            user_id=user_id,
+            department_name=department_name,
+            location_labels=location_labels,
+            committed_by_user_id=None,
+            committed_by_display_name=f"Kiosk:{department_name}",
+            updated_by_source="kiosk_token",
+            source_ip=source_ip,
+            source_device=source_device,
+        )
+        updated_count += 1
+
     publish_department_update(department_name)
 
-    return jsonify({"ok": True, "department_name": department_name})
+    return jsonify({
+        "ok": True,
+        "department_name": department_name,
+        "updated_count": updated_count,
+    })
 
 
 @bp.route("/<department_name>/absences", methods=["GET", "POST"])

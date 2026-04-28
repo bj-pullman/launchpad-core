@@ -532,7 +532,41 @@ def inject_launchpad_navigation():
 @launchpad_ui_bp.route("/")
 @login_required
 def home():
-    return render_template("launchpad_ui/home.html")
+    setup_completed = get_bool_setting("setup.completed", False)
+
+    setup_status = {
+        "organization_completed": get_bool_setting("setup.organization.completed", False),
+        "organization_skipped": get_bool_setting("setup.organization.skipped", False),
+        "email_completed": get_bool_setting("setup.email.completed", False),
+        "email_skipped": get_bool_setting("setup.email.skipped", False),
+        "authentication_completed": get_bool_setting("setup.authentication.completed", False),
+        "authentication_skipped": get_bool_setting("setup.authentication.skipped", False),
+        "users_completed": get_bool_setting("setup.users.completed", False),
+        "users_skipped": get_bool_setting("setup.users.skipped", False),
+        "apps_completed": get_bool_setting("setup.apps.completed", False),
+        "apps_skipped": get_bool_setting("setup.apps.skipped", False),
+    }
+
+    setup_total_steps = 5
+    setup_completed_steps = sum(
+        1
+        for key, value in setup_status.items()
+        if key.endswith("_completed") and value
+    )
+    setup_skipped_steps = sum(
+        1
+        for key, value in setup_status.items()
+        if key.endswith("_skipped") and value
+    )
+
+    return render_template(
+        "launchpad_ui/home.html",
+        setup_completed=setup_completed,
+        setup_status=setup_status,
+        setup_total_steps=setup_total_steps,
+        setup_completed_steps=setup_completed_steps,
+        setup_skipped_steps=setup_skipped_steps,
+    )
 
 
 @launchpad_ui_bp.route("/settings")
@@ -1423,6 +1457,106 @@ def settings_users_delete(user_id: int):
         flash("Unable to delete user.", "error")
 
     return redirect(url_for("launchpad_ui.settings_users"))
+
+@launchpad_ui_bp.route("/settings/users/bulk-action", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.users.manage")
+def settings_users_bulk_action():
+    payload = request.get_json(silent=True) or {}
+
+    action = (payload.get("action") or "").strip().lower()
+    raw_user_ids = payload.get("user_ids") or []
+
+    user_ids = []
+    for raw_user_id in raw_user_ids:
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            continue
+
+        if user_id > 0:
+            user_ids.append(user_id)
+
+    user_ids = list(dict.fromkeys(user_ids))
+
+    if not action:
+        return jsonify({
+            "ok": False,
+            "message": "Bulk action is required.",
+        }), 400
+
+    if not user_ids:
+        return jsonify({
+            "ok": False,
+            "message": "At least one user must be selected.",
+        }), 400
+
+    if action not in {"activate", "disable"}:
+        return jsonify({
+            "ok": False,
+            "message": "Unsupported bulk action.",
+        }), 400
+
+    updated_count = 0
+    skipped_count = 0
+    errors = []
+
+    for user_id in user_ids:
+        local_user = get_local_user_by_user_id(user_id)
+        identity_user = get_user_by_id(user_id)
+
+        if not local_user or not identity_user:
+            skipped_count += 1
+            continue
+
+        username = (
+            local_user.get("username")
+            or identity_user.get("email")
+            or identity_user.get("username")
+            or ""
+        ).strip().lower()
+
+        if not username:
+            skipped_count += 1
+            errors.append(f"User {user_id} has no username or email.")
+            continue
+
+        try:
+            update_user(user_id, {
+                "email": identity_user.get("email"),
+                "username": identity_user.get("username"),
+                "display_name": identity_user.get("display_name"),
+                "is_active": 1 if action == "activate" else 0,
+                "first_name": identity_user.get("first_name"),
+                "last_name": identity_user.get("last_name"),
+                "job_title": identity_user.get("job_title"),
+                "department": identity_user.get("department"),
+                "office_location": identity_user.get("office_location"),
+                "company_name": identity_user.get("company_name"),
+                "employee_id": identity_user.get("employee_id"),
+                "preferred_language": identity_user.get("preferred_language"),
+                "business_phone": identity_user.get("business_phone"),
+                "mobile_phone": identity_user.get("mobile_phone"),
+                "manager_email": identity_user.get("manager_email"),
+                "manager_display_name": identity_user.get("manager_display_name"),
+            })
+
+            update_local_user(user_id, username, 1 if action == "activate" else 0)
+            updated_count += 1
+
+        except Exception as exc:
+            skipped_count += 1
+            current_app.logger.exception("Unable to bulk update user_id=%s", user_id)
+            errors.append(f"User {user_id}: {exc}")
+
+    return jsonify({
+        "ok": True,
+        "action": action,
+        "updated_count": updated_count,
+        "skipped_count": skipped_count,
+        "errors": errors,
+        "message": f"{'Activated' if action == 'activate' else 'Disabled'} {updated_count} user(s).",
+    })
     
 @launchpad_ui_bp.route("/settings/staff-status", methods=["GET", "POST"])
 @login_required

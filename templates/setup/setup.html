@@ -7,48 +7,21 @@
     rel="stylesheet"
     href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/login.css') }}"
 >
-<style>
-    .setup-card {
-        max-width: 560px;
-    }
-
-    .setup-meta {
-        margin-bottom: 18px;
-        padding: 14px 16px;
-        border-radius: 12px;
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        color: #334155;
-        font-size: 14px;
-        line-height: 1.5;
-    }
-
-    .setup-meta strong {
-        color: #0f172a;
-    }
-
-    .setup-help {
-        margin: 0 0 18px;
-        color: #64748b;
-        font-size: 14px;
-        line-height: 1.6;
-    }
-
-    .setup-actions {
-        margin-top: 6px;
-    }
-</style>
+<link
+    rel="stylesheet"
+    href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/setup.css') }}"
+>
 {% endblock %}
 
 {% block content %}
-<div class="login-page">
+<div class="login-page setup-page">
     <div class="login-shell">
         <div class="login-card setup-card">
             <div class="login-header">
                 <div class="login-badge">First-Time Setup</div>
                 <h1>Configure Local Administrator</h1>
                 <p class="login-subtext">
-                    Set the password for the initial local administrator account before using Launchpad.
+                    Set the password for the required local administrator account before using Launchpad.
                 </p>
             </div>
 
@@ -62,45 +35,112 @@
                 {% endif %}
             {% endwith %}
 
-            <div class="setup-meta">
-                <div><strong>Username:</strong> admin</div>
-                <div><strong>Role:</strong> Super Administrator</div>
+            <div class="setup-grid">
+                <div>
+                    <div class="setup-required-banner">
+                        <strong>This step cannot be skipped.</strong>
+                        Launchpad requires a local breakglass administrator so the system can still be accessed if SSO, directory sync, or an external identity provider is unavailable.
+                    </div>
+
+                    <div class="setup-meta">
+                        <div><strong>Username:</strong> admin</div>
+                        <div><strong>Role:</strong> Super Administrator</div>
+                        <div><strong>Purpose:</strong> Local breakglass access</div>
+                    </div>
+
+                    <p class="setup-help">
+                        Store this password securely. This account has full administrative access and should only be used for setup, recovery, or emergency access.
+                    </p>
+
+                    <form method="post" action="{{ url_for('setup.initial_setup') }}" class="login-form" id="setup-admin-form">
+                        <div class="form-row">
+                            <label for="password">New Password</label>
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                autocomplete="new-password"
+                                required
+                            >
+                        </div>
+
+                        <div class="form-row">
+                            <label for="confirm">Confirm Password</label>
+                            <input
+                                type="password"
+                                id="confirm"
+                                name="confirm"
+                                autocomplete="new-password"
+                                required
+                            >
+                        </div>
+
+                        <div class="setup-actions">
+                            <button type="submit" class="primary-login-btn">
+                                Save Administrator Password
+                            </button>
+                        </div>
+
+                        <p class="setup-note">
+                            After saving this password, sign in as <strong>admin</strong>. The remaining setup steps can be completed or skipped from the setup wizard.
+                        </p>
+                    </form>
+                </div>
+
+                <aside class="setup-info-card">
+                    <h2>What comes next?</h2>
+                    <p>
+                        After the local administrator is created, Launchpad will guide you through the main setup areas. These later steps can be skipped, but skipped steps may limit features until configured in Settings.
+                    </p>
+
+                    <div class="setup-step-list">
+                        <div class="setup-step-item">
+                            <span class="setup-step-number">1</span>
+                            <div class="setup-step-copy">
+                                <strong>Organization Basics</strong>
+                                <span>Configure organization name, public base URL, timezone, date format, and time format.</span>
+                            </div>
+                        </div>
+
+                        <div class="setup-step-item">
+                            <span class="setup-step-number">2</span>
+                            <div class="setup-step-copy">
+                                <strong>Email Integration</strong>
+                                <span>Verify SMTP so Launchpad can send account setup links, password resets, renewal reminders, and notifications.</span>
+                            </div>
+                        </div>
+
+                        <div class="setup-step-item">
+                            <span class="setup-step-number">3</span>
+                            <div class="setup-step-copy">
+                                <strong>Authentication</strong>
+                                <span>Configure local auth, Google, Microsoft, SAML, or access control rules.</span>
+                            </div>
+                        </div>
+
+                        <div class="setup-step-item">
+                            <span class="setup-step-number">4</span>
+                            <div class="setup-step-copy">
+                                <strong>Users</strong>
+                                <span>Prepare manual user creation, CSV import, account setup emails, and user management workflow.</span>
+                            </div>
+                        </div>
+
+                        <div class="setup-step-item">
+                            <span class="setup-step-number">5</span>
+                            <div class="setup-step-copy">
+                                <strong>Apps</strong>
+                                <span>Review readiness for Staff Status, Finance, SnipeOps, and other enabled Launchpad modules.</span>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
             </div>
-
-            <p class="setup-help">
-                This account is your local breakglass administrator and will have full access to Launchpad.
-            </p>
-
-            <form method="post" action="{{ url_for('setup.initial_setup') }}" class="login-form">
-                <div class="form-row">
-                    <label for="password">New Password</label>
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        autocomplete="new-password"
-                        required
-                    >
-                </div>
-
-                <div class="form-row">
-                    <label for="confirm">Confirm Password</label>
-                    <input
-                        type="password"
-                        id="confirm"
-                        name="confirm"
-                        autocomplete="new-password"
-                        required
-                    >
-                </div>
-
-                <div class="setup-actions">
-                    <button type="submit" class="primary-login-btn">
-                        Save Administrator Password
-                    </button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/setup.js') }}"></script>
 {% endblock %}

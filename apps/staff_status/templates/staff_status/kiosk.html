@@ -18,10 +18,10 @@
         <div class="staff-status-kiosk-success-card">
           <div class="staff-status-kiosk-success-icon">✓</div>
           <h2>Entry Submitted</h2>
-          <p>The status was updated successfully.</p>
+          <p id="staff-status-kiosk-success-message">The status was updated successfully.</p>
         </div>
       </div>
-      
+
       <header class="staff-status-kiosk-header">
         <div class="staff-status-kiosk-header-left">
           <p class="staff-status-eyebrow">Department Kiosk</p>
@@ -39,7 +39,7 @@
           </div>
 
           <p class="staff-status-kiosk-subtitle">
-            Select your name and choose your current location.
+            Select one or more staff members and choose the current location.
           </p>
         </div>
       </header>
@@ -54,13 +54,74 @@
         <div class="staff-status-kiosk-layout">
           <div class="staff-status-kiosk-panel">
             <div class="form-field">
-              <label for="user_id">Staff Member</label>
-              <select id="user_id" name="user_id" required>
-                <option value="">Select a user</option>
-                {% for user in users %}
-                  <option value="{{ user.id }}">{{ user.resolved_display_name }}</option>
-                {% endfor %}
-              </select>
+              <label>Staff Members</label>
+
+              <div class="staff-status-kiosk-user-tools">
+                <input
+                  type="search"
+                  id="staff-status-kiosk-user-search"
+                  placeholder="Search staff..."
+                  autocomplete="off"
+                >
+
+                <button
+                  type="button"
+                  class="staff-status-kiosk-clear-users-btn"
+                  id="staff-status-kiosk-clear-users"
+                >
+                  Clear
+                </button>
+              </div>
+
+              <div class="staff-status-kiosk-selected-summary">
+                <span>Selected staff</span>
+                <span id="staff-status-kiosk-selected-count" class="staff-status-kiosk-selected-count">0</span>
+              </div>
+
+              <details class="staff-status-kiosk-user-picker">
+                <summary>
+                  <span>Choose Staff</span>
+                  <span class="staff-status-kiosk-picker-hint">Tap to search/select</span>
+                </summary>
+
+                <div class="staff-status-kiosk-user-picker-body">
+                  <div class="staff-status-kiosk-user-tools">
+                    <input
+                      type="search"
+                      id="staff-status-kiosk-user-search"
+                      placeholder="Search staff..."
+                      autocomplete="off"
+                    >
+
+                    <button
+                      type="button"
+                      class="staff-status-kiosk-clear-users-btn"
+                      id="staff-status-kiosk-clear-users"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div
+                    id="staff-status-kiosk-user-list"
+                    class="staff-status-kiosk-user-list"
+                  >
+                    {% for user in users %}
+                      <label
+                        class="staff-status-kiosk-user-option"
+                        data-user-label="{{ user.resolved_display_name|lower }}"
+                      >
+                        <input
+                          type="checkbox"
+                          name="user_ids"
+                          value="{{ user.id }}"
+                        >
+                        <span>{{ user.resolved_display_name }}</span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              </details>
             </div>
 
             <div id="staff-status-kiosk-result" class="staff-status-result" hidden></div>

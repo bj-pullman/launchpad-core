@@ -1482,6 +1482,235 @@
   min-width: 160px;
 }
 
+/* =====================================================
+   USERS PAGE
+   ===================================================== */
+
+/* Filter Card (separate like Finance) */
+.users-filter-card {
+  margin-bottom: 16px;
+}
+
+/* Toolbar Layout */
+.users-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  justify-content: space-between;
+}
+
+/* Filter Grid */
+.users-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(150px, 1fr) minmax(150px, 1fr);
+  gap: 12px;
+  flex: 1;
+}
+
+/* Bulk Actions */
+.users-bulk-actions {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.users-bulk-actions .form-field {
+  min-width: 180px;
+  margin: 0;
+}
+
+.users-bulk-apply-btn {
+  border-radius: 999px;
+  font-weight: 700;
+  height: 42px;
+}
+
+/* Import Button */
+.users-import-btn {
+  border-radius: 999px;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.users-import-btn:hover {
+  background: #f8fafc;
+}
+
+/* Table Row Behavior */
+.users-table-row {
+  cursor: pointer;
+}
+
+.users-table-row:hover {
+  background: #f8fafc;
+}
+
+/* Checkbox Column */
+.users-select-col {
+  width: 48px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.users-select-col input[type="checkbox"] {
+  display: inline-block;
+  margin: 0 auto;
+  transform: scale(1.05);
+}
+
+/* Actions Column */
+.users-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* Edit Button (improved) */
+.users-edit-btn {
+  border-radius: 999px;
+  font-weight: 700;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.users-edit-btn:hover {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* Results Summary */
+.users-results-summary {
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+/* Filtering */
+.users-hidden-by-filter {
+  display: none;
+}
+
+/* SSO Badge (colored but not harsh) */
+.badge-sso {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+/* Users bulk action visibility */
+.users-bulk-actions[hidden] {
+  display: none !important;
+}
+
+/* Users bulk confirmation modal */
+.users-bulk-modal[hidden] {
+  display: none !important;
+}
+
+.users-bulk-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.users-bulk-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.users-bulk-modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.users-bulk-modal-header {
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.users-bulk-modal-header h3 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.users-bulk-modal-body {
+  padding: 20px 24px;
+}
+
+.users-bulk-modal-body p {
+  margin-top: 0;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.users-bulk-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.users-bulk-modal-list-item {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.users-bulk-modal-list-more {
+  color: #64748b;
+}
+
+.users-bulk-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fbfdff;
+}
+
+.users-bulk-modal-open {
+  overflow: hidden;
+}
+
+/* Responsive */
+@media (max-width: 850px) {
+  .users-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .users-toolbar {
+    align-items: stretch;
+  }
+
+  .users-bulk-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 1000px) {
   .finance-settings-template-grid {
     grid-template-columns: 1fr;

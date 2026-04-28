@@ -364,7 +364,7 @@ def get_board_rows_for_department(department_name: str) -> list[dict]:
                     "location_labels": [],
                     "is_out_of_office": True,
                     "updated_at": format_board_timestamp(
-                        absence["updated_at"] or absence["created_at"]
+                        current["updated_at"] if current else absence["updated_at"] or absence["created_at"]
                     ),
                 }
             )
@@ -1026,6 +1026,49 @@ def delete_location(location_id: int):
             "DELETE FROM staff_status_locations WHERE id = ?",
             (location_id,),
         )
+        conn.commit()
+
+def reorder_locations_for_department(
+    *,
+    department_name: str,
+    location_ids: list[int],
+):
+    department_name = normalize_department(department_name)
+    if not department_name:
+        raise ValueError("department_name is required")
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        valid_rows = conn.execute(
+            """
+            SELECT id
+            FROM staff_status_locations
+            WHERE department_name = ?
+            """,
+            (department_name,),
+        ).fetchall()
+
+        valid_ids = {row["id"] for row in valid_rows}
+
+        filtered_location_ids = [
+            location_id
+            for location_id in location_ids
+            if location_id in valid_ids
+        ]
+
+        for sort_order, location_id in enumerate(filtered_location_ids, start=1):
+            conn.execute(
+                """
+                UPDATE staff_status_locations
+                SET sort_order = ?,
+                    updated_at = ?
+                WHERE id = ?
+                  AND department_name = ?
+                """,
+                (sort_order, now, location_id, department_name),
+            )
+
         conn.commit()
         
 def list_recent_absences_for_department(
