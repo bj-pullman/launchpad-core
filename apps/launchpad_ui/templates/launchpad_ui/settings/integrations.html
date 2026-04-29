@@ -146,6 +146,32 @@
     </a>
     {% endif %}
 
+    {% if can_view_snipeit %}
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_mosyle') }}"
+      class="integration-brand-card integration-brand-card-mosyle"
+    >
+      <div class="integration-brand-logo-wrap">
+        <img
+          src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/img/integrations/mosyle.png') }}"
+          alt="Mosyle logo"
+          class="integration-brand-logo-image"
+        />
+      </div>
+
+      <div class="integration-brand-title">Mosyle</div>
+
+      <div class="integration-brand-body">
+        Apple MDM inventory sync for macOS, iOS, and Apple device lifecycle management.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+    {% endif %}
+
     {% if can_view_email %}
     <a
       href="{{ url_for('launchpad_ui.settings_integrations_email') }}"

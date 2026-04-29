@@ -1,0 +1,44 @@
+{% extends "snipeops/base.html" %}
+
+{% block title %}Intune Sync - SnipeOps{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Intune Sync</h1>
+  <p class="muted">
+    Preview Microsoft Intune device inventory before comparing it with Snipe-IT.
+  </p>
+</section>
+
+<section class="grid">
+<a class="card" href="{{ url_for('launchpad_ui.settings_integrations_microsoft', tab='intune') }}">
+  <div class="card-title">Connector Status</div>
+  <div class="card-body">
+    {% if connector.configured %}
+      Intune is enabled and configured.
+    {% elif connector.enabled %}
+      Intune is enabled but missing required configuration.
+    {% else %}
+      Intune is currently disabled.
+    {% endif %}
+  </div>
+  <div class="card-cta">Open Settings →</div>
+</a>
+
+<a class="card" href="{{ url_for('launchpad_ui.settings_snipeops') }}">
+  <div class="card-title">Mapping Rules</div>
+  <div class="card-body">
+    Model, manufacturer, OS version, and device type values will be humanized before sync.
+  </div>
+  <div class="card-cta">Open →</div>
+</a>
+
+  <div class="card card-disabled">
+    <div class="card-title">Sync Preview</div>
+    <div class="card-body">
+      Pull devices, compare serial numbers, and review changes before writing to Snipe-IT.
+    </div>
+    <div class="card-cta">Coming soon</div>
+  </div>
+</section>
+{% endblock %}

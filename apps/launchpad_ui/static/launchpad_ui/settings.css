@@ -167,6 +167,14 @@
   background: linear-gradient(to bottom, #ffffff, #f0fdf4);
 }
 
+.settings-index-card[data-section="snipeops"]::before {
+  background: #7aa2ff;
+}
+
+.settings-index-card[data-section="snipeops"]:hover {
+  background: linear-gradient(to bottom, #ffffff, #f2f6ff);
+}
+
 .settings-index-card:hover {
   transform: translateY(-3px);
   border-color: rgba(15, 23, 42, 0.14);
@@ -209,9 +217,24 @@
 }
 
 .settings-main-layout {
-  max-width: 1100px;
+  width: min(100%, 1280px);
   margin: 0 auto;
-  padding: 8px 0 24px;
+  padding: 0 24px;
+}
+
+.settings-main-layout .settings-form,
+.settings-main-layout .settings-narrow-stack {
+  width: 100%;
+  max-width: none;
+}
+
+.settings-main-layout .settings-provider-card {
+  width: 100%;
+  max-width: none;
+}
+
+.settings-main-layout .form-actions {
+  width: 100%;
 }
 
 .settings-section-stack {
@@ -269,6 +292,31 @@
   border-radius: 16px;
   background: #ffffff;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.settings-tabs-full {
+  width: 100%;
+  max-width: none;
+  margin: 22px 0 28px;
+  padding: 8px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.settings-tabs-full .settings-tab {
+  min-width: 150px;
+  justify-content: center;
+  border-radius: 14px;
+  text-decoration: none;
+}
+
+.settings-tabs-full .settings-tab.active {
+  background: #ffffff;
+  color: var(--text);
+  border-color: rgba(59, 130, 246, 0.22);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
 
 .settings-tab {
@@ -344,6 +392,17 @@
   font-size: 15px;
   font-weight: 700;
   color: #1f2937;
+}
+
+.settings-guide-list {
+  margin: 12px 0 0 18px;
+  padding: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.settings-guide-list li + li {
+  margin-top: 6px;
 }
 
 .form-field {
@@ -905,6 +964,18 @@
   color: #6d28d9;
 }
 
+.integration-brand-card-mosyle::before {
+  background: #1c94d2;
+}
+
+.integration-brand-card-mosyle:hover {
+  background: linear-gradient(to bottom, #ffffff, #eef7fc);
+}
+
+/* .integration-brand-card-mosyle .integration-brand-logo-wrap {
+  color: #1c94d2;
+} */
+
 /* Staff Status page normalization */
 .staff-status-department-list,
 .staff-status-kiosk-list {
@@ -1101,6 +1172,26 @@
   pointer-events: none;
   transform: none;
   box-shadow: none;
+}
+
+.settings-card-inner {
+  width: min(100%, 1100px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.settings-section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-content-card {
+  padding: 28px 32px;
+}
+
+.settings-content-card + .settings-content-card {
+  margin-top: 20px;
 }
 
 .settings-toggle-row.settings-toggle-off {

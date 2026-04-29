@@ -30,6 +30,9 @@
     <div class="settings-narrow-stack">
       <div class="settings-provider-card">
         <h2>Snipe-IT Connection</h2>
+        <a href="{{ url_for('launchpad_ui.settings_snipeops') }}" class="btn btn-secondary">
+          SnipeOps Mapping Rules
+        </a>
         <p class="muted">Control Snipe-IT API integration for Launchpad.</p>
 
         <div class="settings-toggle-row">
@@ -76,7 +79,6 @@
             </select>
           </div>
         </div>
-
         <div class="settings-provider-actions">
           <button type="button" class="test-connection-btn" id="snipeops-test-btn">
             Test Connection

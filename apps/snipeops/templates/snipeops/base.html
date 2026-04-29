@@ -12,46 +12,104 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
   <script>
-      window.APP_CONFIG = {timezone: "{{ SYSTEM_TIMEZONE }}"};
+    window.APP_CONFIG = {timezone: "{{ SYSTEM_TIMEZONE }}"};
   </script>
+
   {% block head %}{% endblock %}
 </head>
-<body>
+
+<body data-theme="{{ current_user_theme or 'light' }}">
   <header class="topbar">
     <div class="container topbar-inner">
-      <a class="brand" href="{{ url_for('snipeops.index') }}">SnipeOps</a>
+      <div class="topbar-left">
+        <a class="brand" href="{{ url_for('snipeops.index') }}">SnipeOps</a>
+      </div>
 
-      <nav class="nav">
-          <a href="{{ url_for('launchpad_ui.home') }}" class="nav-link">Dashboard</a>
-          <a href="{{ url_for('snipeops.index') }}" class="nav-link">Overview</a>
+      <nav class="topbar-nav">
+        <a href="{{ url_for('launchpad_ui.home') }}" class="topbar-link">Dashboard</a>
 
-          <div class="nav-dropdown">
-              <button class="nav-dropdown-btn" type="button">
-                  Tools
-                  <span class="nav-caret">▾</span>
+        {% if launchpad_apps %}
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">
+            Applications
+            <span class="nav-caret">▾</span>
+          </button>
+
+          <div class="nav-dropdown-menu">
+            {% for app in launchpad_apps %}
+            <a href="{{ url_for(app.endpoint) }}" class="nav-dropdown-item">
+              {{ app.label }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">
+            Tools
+            <span class="nav-caret">▾</span>
+          </button>
+
+          <div class="nav-dropdown-menu">
+            <a href="{{ url_for('import_by_scan.index') }}" class="nav-dropdown-item">
+              Import by Scan
+            </a>
+            <a href="{{ url_for('snipe_catalog.index') }}" class="nav-dropdown-item">
+              Catalog
+            </a>
+            <a href="{{ url_for('snipeops.intune_sync') }}" class="nav-dropdown-item">
+              Intune Sync
+            </a>
+
+            <a href="{{ url_for('snipeops.mosyle_sync') }}" class="nav-dropdown-item">
+              Mosyle Sync
+            </a>
+          </div>
+        </div>
+
+        {% if settings_sections %}
+        <a href="{{ url_for('launchpad_ui.settings_index') }}" class="topbar-link">Settings</a>
+        {% endif %}
+
+        {% if session.get("is_authenticated") %}
+        <div class="nav-dropdown nav-dropdown-right">
+          <button class="nav-dropdown-btn" type="button">
+            Account
+            <span class="nav-caret">▾</span>
+          </button>
+
+          <div class="nav-dropdown-menu nav-dropdown-menu-sm">
+            <div class="theme-menu">
+              <div class="theme-menu-label">Theme</div>
+
+              <button
+                type="button"
+                class="theme-option {% if current_user_theme != 'dark' %}active{% endif %}"
+                data-theme-choice="light"
+              >
+                Light
               </button>
 
-              <div class="nav-dropdown-menu">
-                  <a href="{{ url_for('import_by_scan.index') }}" class="nav-dropdown-item">Import by Scan</a>
-                  <a href="{{ url_for('snipe_catalog.index') }}" class="nav-dropdown-item">Catalog</a>
-              </div>
-          </div>
-
-          {% if session.get("is_authenticated") %}
-          <div class="nav-dropdown">
-              <button class="nav-dropdown-btn" type="button">
-                  Account
-                  <span class="nav-caret">▾</span>
+              <button
+                type="button"
+                class="theme-option {% if current_user_theme == 'dark' %}active{% endif %}"
+                data-theme-choice="dark"
+              >
+                Dark
               </button>
+            </div>
 
-              <div class="nav-dropdown-menu nav-dropdown-menu-sm">
-                  <a href="{{ url_for('auth.logout') }}" class="nav-dropdown-item">Logout</a>
-              </div>
+            <div class="nav-dropdown-divider"></div>
+
+            <a href="{{ url_for('auth.logout') }}" class="nav-dropdown-item">Logout</a>
           </div>
-          {% else %}
-              <a href="{{ url_for('auth.login') }}" class="nav-link">Login</a>
-          {% endif %}
+        </div>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}" class="topbar-link">Login</a>
+        {% endif %}
       </nav>
     </div>
   </header>
@@ -62,9 +120,36 @@
 
   <footer class="footer">
     <div class="container footer-inner">
-      <span class="muted">SnipeOps • Internal SnipeIT Helper</span>
+      <span class="muted">{{ general_settings.footer_text or "SnipeOps • Internal Snipe-IT Helper" }}</span>
     </div>
   </footer>
+
+  <script>
+    document.addEventListener("click", async function (event) {
+      const button = event.target.closest("[data-theme-choice]");
+      if (!button) return;
+
+      const theme = button.getAttribute("data-theme-choice");
+      const body = new URLSearchParams();
+      body.set("theme_preference", theme);
+
+      const response = await fetch("{{ url_for('launchpad_ui.update_account_theme') }}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body
+      });
+
+      if (!response.ok) return;
+
+      document.body.setAttribute("data-theme", theme);
+
+      document.querySelectorAll(".theme-option").forEach(function (item) {
+        item.classList.toggle("active", item.getAttribute("data-theme-choice") === theme);
+      });
+    });
+  </script>
 
   {% block scripts %}{% endblock %}
 </body>

@@ -62,21 +62,21 @@
       <div class="card-cta muted">Coming soon</div>
     </div>
 
-    <div class="card card-disabled">
+    <a class="card" href="{{ url_for('snipeops.intune_sync') }}">
       <div class="card-title">Intune Sync</div>
-      <div class="card-body muted">
-        Automation workflow to sync Intune device assignments to users in SnipeIT (coming next).
+      <div class="card-body">
+        Pull Windows device inventory from Microsoft Intune and compare it with Snipe-IT.
       </div>
-      <div class="card-cta muted">Coming soon</div>
-    </div>
+      <div class="card-cta">Open →</div>
+    </a>
 
-    <div class="card card-disabled">
+    <a class="card" href="{{ url_for('snipeops.mosyle_sync') }}">
       <div class="card-title">Mosyle Sync</div>
-      <div class="card-body muted">
-        Automation workflow to sync Mosyle device assignments to users in SnipeIT (coming next).
+      <div class="card-body">
+        Pull Apple device inventory from Mosyle and compare it with Snipe-IT.
       </div>
-      <div class="card-cta muted">Coming soon</div>
-    </div>
+      <div class="card-cta">Open →</div>
+    </a>
 
     <div class="card card-disabled">
       <div class="card-title">Secure User Rostering</div>

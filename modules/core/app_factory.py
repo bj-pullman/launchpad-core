@@ -10,6 +10,8 @@ from apps.snipeops.import_by_scan.import_by_scan_db import init_db as import_by_
 from apps.snipeops.snipe_catalog.blueprint import bp as snipe_catalog_bp
 from apps.launchpad_ui import launchpad_ui_bp
 from apps.snipeops.blueprint import bp as snipeops_bp
+from apps.snipeops.mapping_db import init_mapping_db
+from apps.snipeops.mapping_service import seed_default_mappings
 from apps.staff_status.blueprint import bp as staff_status_bp
 from apps.staff_status.db import init_staff_status_db
 from apps.finance.blueprint import bp as finance_bp
@@ -32,6 +34,7 @@ from modules.core.utils.time import format_system_time, utc_now
 from modules.core.settings.settings_service import get_setting, get_bool_setting
 from modules.core.api_keys.service import init_api_keys_db
 from modules.core.bootstrap.finance_seed import ensure_efinance_daily_import_profile
+from modules.core.identity.user_service import get_user_by_id
 
 from tasks.scheduler import configure_jobs
 
@@ -66,6 +69,8 @@ def create_app() -> Flask:
     # Init DB
     import_by_scan_init_db()
     init_identity_db()
+    init_mapping_db()
+    seed_default_mappings()
     init_local_auth_db()
     init_settings_db()
     init_rbac_db()
@@ -364,9 +369,21 @@ def create_app() -> Flask:
             "time_format": get_setting("general.time_format", "12h"),
         }
 
+        current_user_theme = session.get("theme_preference", "light")
+
+        if session.get("is_authenticated") and session.get("user_id"):
+            user = get_user_by_id(session["user_id"])
+            if user:
+                current_user_theme = user.get("theme_preference") or "light"
+                session["theme_preference"] = current_user_theme
+
+        if current_user_theme not in ("light", "dark"):
+            current_user_theme = "light"
+
         return {
             "SYSTEM_TIMEZONE": general_settings["timezone"],
             "general_settings": general_settings,
+            "current_user_theme": current_user_theme,
         }
 
     return app
