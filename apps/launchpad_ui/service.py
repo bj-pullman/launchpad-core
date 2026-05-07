@@ -564,4 +564,5 @@ def mosyle_integration_settings():
         "mosyle_base_url": get_setting("integrations.mosyle.base_url", "https://managerapi.mosyle.com/v2"),
         "mosyle_username": get_setting("integrations.mosyle.username", ""),
         "mosyle_access_token": bool((get_setting("integrations.mosyle.access_token", "") or "").strip()),
+        "mosyle_has_password": bool((get_setting("integrations.mosyle.password", "") or "").strip()),
     }

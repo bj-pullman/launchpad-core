@@ -149,3 +149,66 @@ def create_asset(profile, serial):
     return {
         "data": response.json()
     }
+
+def find_user(search_value):
+    search_value = str(search_value or "").strip()
+    if not search_value:
+        return None
+
+    response = _request(
+        "GET",
+        "/api/v1/users",
+        params={"search": search_value, "limit": 10},
+    )
+    response.raise_for_status()
+
+    payload = response.json()
+    rows = payload.get("rows", [])
+
+    target = search_value.lower().replace(" ", "")
+
+    for row in rows:
+        email = str(row.get("email") or "").strip().lower()
+        username = str(row.get("username") or "").strip().lower()
+        name = str(row.get("name") or "").strip().lower().replace(" ", "")
+
+        if email == search_value.lower():
+            return row
+        if username == search_value.lower():
+            return row
+        if name == target:
+            return row
+
+    return rows[0] if rows else None
+
+
+def update_asset(asset_id, payload):
+    response = _request(
+        "PATCH",
+        f"/api/v1/hardware/{int(asset_id)}",
+        json=payload,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def checkout_asset_to_user(asset_id, assigned_user):
+    user = find_user(assigned_user)
+    if not user:
+        raise ValueError(f"No matching Snipe-IT user found for: {assigned_user}")
+
+    user_id = user.get("id")
+    if not user_id:
+        raise ValueError(f"Snipe-IT user result had no id for: {assigned_user}")
+
+    response = _request(
+        "POST",
+        f"/api/v1/hardware/{int(asset_id)}/checkout",
+        json={
+            "checkout_to_type": "user",
+            "assigned_user": int(user_id),
+            "note": "Updated by SnipeOps sync preview.",
+        },
+    )
+    response.raise_for_status()
+    return response.json()

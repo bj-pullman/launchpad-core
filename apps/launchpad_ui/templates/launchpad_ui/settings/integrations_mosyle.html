@@ -95,6 +95,21 @@
               </small>
             </div>
           </div>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="mosyle_password">Password</label>
+              <input
+                type="password"
+                id="mosyle_password"
+                name="mosyle_password"
+                value=""
+                placeholder="{% if settings.mosyle_has_password %}Stored password exists{% else %}Mosyle admin password{% endif %}"
+              />
+              <small class="form-text text-muted">
+                Required for Mosyle API login. Leave blank to keep the current stored password.
+              </small>
+            </div>
+          </div>
         </div>
       </div>
 

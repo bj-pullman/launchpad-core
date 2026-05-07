@@ -1513,11 +1513,15 @@ def settings_integrations_mosyle():
             or "https://managerapi.mosyle.com/v2"
         ).strip().rstrip("/")
         username = (request.form.get("mosyle_username") or "").strip()
+        password = (request.form.get("mosyle_password") or "").strip()
         access_token = (request.form.get("mosyle_access_token") or "").strip()
 
         set_setting("integrations.mosyle.enabled", enabled)
         set_setting("integrations.mosyle.base_url", base_url)
         set_setting("integrations.mosyle.username", username)
+
+        if password:
+            set_setting("integrations.mosyle.password", password, is_sensitive=1)
 
         if access_token:
             set_setting("integrations.mosyle.access_token", access_token, is_sensitive=1)
