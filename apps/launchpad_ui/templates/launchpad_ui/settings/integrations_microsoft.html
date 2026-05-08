@@ -3,7 +3,10 @@
 {% block title %}Microsoft Integration - Launchpad{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}" />
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+/>
 {% endblock %}
 
 {% block content %}
@@ -11,8 +14,8 @@
   <div class="settings-back-row">
     <a href="{{ url_for('launchpad_ui.settings_integrations') }}" class="settings-back-link">
       <span class="settings-back-link-icon" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M15 18l-6-6 6-6" />
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
         </svg>
       </span>
       <span>Integrations</span>
@@ -22,65 +25,202 @@
   <div class="settings-page-header">
     <div>
       <h1>Microsoft</h1>
-      <p class="muted">Configure Microsoft OIDC provider settings.</p>
+      <p class="muted">Configure Microsoft platform integrations, including sign-in and Intune device sync.</p>
     </div>
   </div>
 
   <form method="post" class="settings-form">
-    <div class="settings-narrow-stack">
-      <div class="settings-provider-card">
-        <h2>Microsoft OIDC</h2>
-        <p class="muted">Control Microsoft sign-in integration for Launchpad.</p>
+    <input type="hidden" name="active_tab" id="active_tab" value="{{ active_tab or 'signin' }}" />
+    <input type="hidden" name="action" id="microsoft_action" value="{% if active_tab == 'intune' %}save_intune{% else %}save_oidc{% endif %}" />
 
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-copy">
-            <strong>Enable Microsoft OIDC</strong>
-            <span>Allow Microsoft identity provider sign-in for Launchpad.</span>
+    <div class="settings-tabs">
+      <button
+        type="button"
+        class="settings-tab {% if active_tab == 'signin' %}active{% endif %}"
+        data-tab="signin"
+        data-action-value="save_oidc"
+      >
+        Sign-In
+      </button>
+
+      <button
+        type="button"
+        class="settings-tab {% if active_tab == 'intune' %}active{% endif %}"
+        data-tab="intune"
+        data-action-value="save_intune"
+      >
+        Intune
+      </button>
+    </div>
+
+    <div class="settings-section-stack">
+      <div class="settings-tab-panel {% if active_tab == 'signin' %}active{% endif %}" data-panel="signin">
+        <div class="settings-content-card">
+          <div class="settings-card-inner">
+            <h2>Microsoft Sign-In</h2>
+            <p class="muted">Control Microsoft OIDC sign-in integration for Launchpad.</p>
+
+            <div class="settings-toggle-row">
+              <div class="settings-toggle-copy">
+                <strong>Enable Microsoft OIDC</strong>
+                <span>Allow Microsoft identity provider sign-in for Launchpad.</span>
+              </div>
+
+              <label class="settings-switch">
+                <input type="checkbox" name="microsoft_oidc_enabled" value="1" {% if settings.microsoft_oidc_enabled %}checked{% endif %} />
+                <span class="settings-switch-slider"></span>
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="microsoft_tenant_id">Tenant ID</label>
+                <input type="text" id="microsoft_tenant_id" name="microsoft_tenant_id" value="{{ settings.microsoft_tenant_id }}" />
+              </div>
+
+              <div class="form-field">
+                <label for="microsoft_redirect_uri">Redirect URI</label>
+                <input type="text" id="microsoft_redirect_uri" name="microsoft_redirect_uri" value="{{ settings.microsoft_redirect_uri }}" />
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="microsoft_client_id">Client ID</label>
+                <input type="text" id="microsoft_client_id" name="microsoft_client_id" value="{{ settings.microsoft_client_id }}" />
+              </div>
+
+              <div class="form-field">
+                <label for="microsoft_client_secret">Client Secret</label>
+                <input type="password" id="microsoft_client_secret" name="microsoft_client_secret" value="" />
+                <small>Leave blank to keep the current stored secret.</small>
+              </div>
+            </div>
+
+            <div class="settings-provider-actions">
+              <button
+                type="button"
+                class="test-connection-btn"
+                data-provider="microsoft_oidc"
+                data-test-url="{{ url_for('launchpad_ui.settings_authentication_test_connection') }}"
+              >
+                Test Configuration
+              </button>
+            </div>
+
+            <div class="settings-test-result" data-provider-result="microsoft_oidc" hidden></div>
           </div>
+        </div>
+      </div>
 
-          <label class="settings-switch">
-            <input type="checkbox" name="microsoft_oidc_enabled" value="1" {% if settings.microsoft_oidc_enabled %}checked{% endif %} />
-            <span class="settings-switch-slider"></span>
-          </label>
+      <div class="settings-tab-panel {% if active_tab == 'intune' %}active{% endif %}" data-panel="intune">
+        <div class="settings-content-card">
+          <div class="settings-card-inner">
+            <h2>Microsoft Intune</h2>
+            <p class="muted">
+              Configure the Microsoft Graph app registration SnipeOps will use to read Intune device inventory.
+            </p>
+
+            <div class="settings-toggle-row">
+              <div class="settings-toggle-copy">
+                <strong>Enable Intune Connector</strong>
+                <span>Allow SnipeOps to use Microsoft Graph for Intune device sync.</span>
+              </div>
+
+              <label class="settings-switch">
+                <input type="checkbox" name="intune_enabled" value="1" {% if settings.intune_enabled %}checked{% endif %} />
+                <span class="settings-switch-slider"></span>
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="intune_tenant_id">Tenant ID</label>
+                <input
+                  type="text"
+                  id="intune_tenant_id"
+                  name="intune_tenant_id"
+                  value="{{ settings.intune_tenant_id }}"
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+              </div>
+
+              <div class="form-field">
+                <label for="intune_client_id">Client ID</label>
+                <input
+                  type="text"
+                  id="intune_client_id"
+                  name="intune_client_id"
+                  value="{{ settings.intune_client_id }}"
+                  placeholder="Application / client ID"
+                />
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="intune_client_secret">Client Secret</label>
+                <input
+                  type="password"
+                  id="intune_client_secret"
+                  name="intune_client_secret"
+                  value=""
+                  placeholder="{% if settings.intune_has_client_secret %}Stored secret exists{% else %}Enter client secret{% endif %}"
+                />
+                <small>
+                  {% if settings.intune_has_client_secret %}
+                  Leave blank to keep the current stored secret.
+                  {% else %}
+                  Enter the client secret from the Entra app registration.
+                  {% endif %}
+                </small>
+              </div>
+
+              <div class="form-field">
+                <label for="intune_graph_base_url">Graph Base URL</label>
+                <input
+                  type="text"
+                  id="intune_graph_base_url"
+                  name="intune_graph_base_url"
+                  value="{{ settings.intune_graph_base_url }}"
+                />
+                <small>Default: https://graph.microsoft.com/v1.0</small>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="microsoft_tenant_id">Tenant ID</label>
-            <input type="text" id="microsoft_tenant_id" name="microsoft_tenant_id" value="{{ settings.microsoft_tenant_id }}" />
-          </div>
+        <div class="settings-content-card">
+          <div class="settings-card-inner">
+            <h2>Setup Guide</h2>
+            <p class="muted">
+              Create an Entra app registration for SnipeOps, then grant Microsoft Graph application permissions.
+            </p>
 
-          <div class="form-field">
-            <label for="microsoft_redirect_uri">Redirect URI</label>
-            <input type="text" id="microsoft_redirect_uri" name="microsoft_redirect_uri" value="{{ settings.microsoft_redirect_uri }}" />
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="microsoft_client_id">Client ID</label>
-            <input type="text" id="microsoft_client_id" name="microsoft_client_id" value="{{ settings.microsoft_client_id }}" />
-          </div>
-
-          <div class="form-field">
-            <label for="microsoft_client_secret">Client Secret</label>
-            <input type="password" id="microsoft_client_secret" name="microsoft_client_secret" value="" />
-            <small>Leave blank to keep the current stored secret.</small>
+            <ol class="settings-guide-list">
+              <li>Open the Microsoft Entra admin center.</li>
+              <li>Create or select an App Registration for Launchpad / SnipeOps.</li>
+              <li>Create a client secret and paste it above.</li>
+              <li>Add Microsoft Graph application permissions for Intune device reads.</li>
+              <li>Grant admin consent.</li>
+            </ol>
           </div>
         </div>
 
-        <div class="settings-provider-actions">
-          <button
-            type="button"
-            class="test-connection-btn"
-            data-provider="microsoft_oidc"
-            data-test-url="{{ url_for('launchpad_ui.settings_authentication_test_connection') }}"
-          >
-            Test Configuration
-          </button>
-        </div>
+        <div class="settings-content-card">
+          <div class="settings-card-inner">
+            <h2>SnipeOps Mapping Behavior</h2>
+            <p class="muted">
+              Intune values will pass through SnipeOps Mapping Rules before they are compared with Snipe-IT.
+            </p>
 
-        <div class="settings-test-result" data-provider-result="microsoft_oidc" hidden></div>
+            <div class="settings-provider-actions">
+              <a href="{{ url_for('launchpad_ui.settings_snipeops') }}" class="btn btn-secondary">
+                Open Mapping Rules
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="form-actions">
@@ -93,4 +233,35 @@
 
 {% block extra_js %}
 <script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const tabs = document.querySelectorAll(".settings-tab[data-tab]");
+  const panels = document.querySelectorAll(".settings-tab-panel[data-panel]");
+  const activeTabInput = document.getElementById("active_tab");
+  const actionInput = document.getElementById("microsoft_action");
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      const tabName = tab.dataset.tab;
+      const actionValue = tab.dataset.actionValue;
+
+      tabs.forEach(function (item) {
+        item.classList.toggle("active", item.dataset.tab === tabName);
+      });
+
+      panels.forEach(function (panel) {
+        panel.classList.toggle("active", panel.dataset.panel === tabName);
+      });
+
+      activeTabInput.value = tabName;
+      actionInput.value = actionValue;
+
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tabName);
+      window.history.replaceState({}, "", url.toString());
+    });
+  });
+});
+</script>
 {% endblock %}

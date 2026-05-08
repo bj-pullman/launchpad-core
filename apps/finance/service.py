@@ -5,6 +5,7 @@ from modules.core.identity.identity_db import get_connection as get_identity_con
 from .db import get_connection
 import os
 import secrets
+import json
 from pathlib import Path
 import csv
 from io import TextIOWrapper
@@ -165,46 +166,201 @@ def list_records_for_vendor(vendor_id: int) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def list_active_vendors() -> list[dict]:
-    with get_connection() as conn:
-        rows = conn.execute(
+def list_active_vendors(
+    q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
+    q = normalize_text(q)
+
+    page = max(int(page or 1), 1)
+    per_page = max(min(int(per_page or 100), 250), 25)
+    offset = (page - 1) * per_page
+
+    where = ["status IS NULL OR status NOT IN ('archived', 'deleted')"]
+    params = []
+
+    if q:
+        where.append(
             """
+            (
+                LOWER(COALESCE(vendor_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(vendor_code, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(website, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(billing_email, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(support_email, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(sales_contact_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(notes, '')) LIKE LOWER(?)
+            )
+            """
+        )
+        term = f"%{q}%"
+        params.extend([term, term, term, term, term, term, term])
+
+    where_sql = " AND ".join(f"({item})" for item in where)
+
+    with get_connection() as conn:
+        total = conn.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM finance_vendors
+            WHERE {where_sql}
+            """,
+            params,
+        ).fetchone()["count"]
+
+        rows = conn.execute(
+            f"""
             SELECT *
             FROM finance_vendors
-            WHERE status IS NULL OR status NOT IN ('archived', 'deleted')
+            WHERE {where_sql}
             ORDER BY vendor_name COLLATE NOCASE ASC
-            """
+            LIMIT ? OFFSET ?
+            """,
+            [*params, per_page, offset],
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    total_pages = max((total + per_page - 1) // per_page, 1)
+
+    return {
+        "rows": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+    }
 
 
-def list_archived_vendors() -> list[dict]:
+def list_archived_vendors(
+    q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
+    q = normalize_text(q)
+
+    page = max(int(page or 1), 1)
+    per_page = max(min(int(per_page or 100), 250), 25)
+    offset = (page - 1) * per_page
+
+    where = ["status = 'archived'"]
+    params = []
+
+    if q:
+        where.append("""
+            (
+                LOWER(COALESCE(vendor_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(vendor_code, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(website, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(billing_email, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(support_email, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(sales_contact_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(notes, '')) LIKE LOWER(?)
+            )
+        """)
+        term = f"%{q}%"
+        params.extend([term, term, term, term, term, term, term])
+
+    where_sql = " AND ".join(f"({item})" for item in where)
+
     with get_connection() as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) AS count FROM finance_vendors WHERE {where_sql}",
+            params,
+        ).fetchone()["count"]
+
         rows = conn.execute(
-            """
+            f"""
             SELECT *
             FROM finance_vendors
-            WHERE status = 'archived'
+            WHERE {where_sql}
             ORDER BY vendor_name COLLATE NOCASE ASC
-            """
+            LIMIT ? OFFSET ?
+            """,
+            [*params, per_page, offset],
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    return {
+        "rows": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": max((total + per_page - 1) // per_page, 1),
+        "has_prev": page > 1,
+        "has_next": page < max((total + per_page - 1) // per_page, 1),
+        "prev_page": page - 1,
+        "next_page": page + 1,
+    }
 
 
-def list_deleted_vendors() -> list[dict]:
+def list_deleted_vendors(
+    q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
+    q = normalize_text(q)
+
+    page = max(int(page or 1), 1)
+    per_page = max(min(int(per_page or 100), 250), 25)
+    offset = (page - 1) * per_page
+
+    where = ["status = 'deleted'"]
+    params = []
+
+    if q:
+        where.append("""
+            (
+                LOWER(COALESCE(vendor_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(vendor_code, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(website, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(billing_email, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(support_email, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(sales_contact_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(notes, '')) LIKE LOWER(?)
+            )
+        """)
+        term = f"%{q}%"
+        params.extend([term, term, term, term, term, term, term])
+
+    where_sql = " AND ".join(f"({item})" for item in where)
+
     with get_connection() as conn:
+        total = conn.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM finance_vendors
+            WHERE {where_sql}
+            """,
+            params,
+        ).fetchone()["count"]
+
         rows = conn.execute(
-            """
+            f"""
             SELECT *
             FROM finance_vendors
-            WHERE status = 'deleted'
+            WHERE {where_sql}
             ORDER BY deleted_at DESC, vendor_name COLLATE NOCASE ASC
-            """
+            LIMIT ? OFFSET ?
+            """,
+            [*params, per_page, offset],
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    total_pages = max((total + per_page - 1) // per_page, 1)
+
+    return {
+        "rows": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+    }
 
 
 def archive_vendor(vendor_id: int) -> bool:
@@ -1310,14 +1466,100 @@ def delete_record(record_id: int, deleted_by_user_id: int | None = None) -> bool
 
     return True
 
-def list_active_records_for_department(department_name: str) -> list[dict]:
+def list_records_for_department_page(
+    *,
+    department_name: str,
+    status: str,
+    q: str | None = None,
+    category_id: int | None = None,
+    vendor_q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
     department_name = normalize_text(department_name)
+    q = normalize_text(q)
+    vendor_q = normalize_text(vendor_q)
+
+    page = max(int(page or 1), 1)
+    per_page = max(min(int(per_page or 100), 250), 25)
+    offset = (page - 1) * per_page
+
     if not department_name:
-        return []
+        return {
+            "rows": [],
+            "total": 0,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": 1,
+            "has_prev": False,
+            "has_next": False,
+            "prev_page": page - 1,
+            "next_page": page + 1,
+        }
+
+    where = ["r.department_name = ?"]
+    params = [department_name]
+
+    if status == "active":
+        where.append("r.status NOT IN ('archived', 'deleted')")
+    elif status == "archived":
+        where.append("r.status = 'archived'")
+    elif status == "deleted":
+        where.append("r.status = 'deleted'")
+    else:
+        raise ValueError("Invalid record status.")
+
+    if q:
+        where.append("""
+            (
+                LOWER(COALESCE(r.title, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(v.vendor_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(c.category_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(r.account_code, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(r.po_number, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(r.notes, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(r.record_type, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(r.cost, '')) LIKE LOWER(?)
+            )
+        """)
+        term = f"%{q}%"
+        params.extend([term, term, term, term, term, term, term, term])
+
+    if category_id:
+        where.append("r.category_id = ?")
+        params.append(category_id)
+
+    if vendor_q:
+        where.append("LOWER(COALESCE(v.vendor_name, '')) LIKE LOWER(?)")
+        params.append(f"%{vendor_q}%")
+
+    where_sql = " AND ".join(f"({item})" for item in where)
+
+    if status == "deleted":
+        order_sql = "r.deleted_at DESC, r.title COLLATE NOCASE ASC"
+    elif status == "archived":
+        order_sql = "r.updated_at DESC, r.title COLLATE NOCASE ASC"
+    else:
+        order_sql = """
+            CASE WHEN r.renewal_date IS NULL THEN 1 ELSE 0 END,
+            r.renewal_date ASC,
+            r.title COLLATE NOCASE ASC
+        """
 
     with get_connection() as conn:
+        total = conn.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM finance_records r
+            LEFT JOIN finance_vendors v ON v.id = r.vendor_id
+            LEFT JOIN finance_categories c ON c.id = r.category_id
+            WHERE {where_sql}
+            """,
+            params,
+        ).fetchone()["count"]
+
         rows = conn.execute(
-            """
+            f"""
             SELECT
                 r.*,
                 v.vendor_name,
@@ -1325,65 +1567,83 @@ def list_active_records_for_department(department_name: str) -> list[dict]:
             FROM finance_records r
             LEFT JOIN finance_vendors v ON v.id = r.vendor_id
             LEFT JOIN finance_categories c ON c.id = r.category_id
-            WHERE r.department_name = ?
-              AND r.status NOT IN ('archived', 'deleted')
-            ORDER BY
-                CASE WHEN r.renewal_date IS NULL THEN 1 ELSE 0 END,
-                r.renewal_date ASC,
-                r.title COLLATE NOCASE ASC
+            WHERE {where_sql}
+            ORDER BY {order_sql}
+            LIMIT ? OFFSET ?
             """,
-            (department_name,),
+            [*params, per_page, offset],
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    total_pages = max((total + per_page - 1) // per_page, 1)
 
-def list_archived_records_for_department(department_name: str) -> list[dict]:
-    department_name = normalize_text(department_name)
-    if not department_name:
-        return []
+    return {
+        "rows": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+    }
 
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-                r.*,
-                v.vendor_name,
-                c.category_name
-            FROM finance_records r
-            LEFT JOIN finance_vendors v ON v.id = r.vendor_id
-            LEFT JOIN finance_categories c ON c.id = r.category_id
-            WHERE r.department_name = ?
-              AND r.status = 'archived'
-            ORDER BY r.updated_at DESC, r.title COLLATE NOCASE ASC
-            """,
-            (department_name,),
-        ).fetchall()
 
-    return [dict(row) for row in rows]
+def list_active_records_for_department(
+    department_name: str,
+    q: str | None = None,
+    category_id: int | None = None,
+    vendor_q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
+    return list_records_for_department_page(
+        department_name=department_name,
+        status="active",
+        q=q,
+        category_id=category_id,
+        vendor_q=vendor_q,
+        page=page,
+        per_page=per_page,
+    )
 
-def list_deleted_records_for_department(department_name: str) -> list[dict]:
-    department_name = normalize_text(department_name)
-    if not department_name:
-        return []
 
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-                r.*,
-                v.vendor_name,
-                c.category_name
-            FROM finance_records r
-            LEFT JOIN finance_vendors v ON v.id = r.vendor_id
-            LEFT JOIN finance_categories c ON c.id = r.category_id
-            WHERE r.department_name = ?
-              AND r.status = 'deleted'
-            ORDER BY r.deleted_at DESC, r.title COLLATE NOCASE ASC
-            """,
-            (department_name,),
-        ).fetchall()
+def list_archived_records_for_department(
+    department_name: str,
+    q: str | None = None,
+    category_id: int | None = None,
+    vendor_q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
+    return list_records_for_department_page(
+        department_name=department_name,
+        status="archived",
+        q=q,
+        category_id=category_id,
+        vendor_q=vendor_q,
+        page=page,
+        per_page=per_page,
+    )
 
-    return [dict(row) for row in rows]
+
+def list_deleted_records_for_department(
+    department_name: str,
+    q: str | None = None,
+    category_id: int | None = None,
+    vendor_q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
+    return list_records_for_department_page(
+        department_name=department_name,
+        status="deleted",
+        q=q,
+        category_id=category_id,
+        vendor_q=vendor_q,
+        page=page,
+        per_page=per_page,
+    )
 
 def restore_archived_record(record_id: int, changed_by_user_id: int | None = None) -> bool:
     record = get_record_by_id(record_id)
@@ -1713,6 +1973,20 @@ def read_import_headers(stored_filename: str) -> list[str]:
 def get_import_target_fields(import_type: str) -> list[dict]:
     import_type = (import_type or "").strip().lower()
 
+    if import_type == "transactions":
+        return [
+            {"field_name": "fund", "label": "Fund", "required": False},
+            {"field_name": "budget_unit", "label": "Budget Unit", "required": False},
+            {"field_name": "account_code", "label": "Account Code", "required": False},
+            {"field_name": "purchase_date", "label": "Date", "required": False},
+            {"field_name": "po_number", "label": "PO Number", "required": False},
+            {"field_name": "vendor_name", "label": "Vendor", "required": False},
+            {"field_name": "expenditure_amount", "label": "Expenditures", "required": False},
+            {"field_name": "encumbrance_amount", "label": "Encumbrances", "required": False},
+            {"field_name": "description", "label": "Description", "required": False},
+            {"field_name": "cumulative_balance", "label": "Cumulative Balance", "required": False},
+        ]
+
     if import_type == "vendors":
         return [
             {"field_name": "vendor_name", "label": "Vendor Name", "required": True},
@@ -1788,6 +2062,369 @@ def replace_import_profile_fields(profile_id: int, field_mappings: list[dict]):
                 ),
             )
 
+        conn.commit()
+
+def build_friendly_import_title(source_row: dict, row_number: int | None = None) -> str:
+    description = normalize_text(source_row.get("DESCRIPTION"))
+    vendor = normalize_text(source_row.get("VENDOR"))
+    account = normalize_text(source_row.get("ACCOUNT"))
+    po_number = normalize_text(source_row.get("PURCHASE O"))
+    purchase_date = normalize_text(source_row.get("DATE"))
+
+    if description:
+        upper_description = description.upper()
+        if not upper_description.startswith("TOTAL ") and upper_description not in {
+            "BEGINNING BALANCE",
+            "POSTED FROM BUDGET SYSTEM",
+        }:
+            return description.title()
+
+    if vendor and po_number:
+        return f"{vendor.title()} - {po_number}"
+
+    if vendor and account:
+        return f"{vendor.title()} - Account {account}"
+
+    if vendor:
+        return vendor.title()
+
+    if account and purchase_date:
+        return f"Account {account} - {purchase_date}"
+
+    if account:
+        return f"Account {account}"
+
+    if row_number:
+        return f"Finance Import Row {row_number}"
+
+    return "Imported Finance Item"
+
+def split_efinance_vendor(value: str | None) -> tuple[str | None, str | None]:
+    value = normalize_text(value)
+    if not value:
+        return None, None
+
+    parts = value.split(maxsplit=1)
+
+    if len(parts) == 2 and parts[0].isdigit():
+        return normalize_vendor_name(parts[1]), parts[0]
+
+    return normalize_vendor_name(value), None
+
+
+def parse_money_decimal(value) -> Decimal:
+    return parse_cost_to_decimal(value)
+
+
+def money_to_string(value) -> str:
+    amount = parse_money_decimal(value)
+    return str(amount.quantize(Decimal("0.01")))
+
+
+def should_skip_efinance_transaction(mapped: dict, source_row: dict) -> bool:
+    description = (normalize_text(mapped.get("description")) or "").upper()
+    fund = (normalize_text(mapped.get("fund")) or "").upper()
+
+    expenditure = parse_money_decimal(mapped.get("expenditure_amount"))
+    encumbrance = parse_money_decimal(mapped.get("encumbrance_amount"))
+    balance = parse_money_decimal(mapped.get("cumulative_balance"))
+
+    if description in {"BEGINNING BALANCE", "POSTED FROM BUDGET SYSTEM"}:
+        return True
+
+    if fund.startswith("TOTAL "):
+        return True
+
+    if description.startswith("TOTAL "):
+        return True
+
+    if not description and expenditure == 0 and encumbrance == 0 and balance == 0:
+        return True
+
+    # subtotal/balance-only rows
+    if not description and not mapped.get("vendor_name") and not mapped.get("po_number"):
+        return True
+
+    return False
+
+
+def classify_transaction_type(mapped: dict) -> str:
+    description = (normalize_text(mapped.get("description")) or "").upper()
+    expenditure = parse_money_decimal(mapped.get("expenditure_amount"))
+    encumbrance = parse_money_decimal(mapped.get("encumbrance_amount"))
+
+    if "CHANGE ORDER" in description:
+        return "change_order"
+
+    if "BLANKET PO" in description:
+        return "blanket_po"
+
+    if "TAX" in description:
+        return "tax_fee"
+
+    if expenditure < 0:
+        return "credit_refund"
+
+    if expenditure == 0 and encumbrance > 0:
+        return "encumbrance"
+
+    if encumbrance < 0 and expenditure == 0:
+        return "encumbrance_release"
+
+    if expenditure > 0 and encumbrance < 0:
+        return "purchase"
+
+    if expenditure > 0:
+        return "purchase"
+
+    if encumbrance != 0:
+        return "encumbrance"
+
+    return "other"
+
+
+def suggest_record_type_for_transaction(mapped: dict) -> str | None:
+    description = (normalize_text(mapped.get("description")) or "").upper()
+
+    renewal_words = [
+        "ANNUAL",
+        "RENEWAL",
+        "SUBSCRIPTION",
+        "LICENSE",
+        "SOFTWARE",
+        "SUPPORT",
+        "SITE LICENSE",
+        "SERVICE AGREEMENT",
+    ]
+
+    if any(word in description for word in renewal_words):
+        return "renewal"
+
+    if "COPIER SERVICE AGREEMENT" in description:
+        return "service_contract"
+
+    if "BLANKET PO" in description:
+        return "blanket_po"
+
+    if "CHANGE ORDER" in description:
+        return "change_order"
+
+    return None
+
+
+def build_transaction_title(mapped: dict, source_row: dict, row_number: int | None = None) -> str:
+    description = normalize_text(mapped.get("description"))
+    vendor_name = normalize_text(mapped.get("vendor_name"))
+    po_number = normalize_text(mapped.get("po_number"))
+    account_code = normalize_text(mapped.get("account_code"))
+
+    if description:
+        return description.title()
+
+    if vendor_name and po_number:
+        return f"{vendor_name} - PO {po_number}"
+
+    if vendor_name and account_code:
+        return f"{vendor_name} - Account {account_code}"
+
+    if account_code:
+        return f"Account {account_code}"
+
+    if row_number:
+        return f"Finance Transaction Row {row_number}"
+
+    return "Finance Transaction"
+
+
+def create_finance_transaction(
+    *,
+    department_name: str,
+    import_run_id: int | None,
+    source_type: str | None,
+    source_row_number: int | None,
+    transaction_type: str,
+    review_status: str,
+    title: str,
+    description: str | None,
+    vendor_id: int | None,
+    vendor_code: str | None,
+    vendor_name: str | None,
+    fund: str | None,
+    budget_unit: str | None,
+    account_code: str | None,
+    po_number: str | None,
+    purchase_date: str | None,
+    expenditure_amount: str | None,
+    encumbrance_amount: str | None,
+    cumulative_balance: str | None,
+    suggested_record_type: str | None,
+    is_promotable: bool,
+    raw_json: str | None,
+) -> int:
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO finance_transactions (
+                department_name,
+                import_run_id,
+                source_type,
+                source_row_number,
+                transaction_type,
+                review_status,
+                title,
+                description,
+                vendor_id,
+                vendor_code,
+                vendor_name,
+                fund,
+                budget_unit,
+                account_code,
+                po_number,
+                purchase_date,
+                expenditure_amount,
+                encumbrance_amount,
+                cumulative_balance,
+                suggested_record_type,
+                is_promotable,
+                raw_json,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                normalize_text(department_name),
+                import_run_id,
+                normalize_text(source_type),
+                source_row_number,
+                normalize_text(transaction_type),
+                normalize_text(review_status) or "needs_review",
+                normalize_text(title),
+                normalize_text(description),
+                vendor_id,
+                normalize_text(vendor_code),
+                normalize_text(vendor_name),
+                normalize_text(fund),
+                normalize_text(budget_unit),
+                normalize_text(account_code),
+                normalize_text(po_number),
+                normalize_text(purchase_date),
+                normalize_text(expenditure_amount),
+                normalize_text(encumbrance_amount),
+                normalize_text(cumulative_balance),
+                normalize_text(suggested_record_type),
+                1 if is_promotable else 0,
+                raw_json,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+
+def list_transactions_for_department(
+    department_name: str,
+    review_status: str | None = None,
+    transaction_type: str | None = None,
+    vendor_q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
+    department_name = normalize_text(department_name)
+    review_status = normalize_text(review_status)
+    transaction_type = normalize_text(transaction_type)
+    vendor_q = normalize_text(vendor_q)
+
+    page = max(int(page or 1), 1)
+    per_page = max(min(int(per_page or 100), 250), 25)
+    offset = (page - 1) * per_page
+
+    where = ["department_name = ?"]
+    params = [department_name]
+
+    if review_status:
+        where.append("review_status = ?")
+        params.append(review_status)
+
+    if transaction_type:
+        where.append("transaction_type = ?")
+        params.append(transaction_type)
+
+    if vendor_q:
+        where.append("LOWER(vendor_name) LIKE LOWER(?)")
+        params.append(f"%{vendor_q}%")
+
+    where_sql = " AND ".join(where)
+
+    with get_connection() as conn:
+        total = conn.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM finance_transactions
+            WHERE {where_sql}
+            """,
+            params,
+        ).fetchone()["count"]
+
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM finance_transactions
+            WHERE {where_sql}
+            ORDER BY
+                CASE WHEN purchase_date IS NULL OR purchase_date = '' THEN 1 ELSE 0 END,
+                purchase_date DESC,
+                id DESC
+            LIMIT ? OFFSET ?
+            """,
+            [*params, per_page, offset],
+        ).fetchall()
+
+    total_pages = max((total + per_page - 1) // per_page, 1)
+
+    return {
+        "rows": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+    }
+
+def get_transaction_by_id(transaction_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM finance_transactions
+            WHERE id = ?
+            """,
+            (transaction_id,),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def mark_transaction_promoted(transaction_id: int, record_id: int):
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE finance_transactions
+            SET review_status = 'promoted',
+                promoted_record_id = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (record_id, now, transaction_id),
+        )
         conn.commit()
 
 def create_import_profile(
@@ -2055,6 +2692,42 @@ def read_import_rows(stored_filename: str) -> list[dict]:
 
     raise ValueError("Unsupported file type. Only CSV and XLSX are supported.")
 
+def apply_import_mapping(row: dict, mappings: list[dict], row_number: int | None = None) -> dict:
+    mapped = {}
+
+    for mapping in mappings:
+        if mapping["ignore_field"]:
+            continue
+
+        target_field = mapping["target_field_name"]
+        source_column = mapping["source_column_name"]
+        transform_rule = normalize_text(mapping.get("transform_rule"))
+        default_value = normalize_text(mapping.get("default_value"))
+
+        if transform_rule == "friendly_title":
+            value = build_friendly_import_title(row, row_number)
+
+        elif transform_rule == "vendor_split":
+            vendor_name, vendor_code = split_efinance_vendor(row.get(source_column))
+            mapped["vendor_name"] = vendor_name
+            mapped["vendor_code"] = vendor_code
+            continue
+
+        elif transform_rule == "money":
+            value = money_to_string(row.get(source_column))
+
+        elif source_column:
+            value = normalize_text(row.get(source_column))
+
+        else:
+            value = None
+
+        if not value and default_value:
+            value = default_value
+
+        mapped[target_field] = value
+
+    return mapped
 
 def preview_import_rows(
     *,
@@ -2160,21 +2833,6 @@ def execute_records_import(
     rows = read_import_rows(run["stored_filename"])
     mappings = get_import_profile_fields(profile_id)
 
-    target_to_source = {}
-    required_targets = set()
-
-    for mapping in mappings:
-        target_field = mapping["target_field_name"]
-        if mapping["required"]:
-            required_targets.add(target_field)
-
-        if mapping["ignore_field"]:
-            continue
-        if not mapping["source_column_name"]:
-            continue
-
-        target_to_source[target_field] = mapping["source_column_name"]
-
     total_rows = len(rows)
     created_rows = 0
     skipped_rows = 0
@@ -2196,23 +2854,35 @@ def execute_records_import(
 
     for index, row in enumerate(rows, start=2):
         try:
-            mapped = {}
-            for target_field, source_column in target_to_source.items():
-                mapped[target_field] = normalize_text(row.get(source_column))
+            mapped = apply_import_mapping(row, mappings, index)
 
             if default_department_name:
                 mapped["department_name"] = normalize_text(default_department_name)
 
             missing_required = []
-            if not normalize_text(mapped.get("title")):
-                missing_required.append("title")
+
+            for mapping in mappings:
+                if not mapping["required"]:
+                    continue
+
+                if mapping["ignore_field"]:
+                    continue
+
+                target_field = mapping["target_field_name"]
+
+                if not normalize_text(mapped.get(target_field)):
+                    missing_required.append(target_field)
 
             if missing_required:
                 skipped_rows += 1
                 log_import_run_error(
                     run_id=run_id,
                     row_number=index,
-                    source_identifier=mapped.get("title") or row.get(next(iter(row.keys()), ""), ""),
+                    source_identifier=(
+                        mapped.get("title")
+                        or row.get(next(iter(row.keys()), ""), "")
+                        or f"Row {index}"
+                    ),
                     error_message=f"Missing required mapped fields: {', '.join(missing_required)}",
                 )
                 continue
@@ -2245,9 +2915,11 @@ def execute_records_import(
                 except ValueError:
                     notify_days_before = 30
 
+            title = normalize_text(mapped.get("title")) or "Imported Finance Item"
+
             record_id = create_record(
                 record_type=mapped.get("record_type") or "renewal",
-                title=mapped.get("title") or "",
+                title=title,
                 department_name=mapped.get("department_name") or "",
                 vendor_id=vendor_id,
                 category_id=category_id,
@@ -2387,16 +3059,6 @@ def validate_records_import(
     rows = read_import_rows(run["stored_filename"])
     mappings = get_import_profile_fields(profile_id)
 
-    target_to_source = {}
-    for mapping in mappings:
-        if mapping["ignore_field"]:
-            continue
-        if not mapping["source_column_name"]:
-            continue
-        target_to_source[mapping["target_field_name"]] = mapping["source_column_name"]
-
-    # Clear any previously stored validation/execution errors for this run
-    # so the table/export matches the current validation pass.
     clear_import_run_errors(run_id)
 
     preview_rows = []
@@ -2406,20 +3068,25 @@ def validate_records_import(
     vendors_to_create = 0
 
     for index, row in enumerate(rows, start=2):
-        mapped = {}
-        for target_field, source_column in target_to_source.items():
-            mapped[target_field] = normalize_text(row.get(source_column))
+        mapped = apply_import_mapping(row, mappings, index)
 
         if default_department_name:
             mapped["department_name"] = normalize_text(default_department_name)
 
         row_errors = []
 
-        # Required field validation
-        if not normalize_text(mapped.get("title")):
-            row_errors.append("Missing required field: title")
+        for mapping in mappings:
+            if not mapping["required"]:
+                continue
 
-        # Vendor validation / preview
+            if mapping["ignore_field"]:
+                continue
+
+            target_field = mapping["target_field_name"]
+
+            if not normalize_text(mapped.get(target_field)):
+                row_errors.append(f"Missing required field: {target_field}")
+
         vendor_name = normalize_text(mapped.get("vendor_name"))
         vendor_code = normalize_text(mapped.get("vendor_code"))
         if vendor_name or vendor_code:
@@ -2430,14 +3097,12 @@ def validate_records_import(
             if not existing_vendor and vendor_name:
                 vendors_to_create += 1
 
-        # Category validation
         category_name = normalize_text(mapped.get("category_name"))
         if category_name:
             existing_category = find_category_for_import(category_name)
             if not existing_category:
                 row_errors.append(f"Category not found: {category_name}")
 
-        # Optional sanity checks you can keep or remove later
         if mapped.get("term_length"):
             try:
                 int(str(mapped["term_length"]).strip())
@@ -2470,7 +3135,6 @@ def validate_records_import(
                 }
             )
 
-            # Persist validation errors so export/errors table uses same source
             log_import_run_error(
                 run_id=run_id,
                 row_number=index,
@@ -2526,6 +3190,63 @@ def normalize_import_header(value: str | None) -> str:
 
 def get_import_field_aliases(import_type: str) -> dict[str, list[str]]:
     import_type = (import_type or "").strip().lower()
+
+    if import_type == "transactions":
+        return {
+            "fund": [
+                "fund",
+            ],
+            "budget_unit": [
+                "budget_unit",
+                "budgetunit",
+                "budget",
+            ],
+            "account_code": [
+                "account",
+                "account_code",
+                "accountcode",
+            ],
+            "purchase_date": [
+                "date",
+                "purchase_date",
+                "purchasedate",
+            ],
+            "po_number": [
+                "purchase_o",
+                "purchaseo",
+                "purchase_order",
+                "purchaseorder",
+                "po",
+                "po_number",
+                "ponumber",
+            ],
+            "vendor_name": [
+                "vendor",
+                "vendor_name",
+                "vendorname",
+            ],
+            "expenditure_amount": [
+                "expenditures",
+                "expenditure",
+                "expense",
+                "spent",
+                "amount",
+            ],
+            "encumbrance_amount": [
+                "encumbrances",
+                "encumbrance",
+                "encumbered",
+            ],
+            "description": [
+                "description",
+                "desc",
+            ],
+            "cumulative_balance": [
+                "cumulative_balance",
+                "cumulativebalance",
+                "balance",
+            ],
+        }
 
     if import_type == "vendors":
         return {
@@ -2745,3 +3466,226 @@ def get_budget_breakdown_for_department(
         "top_bucket": top_bucket,
         "group_by": group_by,
     }
+
+def validate_transactions_import(
+    *,
+    run_id: int,
+    profile_id: int,
+    default_department_name: str | None = None,
+    preview_limit: int = 20,
+) -> dict:
+    run = get_import_run_by_id(run_id)
+    if not run:
+        raise ValueError("Import run not found")
+
+    rows = read_import_rows(run["stored_filename"])
+    mappings = get_import_profile_fields(profile_id)
+
+    clear_import_run_errors(run_id)
+
+    preview_rows = []
+    errors = []
+    valid_rows = 0
+    skipped_rows = 0
+    vendors_to_create = 0
+
+    for index, row in enumerate(rows, start=2):
+        mapped = apply_import_mapping(row, mappings, index)
+
+        if default_department_name:
+            mapped["department_name"] = normalize_text(default_department_name)
+
+        if should_skip_efinance_transaction(mapped, row):
+            skipped_rows += 1
+            continue
+
+        mapped["transaction_type"] = classify_transaction_type(mapped)
+        mapped["suggested_record_type"] = suggest_record_type_for_transaction(mapped)
+        mapped["title"] = build_transaction_title(mapped, row, index)
+        mapped["is_promotable"] = 1 if mapped.get("suggested_record_type") else 0
+
+        vendor_name = normalize_text(mapped.get("vendor_name"))
+        vendor_code = normalize_text(mapped.get("vendor_code"))
+
+        if vendor_name or vendor_code:
+            existing_vendor = find_vendor_for_import(
+                vendor_name=vendor_name,
+                vendor_code=vendor_code,
+            )
+            if not existing_vendor and vendor_name:
+                vendors_to_create += 1
+
+        valid_rows += 1
+
+        if len(preview_rows) < preview_limit:
+            preview_rows.append(mapped)
+
+    return {
+        "total_rows": len(rows),
+        "valid_rows": valid_rows,
+        "skipped_rows": skipped_rows,
+        "vendors_to_create": vendors_to_create,
+        "preview_rows": preview_rows,
+        "errors": errors,
+    }
+
+
+def execute_transactions_import(
+    *,
+    run_id: int,
+    profile_id: int,
+    default_department_name: str | None = None,
+    created_by_user_id: int | None = None,
+) -> dict:
+    run = get_import_run_by_id(run_id)
+    if not run:
+        raise ValueError("Import run not found")
+
+    rows = read_import_rows(run["stored_filename"])
+    mappings = get_import_profile_fields(profile_id)
+
+    total_rows = len(rows)
+    created_rows = 0
+    skipped_rows = 0
+    error_rows = 0
+    vendors_created = 0
+
+    update_import_run_results(
+        run_id,
+        status="running",
+        total_rows=total_rows,
+        created_rows=0,
+        updated_rows=0,
+        skipped_rows=0,
+        error_rows=0,
+        run_notes="Transaction import execution started.",
+        completed=False,
+    )
+
+    for index, row in enumerate(rows, start=2):
+        try:
+            mapped = apply_import_mapping(row, mappings, index)
+
+            if default_department_name:
+                mapped["department_name"] = normalize_text(default_department_name)
+
+            if should_skip_efinance_transaction(mapped, row):
+                skipped_rows += 1
+                continue
+
+            transaction_type = classify_transaction_type(mapped)
+            suggested_record_type = suggest_record_type_for_transaction(mapped)
+            title = build_transaction_title(mapped, row, index)
+
+            vendor_id, vendor_was_created = get_or_create_vendor_for_import(
+                vendor_name=mapped.get("vendor_name"),
+                vendor_code=mapped.get("vendor_code"),
+            )
+
+            if vendor_was_created:
+                vendors_created += 1
+
+            create_finance_transaction(
+                department_name=mapped.get("department_name") or "",
+                import_run_id=run_id,
+                source_type=run.get("source_type") or "manual_upload",
+                source_row_number=index,
+                transaction_type=transaction_type,
+                review_status="needs_review",
+                title=title,
+                description=mapped.get("description"),
+                vendor_id=vendor_id,
+                vendor_code=mapped.get("vendor_code"),
+                vendor_name=mapped.get("vendor_name"),
+                fund=mapped.get("fund"),
+                budget_unit=mapped.get("budget_unit"),
+                account_code=mapped.get("account_code"),
+                po_number=mapped.get("po_number"),
+                purchase_date=mapped.get("purchase_date"),
+                expenditure_amount=mapped.get("expenditure_amount"),
+                encumbrance_amount=mapped.get("encumbrance_amount"),
+                cumulative_balance=mapped.get("cumulative_balance"),
+                suggested_record_type=suggested_record_type,
+                is_promotable=bool(suggested_record_type),
+                raw_json=json.dumps(row),
+            )
+
+            created_rows += 1
+
+        except Exception as exc:
+            error_rows += 1
+            log_import_run_error(
+                run_id=run_id,
+                row_number=index,
+                source_identifier=row.get(next(iter(row.keys()), ""), "") if row else None,
+                error_message=str(exc),
+            )
+
+    run_notes = (
+        f"Transaction import completed. Created transactions: {created_rows}, "
+        f"Created vendors: {vendors_created}, Skipped: {skipped_rows}, Errors: {error_rows}."
+    )
+
+    final_status = "completed"
+    if error_rows and not created_rows:
+        final_status = "completed_with_errors"
+    elif error_rows:
+        final_status = "completed_with_warnings"
+
+    update_import_run_results(
+        run_id,
+        status=final_status,
+        total_rows=total_rows,
+        created_rows=created_rows,
+        updated_rows=0,
+        skipped_rows=skipped_rows,
+        error_rows=error_rows,
+        run_notes=run_notes,
+        completed=True,
+    )
+
+    return {
+        "total_rows": total_rows,
+        "created_rows": created_rows,
+        "updated_rows": 0,
+        "skipped_rows": skipped_rows,
+        "error_rows": error_rows,
+        "vendors_created": vendors_created,
+        "notifications_sent": 0,
+        "status": final_status,
+        "run_notes": run_notes,
+    }
+
+def bulk_update_transactions_review_status(
+    *,
+    transaction_ids: list[int],
+    department_name: str,
+    review_status: str,
+) -> int:
+    allowed_statuses = {"needs_review", "ignored"}
+    review_status = normalize_text(review_status)
+
+    if review_status not in allowed_statuses:
+        raise ValueError("Invalid review status.")
+
+    clean_ids = [int(item) for item in transaction_ids if str(item).isdigit()]
+    if not clean_ids:
+        return 0
+
+    now = utc_now_iso()
+    placeholders = ",".join("?" for _ in clean_ids)
+
+    with get_connection() as conn:
+        cursor = conn.execute(
+            f"""
+            UPDATE finance_transactions
+            SET review_status = ?,
+                updated_at = ?
+            WHERE department_name = ?
+              AND review_status != 'promoted'
+              AND id IN ({placeholders})
+            """,
+            [review_status, now, department_name, *clean_ids],
+        )
+        conn.commit()
+        return cursor.rowcount

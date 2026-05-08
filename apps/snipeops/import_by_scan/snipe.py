@@ -71,6 +71,38 @@ def _request(method, endpoint, **kwargs):
         **kwargs,
     )
 
+def _json_response(response):
+    response.raise_for_status()
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise ValueError("Snipe-IT returned a non-JSON response.") from exc
+
+
+def _format_snipe_messages(payload):
+    messages = payload.get("messages") or payload.get("message") or payload
+
+    if isinstance(messages, dict):
+        parts = []
+        for field, value in messages.items():
+            if isinstance(value, list):
+                parts.append(f"{field}: {', '.join(str(item) for item in value)}")
+            else:
+                parts.append(f"{field}: {value}")
+        return "; ".join(parts)
+
+    if isinstance(messages, list):
+        return "; ".join(str(item) for item in messages)
+
+    return str(messages)
+
+
+def _ensure_snipe_write_success(payload, action):
+    if isinstance(payload, dict) and payload.get("status") == "error":
+        raise ValueError(f"Snipe-IT {action} failed: {_format_snipe_messages(payload)}")
+
+    return payload
 
 def find_asset_by_serial(raw_serial):
     candidates = serial_candidates(raw_serial)
@@ -118,6 +150,9 @@ def create_asset(profile, serial):
         "rtd_location_id": int(profile["location_id"]),
     }
 
+    if profile.get("name"):
+        payload["name"] = str(profile["name"]).strip()
+
     if profile.get("asset_tag"):
         payload["asset_tag"] = str(profile["asset_tag"]).strip()
 
@@ -144,8 +179,78 @@ def create_asset(profile, serial):
         "/api/v1/hardware",
         json=payload,
     )
+
+    data = _ensure_snipe_write_success(
+        _json_response(response),
+        "asset create",
+    )
+
+    return {"data": data}
+
+def find_user(search_value):
+    search_value = str(search_value or "").strip()
+    if not search_value:
+        return None
+
+    response = _request(
+        "GET",
+        "/api/v1/users",
+        params={"search": search_value, "limit": 10},
+    )
     response.raise_for_status()
 
-    return {
-        "data": response.json()
-    }
+    payload = response.json()
+    rows = payload.get("rows", [])
+
+    target = search_value.lower().replace(" ", "")
+
+    for row in rows:
+        email = str(row.get("email") or "").strip().lower()
+        username = str(row.get("username") or "").strip().lower()
+        name = str(row.get("name") or "").strip().lower().replace(" ", "")
+
+        if email == search_value.lower():
+            return row
+        if username == search_value.lower():
+            return row
+        if name == target:
+            return row
+
+    return rows[0] if rows else None
+
+
+def update_asset(asset_id, payload):
+    response = _request(
+        "PATCH",
+        f"/api/v1/hardware/{int(asset_id)}",
+        json=payload,
+    )
+
+    return _ensure_snipe_write_success(
+        _json_response(response),
+        "asset update",
+    )
+
+def checkout_asset_to_user(asset_id, assigned_user):
+    user = find_user(assigned_user)
+    if not user:
+        raise ValueError(f"No matching Snipe-IT user found for: {assigned_user}")
+
+    user_id = user.get("id")
+    if not user_id:
+        raise ValueError(f"Snipe-IT user result had no id for: {assigned_user}")
+
+    response = _request(
+        "POST",
+        f"/api/v1/hardware/{int(asset_id)}/checkout",
+        json={
+            "checkout_to_type": "user",
+            "assigned_user": int(user_id),
+            "note": "Updated by SnipeOps sync.",
+        },
+    )
+
+    return _ensure_snipe_write_success(
+        _json_response(response),
+        "asset checkout",
+    )

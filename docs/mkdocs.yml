@@ -1,0 +1,25 @@
+site_name: Launchpad Admin Guide
+site_description: Admin documentation for Launchpad
+nav:
+  - Home: admin-guide/index.md
+  - Setup Wizard: admin-guide/setup-wizard.md
+  - General Settings: admin-guide/general-settings.md
+  - Email Integration: admin-guide/email-integration.md
+  - Authentication: admin-guide/authentication.md
+  - Users and Groups: admin-guide/users-and-groups.md
+  - Staff Status: admin-guide/staff-status.md
+  - Finance: admin-guide/finance.md
+  - SnipeOps: admin-guide/snipeops.md
+  - System Maintenance: admin-guide/system-maintenance.md
+  - Troubleshooting: admin-guide/troubleshooting.md
+  - FAQ: admin-guide/faq.md
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true

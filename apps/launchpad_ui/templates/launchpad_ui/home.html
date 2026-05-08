@@ -1,4 +1,37 @@
 {% extends "launchpad_ui/base.html" %} {% block content %}
+
+{% if not setup_completed %}
+<div class="dashboard-setup-card">
+  <div class="dashboard-setup-card-main">
+    <div class="dashboard-setup-icon">⚙</div>
+
+    <div>
+      <div class="dashboard-setup-eyebrow">Setup not complete</div>
+      <h2>Finish Launchpad Setup</h2>
+      <p>
+        Complete the setup wizard to confirm organization settings, email readiness,
+        authentication, user workflow, and app readiness. Skipped items can still be
+        configured later from Settings.
+      </p>
+
+      <div class="dashboard-setup-meta">
+        <span>{{ setup_completed_steps }} of {{ setup_total_steps }} steps completed</span>
+
+        {% if setup_skipped_steps > 0 %}
+          <span>{{ setup_skipped_steps }} skipped</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-setup-actions">
+    <a href="{{ url_for('setup.wizard_index') }}" class="btn btn-primary">
+      Continue Setup
+    </a>
+  </div>
+</div>
+{% endif %}
+
 <div class="launchpad-home">
   <div class="hero">
     <h1>Technology Launchpad</h1>

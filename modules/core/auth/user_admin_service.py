@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
-
 from modules.core.auth.local_auth_db import get_connection
 from modules.core.auth.passwords import hash_password
 from modules.core.identity.rbac_service import clear_user_roles, assign_role_to_user
 from modules.core.utils.time import utc_now_iso
+
 
 def create_sso_stub_user(user_id: int, username: str, is_active: int = 1):
     now = utc_now_iso()
@@ -27,6 +26,7 @@ def create_sso_stub_user(user_id: int, username: str, is_active: int = 1):
         )
         conn.commit()
 
+
 def update_last_login_at(user_id: int):
     now = utc_now_iso()
 
@@ -41,6 +41,7 @@ def update_last_login_at(user_id: int):
         )
         conn.commit()
 
+
 def list_local_users():
     with get_connection() as conn:
         rows = conn.execute(
@@ -52,7 +53,11 @@ def list_local_users():
                 la.is_breakglass,
                 la.last_login_at,
                 la.created_at,
-                la.updated_at
+                la.updated_at,
+                CASE
+                    WHEN la.password_hash IS NULL OR TRIM(la.password_hash) = '' THEN 'sso'
+                    ELSE 'local'
+                END AS account_type
             FROM local_auth_accounts la
             ORDER BY la.username
             """
@@ -68,11 +73,16 @@ def get_local_user_by_user_id(user_id: int):
             SELECT
                 la.user_id,
                 la.username,
+                la.password_hash,
                 la.is_active,
                 la.is_breakglass,
                 la.last_login_at,
                 la.created_at,
-                la.updated_at
+                la.updated_at,
+                CASE
+                    WHEN la.password_hash IS NULL OR TRIM(la.password_hash) = '' THEN 'sso'
+                    ELSE 'local'
+                END AS account_type
             FROM local_auth_accounts la
             WHERE la.user_id = ?
             """,

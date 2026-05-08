@@ -33,7 +33,8 @@ function initFinanceUI() {
   initConfirmModals();
   initFileUploadLabel();
   initTermCalculation();
-  initFinanceBudgetChart()
+  initFinanceBudgetChart();
+  initFinanceTransactionBulkSelection();
 }
 
 function initVendorFormToggle() {
@@ -332,5 +333,18 @@ function initFinanceBudgetChart() {
       responsive: true,
       maintainAspectRatio: false
     }
+  });
+}
+
+function initFinanceTransactionBulkSelection() {
+  initFinanceBulkSelection({
+    selectAllId: "finance-transactions-select-all",
+    rowSelector: ".finance-transactions-row-select",
+    bulkBarId: "finance-transactions-bulk-bar",
+    countId: "finance-transactions-bulk-count",
+    hiddenInputIds: [
+      "finance-transactions-bulk-ignore-ids",
+      "finance-transactions-bulk-review-ids",
+    ],
   });
 }

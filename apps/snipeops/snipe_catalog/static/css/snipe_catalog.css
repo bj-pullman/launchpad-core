@@ -138,3 +138,177 @@
 .catalog-table tbody tr:hover {
   background: rgba(255,255,255,.05);
 }
+
+.catalog-panel-help {
+  margin: .25rem 0 0;
+}
+
+.catalog-mapping-panel {
+  margin-top: 1rem;
+}
+
+.catalog-mapping-toolbar {
+  display: flex;
+  align-items: end;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-bottom: .75rem;
+}
+
+.catalog-mapping-toolbar .sync-field {
+  min-width: 180px;
+}
+
+.catalog-mapping-table td {
+  vertical-align: middle;
+}
+
+.catalog-mapping-table select {
+  min-width: 280px;
+}
+
+.catalog-tab {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: .5rem .8rem;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.catalog-tab.active {
+  background: linear-gradient(180deg, var(--accent2), var(--accent));
+  color: #fff;
+  border-color: color-mix(in srgb, var(--accent) 75%, #000);
+}
+
+.catalog-filter {
+  min-width: 220px;
+}
+
+.catalog-create-model-box {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel2) 75%, transparent);
+}
+
+.catalog-create-model-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr auto;
+  gap: .75rem;
+  align-items: end;
+}
+
+.catalog-model-map-cell {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: .5rem;
+  align-items: center;
+}
+
+.catalog-create-model-row-btn {
+  min-height: 38px;
+}
+
+.snipeops-modal[hidden] {
+  display: none;
+}
+
+.snipeops-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.snipeops-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, .55);
+  backdrop-filter: blur(4px);
+}
+
+.snipeops-modal-card {
+  position: relative;
+  width: min(620px, 100%);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .28);
+  overflow: hidden;
+}
+
+.snipeops-modal-header,
+.snipeops-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.snipeops-modal-footer {
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+  justify-content: flex-end;
+}
+
+.snipeops-modal-header h2 {
+  margin: 0;
+}
+
+.snipeops-modal-body {
+  display: grid;
+  gap: .75rem;
+  padding: 1rem;
+}
+
+.snipeops-modal-close {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .catalog-model-map-cell {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1000px) {
+  .catalog-create-model-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .catalog-create-model-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .catalog-mapping-toolbar {
+    align-items: stretch;
+  }
+
+  .catalog-mapping-toolbar .sync-field,
+  .catalog-mapping-toolbar .snipeops-btn {
+    width: 100%;
+  }
+
+  .catalog-mapping-table select {
+    min-width: 220px;
+  }
+}

@@ -1,10 +1,3 @@
-# launchpad_ui/routes.py
-import os
-from pathlib import Path
-import secrets
-import html
-
-import requests
 from flask import (
     render_template,
     request,
@@ -18,6 +11,26 @@ from flask import (
 from werkzeug.routing import BuildError
 
 from . import launchpad_ui_bp
+from .permissions import get_visible_settings_sections, get_visible_launchpad_apps
+from .service import (
+    user_permissions,
+    to_bool,
+    get_snipeops_settings,
+    test_snipeit_connection,
+    authentication_policy_settings,
+    microsoft_integration_settings,
+    google_integration_settings,
+    saml_integration_settings,
+    test_oidc_configuration,
+    test_saml_configuration,
+    group_permission_catalog,
+    save_finance_notification_logo,
+    build_finance_template_preview_context,
+    render_finance_template_tokens,
+    finance_notification_settings,
+    build_finance_preview_lines,
+    mosyle_integration_settings,
+)
 
 from apps.staff_status.service import (
     get_department_record,
@@ -32,7 +45,14 @@ from apps.staff_status.access_service import (
     list_staff_status_access_with_users,
 )
 
-from .permissions import get_visible_settings_sections, get_visible_launchpad_apps
+from apps.finance.notification_service import send_finance_test_email
+
+from apps.snipeops.mapping_service import (
+    list_mappings,
+    upsert_mapping,
+    delete_mapping,
+)
+
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.auth.user_admin_service import (
     list_local_users,
@@ -43,10 +63,10 @@ from modules.core.auth.user_admin_service import (
     set_local_user_password,
     replace_user_roles,
 )
+
 from modules.core.identity.rbac_service import (
     get_user_roles,
     list_roles,
-    list_permissions,
     get_role_by_id,
     update_role,
     delete_role,
@@ -54,453 +74,35 @@ from modules.core.identity.rbac_service import (
     get_role_permission_keys,
     get_user_direct_permission_keys,
     replace_user_permissions,
-    build_permission_catalog,
     build_user_access_summary,
-    get_user_role_keys,
-    remove_role_from_user,
 )
 
-from apps.finance.notification_service import send_finance_test_email
+from modules.core.identity.user_service import (
+    get_user_by_id,
+    update_user,
+    create_user,
+    list_users,
+    update_user_theme_preference,
+)
 
-from modules.core.identity.rbac_db import get_connection as get_rbac_connection
-from modules.core.identity.user_service import get_user_by_id, update_user, create_user, list_users
 from modules.core.settings.settings_service import get_setting, set_setting, get_bool_setting
+
+from modules.core.api_keys.service import (
+    create_api_key,
+    list_api_keys,
+    revoke_api_key,
+    delete_api_key,
+)
 
 from tasks.scheduler import configure_jobs
 
 
-def get_all_roles():
-    with get_rbac_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM roles
-            ORDER BY role_name
-            """
-        ).fetchall()
-
-    return [dict(row) for row in rows]
-
-
-def _user_permissions():
-    return set(session.get("user_permissions", []))
-
-
 def _require_manage_permission(permission_key: str, message: str):
-    if permission_key not in _user_permissions():
+    if permission_key not in user_permissions():
         flash(message, "error")
         return False
     return True
 
-def _truncate_text(value: str, max_length: int = 44) -> str:
-    value = (value or "").strip()
-    if len(value) <= max_length:
-        return value
-
-    truncated = value[: max_length - 3].rstrip(", ").rstrip()
-    return f"{truncated}..."
-
-
-def _group_permission_catalog():
-    catalog = build_permission_catalog()
-    grouped = {}
-
-    for item in catalog:
-        section = item["section"]
-        group = item["group"]
-
-        grouped.setdefault(section, {})
-        grouped[section].setdefault(group, [])
-        grouped[section][group].append(item)
-
-    return grouped
-
-def _to_bool(value, default=False):
-    if value is None:
-        return default
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
-
-
-def _get_snipeops_settings():
-    env_url = os.getenv("SNIPE_URL", "").strip()
-    env_token = os.getenv("SNIPE_API_TOKEN", "").strip()
-    env_verify_ssl = _to_bool(os.getenv("VERIFY_SSL", "true"), True)
-
-    db_enabled = get_bool_setting("snipeops.enabled", False)
-    db_url = (get_setting("snipeops.base_url", "") or "").strip()
-    db_token = (get_setting("snipeops.api_token", "") or "").strip()
-    db_verify_ssl = get_setting("snipeops.verify_ssl", None)
-
-    base_url = db_url or env_url
-    api_token = db_token or env_token
-
-    if db_verify_ssl is None:
-        verify_ssl = env_verify_ssl
-    else:
-        verify_ssl = _to_bool(db_verify_ssl, True)
-
-    token_source = "database" if db_token else ("env" if env_token else "none")
-    is_configured = bool(base_url and api_token)
-
-    return {
-        "enabled": db_enabled,
-        "base_url": base_url,
-        "api_token": api_token,
-        "verify_ssl": verify_ssl,
-        "has_api_token": bool(api_token),
-        "token_source": token_source,
-        "is_configured": is_configured,
-    }
-
-def _test_snipeit_connection(base_url: str, api_token: str, verify_ssl: bool):
-    if not base_url:
-        return {
-            "ok": False,
-            "message": "Snipe-IT Base URL is required.",
-        }
-
-    if not api_token:
-        return {
-            "ok": False,
-            "message": "A Snipe-IT API key is required.",
-        }
-
-    url = f"{base_url.rstrip('/')}/api/v1/statuslabels"
-    headers = {
-        "Authorization": f"Bearer {api_token}",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
-
-    try:
-        response = requests.get(
-            url,
-            headers=headers,
-            timeout=10,
-            verify=verify_ssl,
-        )
-    except requests.exceptions.SSLError:
-        return {
-            "ok": False,
-            "message": "SSL verification failed while connecting to Snipe-IT.",
-        }
-    except requests.exceptions.ConnectTimeout:
-        return {
-            "ok": False,
-            "message": "Connection to Snipe-IT timed out.",
-        }
-    except requests.exceptions.ConnectionError:
-        return {
-            "ok": False,
-            "message": "Could not reach the Snipe-IT server.",
-        }
-    except requests.exceptions.RequestException as exc:
-        return {
-            "ok": False,
-            "message": f"Connection test failed: {exc}",
-        }
-
-    if response.status_code in (401, 403):
-        return {
-            "ok": False,
-            "message": "Authentication failed. Check the API key.",
-        }
-
-    if not response.ok:
-        return {
-            "ok": False,
-            "message": f"Snipe-IT returned HTTP {response.status_code}.",
-        }
-
-    try:
-        payload = response.json()
-    except ValueError:
-        return {
-            "ok": False,
-            "message": "Snipe-IT returned a non-JSON response.",
-        }
-
-    total = payload.get("total")
-    if total is not None:
-        return {
-            "ok": True,
-            "message": f"Connection successful. Retrieved status labels successfully (total: {total}).",
-        }
-
-    return {
-        "ok": True,
-        "message": "Connection successful.",
-    }
-
-def _authentication_settings():
-    return {
-        # Sign-In Methods
-        "local_enabled": get_bool_setting("auth.local.enabled", True),
-        "local_mode": get_setting("auth.local.mode", "breakglass_only"),
-        "local_hide_form_when_restricted": get_bool_setting("auth.local.hide_form_when_restricted", False),
-
-        "microsoft_oidc_enabled": get_bool_setting("auth.microsoft_oidc.enabled", False),
-        "microsoft_client_id": get_setting("auth.microsoft_oidc.client_id", ""),
-        "microsoft_client_secret": get_setting("auth.microsoft_oidc.client_secret", ""),
-        "microsoft_tenant_id": get_setting("auth.microsoft_oidc.tenant_id", ""),
-        "microsoft_redirect_uri": get_setting("auth.microsoft_oidc.redirect_uri", ""),
-
-        "google_oidc_enabled": get_bool_setting("auth.google_oidc.enabled", False),
-        "google_client_id": get_setting("auth.google_oidc.client_id", ""),
-        "google_client_secret": get_setting("auth.google_oidc.client_secret", ""),
-        "google_hosted_domain": get_setting("auth.google_oidc.hosted_domain", ""),
-        "google_redirect_uri": get_setting("auth.google_oidc.redirect_uri", ""),
-
-        "saml_enabled": get_bool_setting("auth.saml.enabled", False),
-        "saml_idp_type": get_setting("auth.saml.idp_type", "generic"),
-        "saml_metadata_url": get_setting("auth.saml.metadata_url", ""),
-        "saml_metadata_xml": get_setting("auth.saml.metadata_xml", ""),
-        "saml_idp_entity_id": get_setting("auth.saml.idp_entity_id", ""),
-        "saml_sso_url": get_setting("auth.saml.sso_url", ""),
-        "saml_slo_url": get_setting("auth.saml.slo_url", ""),
-        "saml_x509_cert": get_setting("auth.saml.x509_cert", ""),
-        "saml_sp_entity_id": get_setting("auth.saml.sp_entity_id", ""),
-        "saml_acs_url": get_setting("auth.saml.acs_url", ""),
-        "saml_logout_url": get_setting("auth.saml.logout_url", ""),
-        "saml_attr_email": get_setting("auth.saml.attr.email", "email"),
-        "saml_attr_first_name": get_setting("auth.saml.attr.first_name", "first_name"),
-        "saml_attr_last_name": get_setting("auth.saml.attr.last_name", "last_name"),
-        "saml_attr_display_name": get_setting("auth.saml.attr.display_name", "display_name"),
-        "saml_attr_groups": get_setting("auth.saml.attr.groups", "groups"),
-
-        "primary_method": get_setting("auth.primary_method", "local"),
-
-        # Access Control
-        "require_local_user_for_sso": get_bool_setting("auth.access.require_local_user_for_sso", True),
-        "match_user_by": get_setting("auth.access.match_user_by", "email"),
-        "deny_if_user_not_found": get_bool_setting("auth.access.deny_if_user_not_found", True),
-        "deny_if_inactive": get_bool_setting("auth.access.deny_if_inactive", True),
-        "allowed_domains": get_setting("auth.access.allowed_domains", ""),
-        "required_groups": get_setting("auth.access.required_groups", ""),
-        "required_groups_mode": get_setting("auth.access.required_groups_mode", "any"),
-        "allow_breakglass_with_sso": get_bool_setting("auth.access.allow_breakglass_with_sso", True),
-    }
-
-
-def _provider_status(provider: str, settings: dict) -> str:
-    if provider == "microsoft_oidc":
-        required = [
-            settings.get("microsoft_client_id"),
-            settings.get("microsoft_client_secret"),
-            settings.get("microsoft_tenant_id"),
-        ]
-        enabled = settings.get("microsoft_oidc_enabled")
-    elif provider == "google_oidc":
-        required = [
-            settings.get("google_client_id"),
-            settings.get("google_client_secret"),
-        ]
-        enabled = settings.get("google_oidc_enabled")
-    elif provider == "saml":
-        has_metadata = bool(settings.get("saml_metadata_url") or settings.get("saml_metadata_xml"))
-        has_manual = bool(
-            settings.get("saml_idp_entity_id")
-            and settings.get("saml_sso_url")
-            and settings.get("saml_x509_cert")
-        )
-        required = [has_metadata or has_manual]
-        enabled = settings.get("saml_enabled")
-    else:
-        return "Disabled"
-
-    if enabled:
-        if all(required):
-            return "Enabled"
-        return "Incomplete"
-
-    if all(required):
-        return "Ready"
-
-    if any(required):
-        return "Incomplete"
-
-    return "Disabled"
-
-def _public_base_url() -> str:
-    return (get_setting("general.public_base_url", "") or "").strip().rstrip("/")
-
-def _build_public_url(path: str) -> str:
-    base_url = _public_base_url()
-    clean_path = "/" + (path or "").lstrip("/")
-
-    if not base_url:
-        return clean_path
-
-    return f"{base_url}{clean_path}"
-
-
-def _test_oidc_configuration(provider: str, form):
-    if provider == "microsoft_oidc":
-        tenant_id = (form.get("microsoft_tenant_id") or "").strip()
-        client_id = (form.get("microsoft_client_id") or "").strip()
-        client_secret = (form.get("microsoft_client_secret") or "").strip()
-
-        if not client_secret:
-            client_secret = (get_setting("auth.microsoft_oidc.client_secret", "") or "").strip()
-
-        if not tenant_id:
-            return {"ok": False, "message": "Microsoft Tenant ID is required."}
-        if not client_id:
-            return {"ok": False, "message": "Microsoft Client ID is required."}
-        if not client_secret:
-            return {"ok": False, "message": "Microsoft Client Secret is required."}
-
-        discovery_url = f"https://login.microsoftonline.com/{tenant_id}/v2.0/.well-known/openid-configuration"
-
-    elif provider == "google_oidc":
-        client_id = (form.get("google_client_id") or "").strip()
-        client_secret = (form.get("google_client_secret") or "").strip()
-
-        if not client_secret:
-            client_secret = (get_setting("auth.google_oidc.client_secret", "") or "").strip()
-
-        if not client_id:
-            return {"ok": False, "message": "Google Client ID is required."}
-        if not client_secret:
-            return {"ok": False, "message": "Google Client Secret is required."}
-
-        discovery_url = "https://accounts.google.com/.well-known/openid-configuration"
-    else:
-        return {"ok": False, "message": "Unsupported OIDC provider."}
-
-    try:
-        response = requests.get(discovery_url, timeout=10)
-        response.raise_for_status()
-        payload = response.json()
-    except requests.exceptions.RequestException as exc:
-        return {
-            "ok": False,
-            "message": f"Could not reach the OIDC discovery endpoint: {exc}",
-        }
-    except ValueError:
-        return {"ok": False, "message": "OIDC discovery endpoint returned invalid JSON."}
-
-    required_keys = ["authorization_endpoint", "token_endpoint", "jwks_uri"]
-    missing = [key for key in required_keys if not payload.get(key)]
-    if missing:
-        return {
-            "ok": False,
-            "message": f"OIDC discovery document is missing: {', '.join(missing)}.",
-        }
-
-    return {"ok": True, "message": "OIDC configuration looks valid."}
-
-
-def _test_saml_configuration(form):
-    metadata_url = (form.get("saml_metadata_url") or "").strip()
-    metadata_xml = (form.get("saml_metadata_xml") or "").strip()
-    entity_id = (form.get("saml_idp_entity_id") or "").strip()
-    sso_url = (form.get("saml_sso_url") or "").strip()
-    cert = (form.get("saml_x509_cert") or "").strip()
-    sp_entity_id = (form.get("saml_sp_entity_id") or "").strip()
-    acs_url = (form.get("saml_acs_url") or "").strip()
-
-    if not cert:
-        cert = (get_setting("auth.saml.x509_cert", "") or "").strip()
-
-    if not metadata_xml:
-        metadata_xml = (get_setting("auth.saml.metadata_xml", "") or "").strip()
-
-    if not sp_entity_id:
-        return {"ok": False, "message": "SP Entity ID is required."}
-    if not acs_url:
-        return {"ok": False, "message": "ACS URL is required."}
-
-    if metadata_url:
-        try:
-            response = requests.get(metadata_url, timeout=10)
-            response.raise_for_status()
-            content = response.text
-        except requests.exceptions.RequestException as exc:
-            return {"ok": False, "message": f"Could not fetch metadata URL: {exc}"}
-
-        lowered = content.lower()
-        if "entitydescriptor" not in lowered or "idpssodescriptor" not in lowered:
-            return {"ok": False, "message": "Metadata XML does not appear to be valid IdP metadata."}
-        if "singlesignonservice" not in lowered:
-            return {"ok": False, "message": "Metadata XML is missing a SingleSignOnService entry."}
-        return {"ok": True, "message": "SAML metadata URL looks valid."}
-
-    if metadata_xml:
-        lowered = metadata_xml.lower()
-        if "entitydescriptor" not in lowered or "idpssodescriptor" not in lowered:
-            return {"ok": False, "message": "Pasted metadata XML does not appear to be valid IdP metadata."}
-        if "singlesignonservice" not in lowered:
-            return {"ok": False, "message": "Pasted metadata XML is missing a SingleSignOnService entry."}
-        return {"ok": True, "message": "SAML metadata XML looks valid."}
-
-    if not entity_id:
-        return {"ok": False, "message": "IdP Entity ID is required when not using metadata."}
-    if not sso_url:
-        return {"ok": False, "message": "SSO URL is required when not using metadata."}
-    if not cert:
-        return {"ok": False, "message": "X.509 certificate is required when not using metadata."}
-
-    return {"ok": True, "message": "Manual SAML configuration looks valid."}
-
-def _authentication_policy_settings():
-    settings = _authentication_settings()
-    return {
-        "local_enabled": settings["local_enabled"],
-        "local_mode": settings["local_mode"],
-        "local_hide_form_when_restricted": settings["local_hide_form_when_restricted"],
-        "primary_method": settings["primary_method"],
-        "require_local_user_for_sso": settings["require_local_user_for_sso"],
-        "match_user_by": settings["match_user_by"],
-        "deny_if_user_not_found": settings["deny_if_user_not_found"],
-        "deny_if_inactive": settings["deny_if_inactive"],
-        "allowed_domains": settings["allowed_domains"],
-        "required_groups": settings["required_groups"],
-        "required_groups_mode": settings["required_groups_mode"],
-        "allow_breakglass_with_sso": settings["allow_breakglass_with_sso"],
-    }
-
-
-def _microsoft_integration_settings():
-    settings = _authentication_settings()
-    return {
-        "microsoft_oidc_enabled": settings["microsoft_oidc_enabled"],
-        "microsoft_client_id": settings["microsoft_client_id"],
-        "microsoft_tenant_id": settings["microsoft_tenant_id"],
-        "microsoft_redirect_uri": settings["microsoft_redirect_uri"],
-    }
-
-
-def _google_integration_settings():
-    settings = _authentication_settings()
-    return {
-        "google_oidc_enabled": settings["google_oidc_enabled"],
-        "google_client_id": settings["google_client_id"],
-        "google_hosted_domain": settings["google_hosted_domain"],
-        "google_redirect_uri": settings["google_redirect_uri"],
-    }
-
-
-def _saml_integration_settings():
-    settings = _authentication_settings()
-    return {
-        "saml_enabled": settings["saml_enabled"],
-        "saml_idp_type": settings["saml_idp_type"],
-        "saml_metadata_url": settings["saml_metadata_url"],
-        "saml_metadata_xml": settings["saml_metadata_xml"],
-        "saml_idp_entity_id": settings["saml_idp_entity_id"],
-        "saml_sso_url": settings["saml_sso_url"],
-        "saml_slo_url": settings["saml_slo_url"],
-        "saml_x509_cert": settings["saml_x509_cert"],
-        "saml_sp_entity_id": settings["saml_sp_entity_id"],
-        "saml_acs_url": settings["saml_acs_url"],
-        "saml_logout_url": settings["saml_logout_url"],
-        "saml_attr_email": settings["saml_attr_email"],
-        "saml_attr_first_name": settings["saml_attr_first_name"],
-        "saml_attr_last_name": settings["saml_attr_last_name"],
-        "saml_attr_display_name": settings["saml_attr_display_name"],
-        "saml_attr_groups": settings["saml_attr_groups"],
-    }
 
 @launchpad_ui_bp.app_context_processor
 def inject_launchpad_navigation():
@@ -525,7 +127,41 @@ def inject_launchpad_navigation():
 @launchpad_ui_bp.route("/")
 @login_required
 def home():
-    return render_template("launchpad_ui/home.html")
+    setup_completed = get_bool_setting("setup.completed", False)
+
+    setup_status = {
+        "organization_completed": get_bool_setting("setup.organization.completed", False),
+        "organization_skipped": get_bool_setting("setup.organization.skipped", False),
+        "email_completed": get_bool_setting("setup.email.completed", False),
+        "email_skipped": get_bool_setting("setup.email.skipped", False),
+        "authentication_completed": get_bool_setting("setup.authentication.completed", False),
+        "authentication_skipped": get_bool_setting("setup.authentication.skipped", False),
+        "users_completed": get_bool_setting("setup.users.completed", False),
+        "users_skipped": get_bool_setting("setup.users.skipped", False),
+        "apps_completed": get_bool_setting("setup.apps.completed", False),
+        "apps_skipped": get_bool_setting("setup.apps.skipped", False),
+    }
+
+    setup_total_steps = 5
+    setup_completed_steps = sum(
+        1
+        for key, value in setup_status.items()
+        if key.endswith("_completed") and value
+    )
+    setup_skipped_steps = sum(
+        1
+        for key, value in setup_status.items()
+        if key.endswith("_skipped") and value
+    )
+
+    return render_template(
+        "launchpad_ui/home.html",
+        setup_completed=setup_completed,
+        setup_status=setup_status,
+        setup_total_steps=setup_total_steps,
+        setup_completed_steps=setup_completed_steps,
+        setup_skipped_steps=setup_skipped_steps,
+    )
 
 
 @launchpad_ui_bp.route("/settings")
@@ -641,167 +277,119 @@ def settings_general():
         time_format_options=time_format_options,
     )
 
-def _finance_notification_logo_dir() -> Path:
-    base_dir = Path(__file__).resolve().parents[2]
-    logo_dir = base_dir / "static" / "finance" / "branding"
-    logo_dir.mkdir(parents=True, exist_ok=True)
-    return logo_dir
 
-
-def _save_finance_notification_logo(upload) -> str:
-    if not upload or not upload.filename:
-        raise ValueError("No logo file selected.")
-
-    suffix = Path(upload.filename).suffix.lower()
-    allowed = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
-    if suffix not in allowed:
-        raise ValueError("Unsupported logo type. Allowed: PNG, JPG, JPEG, WEBP, SVG.")
-
-    file_bytes = upload.read()
-    if not file_bytes:
-        raise ValueError("The selected logo file was empty.")
-
-    stored_name = f"finance_notification_logo_{secrets.token_hex(8)}{suffix}"
-    stored_path = _finance_notification_logo_dir() / stored_name
-
-    with open(stored_path, "wb") as f:
-        f.write(file_bytes)
-
-    return f"finance/branding/{stored_name}"
-
-
-def _format_money_preview(value: str) -> str:
-    raw = (value or "").strip()
-    return raw or "$4,500.00"
-
-
-def _build_finance_template_preview_context():
-    record_url = _build_public_url("/finance/records/123")
-
-    return {
-        "title": "Adobe Creative Cloud",
-        "department_name": "Technology",
-        "vendor_name": "Adobe",
-        "category_name": "Software",
-        "renewal_date": "07/01/2026",
-        "expiration_date": "06/30/2026",
-        "cost": "$4,500.00",
-        "po_number": "PO-240156",
-        "account_code": "10-2660-640",
-        "notification_recipients": "tech@sheridanschools.org",
-        "notes": "Annual district renewal for staff licensing.",
-        "record_url": record_url,
-        "days_until_renewal": "45",
-    }
-
-
-def _render_finance_template_tokens(template: str, context: dict) -> str:
-    rendered = template or ""
-    for key, value in context.items():
-        rendered = rendered.replace(f"{{{{ {key} }}}}", str(value or "—"))
-    return rendered
-
-
-def _finance_notification_settings():
-    return {
-        "notifications_enabled": get_bool_setting("finance.notifications.enabled", False),
-        "sender_email": get_setting("finance.notifications.sender_email", ""),
-        "default_recipients": get_setting("finance.notifications.default_recipients", ""),
-        "test_recipient_email": get_setting("finance.notifications.test_recipient_email", ""),
-        "use_record_recipients_first": get_bool_setting(
-            "finance.notifications.use_record_recipients_first",
-            True,
-        ),
-        "fallback_to_default_recipients": get_bool_setting(
-            "finance.notifications.fallback_to_default_recipients",
-            True,
-        ),
-        "default_days_before": get_setting("finance.notifications.default_days_before", "30"),
-        "subject_prefix": get_setting("finance.notifications.subject_prefix", "Renewal Reminder"),
-        "logo_path": get_setting("finance.notifications.logo_path", ""),
-        "logo_width": get_setting("finance.notifications.logo_width", "180"),
-        "template_header": get_setting("finance.notifications.template_header", "Renewal Reminder"),
-        "template_intro": get_setting(
-            "finance.notifications.template_intro",
-            "The following finance record is approaching renewal.",
-        ),
-        "template_subject": get_setting(
-            "finance.notifications.template_subject",
-            "{{ title }} renews on {{ renewal_date }}",
-        ),
-        "template_footer": get_setting(
-            "finance.notifications.template_footer",
-            "This message was generated by Launchpad Finance notifications.",
-        ),
-        "include_title": get_bool_setting("finance.notifications.include_title", True),
-        "include_department_name": get_bool_setting("finance.notifications.include_department_name", True),
-        "include_vendor_name": get_bool_setting("finance.notifications.include_vendor_name", True),
-        "include_category_name": get_bool_setting("finance.notifications.include_category_name", True),
-        "include_renewal_date": get_bool_setting("finance.notifications.include_renewal_date", True),
-        "include_expiration_date": get_bool_setting("finance.notifications.include_expiration_date", True),
-        "include_cost": get_bool_setting("finance.notifications.include_cost", True),
-        "include_po_number": get_bool_setting("finance.notifications.include_po_number", False),
-        "include_account_code": get_bool_setting("finance.notifications.include_account_code", False),
-        "include_notes": get_bool_setting("finance.notifications.include_notes", True),
-        "include_record_link": get_bool_setting("finance.notifications.include_record_link", True),
-        "logo_original_name": get_setting("finance.notifications.logo_original_name", ""),
-    }
-
-def _build_finance_preview_lines(settings: dict, preview_context: dict) -> list[dict]:
-    lines = []
-
-    field_map = [
-        ("include_title", "Title", "title"),
-        ("include_department_name", "Department", "department_name"),
-        ("include_vendor_name", "Vendor", "vendor_name"),
-        ("include_category_name", "Category", "category_name"),
-        ("include_renewal_date", "Renewal Date", "renewal_date"),
-        ("include_expiration_date", "Expiration Date", "expiration_date"),
-        ("include_cost", "Cost", "cost"),
-        ("include_po_number", "PO Number", "po_number"),
-        ("include_account_code", "Account Code", "account_code"),
-        ("include_notes", "Notes", "notes"),
-        ("include_record_link", "Record Link", "record_url"),
-    ]
-
-    for setting_key, label, context_key in field_map:
-        if settings.get(setting_key):
-            lines.append(
-                {
-                    "label": label,
-                    "value": preview_context.get(context_key, "—"),
-                    "is_link": context_key == "record_url",
-                }
-            )
-
-    return lines
-
-@launchpad_ui_bp.route("/settings/snipeops")
+@launchpad_ui_bp.route("/settings/snipeops", methods=["GET", "POST"])
 @login_required
 @require_permission("launchpad.settings.snipeops.view")
 def settings_snipeops():
-    return redirect(url_for("launchpad_ui.settings_integrations_snipeit"))
+    active_tab = (
+        request.form.get("active_tab")
+        or request.args.get("tab")
+        or "general"
+    ).strip().lower()
+
+    if active_tab not in {"general", "mappings"}:
+        active_tab = "general"
+
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.snipeops.manage",
+            "You do not have permission to update SnipeOps settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_snipeops", tab=active_tab))
+
+        action = (request.form.get("action") or "").strip().lower()
+
+        if action == "save_mapping":
+            source = (request.form.get("source") or "any").strip()
+            field = (request.form.get("field") or "").strip()
+            raw_value = (request.form.get("raw_value") or "").strip()
+            mapped_value = (request.form.get("mapped_value") or "").strip()
+            notes = (request.form.get("notes") or "").strip()
+
+            try:
+                upsert_mapping(
+                    source=source,
+                    field=field,
+                    raw_value=raw_value,
+                    mapped_value=mapped_value,
+                    notes=notes,
+                )
+                flash("Mapping saved.", "success")
+            except ValueError as exc:
+                flash(str(exc), "error")
+
+            return redirect(url_for("launchpad_ui.settings_snipeops", tab="mappings"))
+
+        flash("Unsupported SnipeOps settings action.", "error")
+        return redirect(url_for("launchpad_ui.settings_snipeops", tab=active_tab))
+
+    selected_field = (request.args.get("field") or "").strip()
+    selected_source = (request.args.get("source") or "").strip()
+
+    mappings = list_mappings(
+        field=selected_field or None,
+        source=selected_source or None,
+    )
+
+    return render_template(
+        "launchpad_ui/settings/snipeops.html",
+        active_section="snipeops",
+        active_tab=active_tab,
+        mappings=mappings,
+        selected_field=selected_field,
+        selected_source=selected_source,
+        source_options=[
+            {"value": "", "label": "All Sources"},
+            {"value": "any", "label": "Any"},
+            {"value": "intune", "label": "Intune"},
+            {"value": "mosyle", "label": "Mosyle"},
+        ],
+        field_options=[
+            {"value": "", "label": "All Fields"},
+            {"value": "model", "label": "Model"},
+            {"value": "manufacturer", "label": "Manufacturer"},
+            {"value": "os_version", "label": "OS Version"},
+            {"value": "device_type", "label": "Device Type"},
+        ],
+    )
 
 
 @launchpad_ui_bp.route("/settings/snipeops/test-connection", methods=["POST"])
 @login_required
 @require_permission("launchpad.settings.snipeops.view")
 def settings_snipeops_test_connection():
-    if "launchpad.settings.snipeops.manage" not in _user_permissions():
+    if "launchpad.settings.snipeops.manage" not in user_permissions():
         return jsonify({
             "ok": False,
             "message": "You do not have permission to test the SnipeOps connection.",
         }), 403
 
-    current_settings = _get_snipeops_settings()
+    current_settings = get_snipeops_settings()
 
     base_url = (request.form.get("base_url") or "").strip() or current_settings["base_url"]
     api_token = (request.form.get("api_token") or "").strip() or current_settings["api_token"]
-    verify_ssl = _to_bool(request.form.get("verify_ssl"), current_settings["verify_ssl"])
+    verify_ssl = to_bool(request.form.get("verify_ssl"), current_settings["verify_ssl"])
 
-    result = _test_snipeit_connection(base_url, api_token, verify_ssl)
+    result = test_snipeit_connection(base_url, api_token, verify_ssl)
     status_code = 200 if result["ok"] else 400
     return jsonify(result), status_code
+
+
+@launchpad_ui_bp.route("/settings/snipeops/mappings")
+@login_required
+@require_permission("launchpad.settings.snipeops.view")
+def settings_snipeops_mappings():
+    return redirect(url_for("launchpad_ui.settings_snipeops", tab="mappings"))
+
+
+@launchpad_ui_bp.route("/settings/snipeops/mappings/<int:mapping_id>/delete", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.snipeops.manage")
+def delete_snipeops_mapping(mapping_id):
+    delete_mapping(mapping_id)
+    flash("Mapping deleted.", "success")
+    return redirect(url_for("launchpad_ui.settings_snipeops", tab="mappings"))
 
 
 @launchpad_ui_bp.route("/settings/authentication", methods=["GET", "POST"])
@@ -823,7 +411,6 @@ def settings_authentication():
         )
 
         set_setting("auth.primary_method", (request.form.get("primary_method") or "local").strip())
-
         set_setting(
             "auth.access.require_local_user_for_sso",
             1 if request.form.get("require_local_user_for_sso") == "1" else 0,
@@ -851,7 +438,7 @@ def settings_authentication():
         flash("Authentication settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_authentication"))
 
-    settings = _authentication_policy_settings()
+    settings = authentication_policy_settings()
 
     return render_template(
         "launchpad_ui/settings/authentication.html",
@@ -864,7 +451,7 @@ def settings_authentication():
 @login_required
 @require_permission("launchpad.settings.saml.view")
 def settings_authentication_test_connection():
-    if "launchpad.settings.saml.manage" not in _user_permissions():
+    if "launchpad.settings.saml.manage" not in user_permissions():
         return jsonify({
             "ok": False,
             "message": "You do not have permission to test authentication settings.",
@@ -873,11 +460,11 @@ def settings_authentication_test_connection():
     provider = (request.form.get("provider") or "").strip().lower()
 
     if provider == "microsoft_oidc":
-        result = _test_oidc_configuration("microsoft_oidc", request.form)
+        result = test_oidc_configuration("microsoft_oidc", request.form)
     elif provider == "google_oidc":
-        result = _test_oidc_configuration("google_oidc", request.form)
+        result = test_oidc_configuration("google_oidc", request.form)
     elif provider == "saml":
-        result = _test_saml_configuration(request.form)
+        result = test_saml_configuration(request.form)
     else:
         result = {"ok": False, "message": "Unsupported provider."}
 
@@ -921,7 +508,7 @@ def settings_groups():
 @login_required
 @require_permission("launchpad.settings.groups.manage")
 def settings_groups_new():
-    permission_catalog = _group_permission_catalog()
+    permission_catalog = group_permission_catalog()
 
     if request.method == "POST":
         role_key = (request.form.get("role_key") or "").strip().lower().replace(" ", "_")
@@ -992,7 +579,7 @@ def settings_groups_edit(group_id: int):
         flash("Group not found.", "error")
         return redirect(url_for("launchpad_ui.settings_groups"))
 
-    permission_catalog = _group_permission_catalog()
+    permission_catalog = group_permission_catalog()
     selected_permissions = sorted(get_role_permission_keys(group_id))
 
     if request.method == "POST":
@@ -1062,6 +649,21 @@ def settings_users():
     users = list_local_users()
 
     for user in users:
+        identity_user = get_user_by_id(user["user_id"]) or {}
+
+        user["email"] = identity_user.get("email") or user.get("email")
+        user["display_name"] = identity_user.get("display_name") or user.get("display_name")
+        user["first_name"] = identity_user.get("first_name")
+        user["last_name"] = identity_user.get("last_name")
+        user["job_title"] = identity_user.get("job_title")
+        user["department"] = identity_user.get("department")
+        user["office_location"] = identity_user.get("office_location")
+
+        user["sick_allowance_days"] = identity_user.get("sick_allowance_days", 12)
+        user["personal_allowance_days"] = identity_user.get("personal_allowance_days", 3)
+        user["vacation_allowance_days"] = identity_user.get("vacation_allowance_days", 10)
+        user["other_allowance_days"] = identity_user.get("other_allowance_days", 0)
+
         groups = get_user_roles(user["user_id"])
         user["roles"] = groups
 
@@ -1072,10 +674,17 @@ def settings_users():
         user["groups_display_badges"] = groups[:max_groups_shown]
         user["groups_display_remaining"] = max(0, len(groups) - max_groups_shown)
 
+    departments = sorted({
+        (user.get("department") or "").strip()
+        for user in users
+        if (user.get("department") or "").strip()
+    })
+
     return render_template(
         "launchpad_ui/settings/users.html",
         active_section="users",
         users=users,
+        departments=departments,
     )
 
 
@@ -1084,7 +693,7 @@ def settings_users():
 @require_permission("launchpad.settings.users.manage")
 def settings_users_new():
     groups = list_roles(include_system=True)
-    permission_catalog = _group_permission_catalog()
+    permission_catalog = group_permission_catalog()
 
     if request.method == "POST":
         account_type = (request.form.get("account_type") or "local").strip().lower()
@@ -1265,13 +874,10 @@ def settings_users_edit(user_id: int):
     user = {**identity_user, **local_user}
 
     groups = list_roles(include_system=True)
-    permission_catalog = _group_permission_catalog()
+    permission_catalog = group_permission_catalog()
     current_group_keys = [group["role_key"] for group in get_user_roles(user_id)]
     current_direct_permission_keys = sorted(get_user_direct_permission_keys(user_id))
     access_summary = build_user_access_summary(user_id)
-    inherited_permissions = access_summary.get("inherited_permissions", [])
-    direct_permissions = access_summary.get("direct_permissions", [])
-    effective_permissions = access_summary.get("effective_permissions", [])
 
     if request.method == "POST":
         account_type = (request.form.get("account_type") or "local").strip().lower()
@@ -1393,10 +999,11 @@ def settings_users_edit(user_id: int):
         form_mode="edit",
         account_type=account_type,
         display_name=user.get("display_name", ""),
-        inherited_permissions = access_summary.get("inherited_permissions", []),
-        direct_permissions = access_summary.get("direct_permissions", []),
-        effective_permissions = access_summary.get("effective_permissions", []),
+        inherited_permissions=access_summary.get("inherited_permissions", []),
+        direct_permissions=access_summary.get("direct_permissions", []),
+        effective_permissions=access_summary.get("effective_permissions", []),
     )
+
 
 @launchpad_ui_bp.route("/settings/users/<int:user_id>/delete", methods=["POST"])
 @login_required
@@ -1416,7 +1023,100 @@ def settings_users_delete(user_id: int):
         flash("Unable to delete user.", "error")
 
     return redirect(url_for("launchpad_ui.settings_users"))
-    
+
+
+@launchpad_ui_bp.route("/settings/users/bulk-action", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.users.manage")
+def settings_users_bulk_action():
+    payload = request.get_json(silent=True) or {}
+
+    action = (payload.get("action") or "").strip().lower()
+    raw_user_ids = payload.get("user_ids") or []
+
+    user_ids = []
+    for raw_user_id in raw_user_ids:
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            continue
+
+        if user_id > 0:
+            user_ids.append(user_id)
+
+    user_ids = list(dict.fromkeys(user_ids))
+
+    if not action:
+        return jsonify({"ok": False, "message": "Bulk action is required."}), 400
+
+    if not user_ids:
+        return jsonify({"ok": False, "message": "At least one user must be selected."}), 400
+
+    if action not in {"activate", "disable"}:
+        return jsonify({"ok": False, "message": "Unsupported bulk action."}), 400
+
+    updated_count = 0
+    skipped_count = 0
+    errors = []
+
+    for user_id in user_ids:
+        local_user = get_local_user_by_user_id(user_id)
+        identity_user = get_user_by_id(user_id)
+
+        if not local_user or not identity_user:
+            skipped_count += 1
+            continue
+
+        username = (
+            local_user.get("username")
+            or identity_user.get("email")
+            or identity_user.get("username")
+            or ""
+        ).strip().lower()
+
+        if not username:
+            skipped_count += 1
+            errors.append(f"User {user_id} has no username or email.")
+            continue
+
+        try:
+            update_user(user_id, {
+                "email": identity_user.get("email"),
+                "username": identity_user.get("username"),
+                "display_name": identity_user.get("display_name"),
+                "is_active": 1 if action == "activate" else 0,
+                "first_name": identity_user.get("first_name"),
+                "last_name": identity_user.get("last_name"),
+                "job_title": identity_user.get("job_title"),
+                "department": identity_user.get("department"),
+                "office_location": identity_user.get("office_location"),
+                "company_name": identity_user.get("company_name"),
+                "employee_id": identity_user.get("employee_id"),
+                "preferred_language": identity_user.get("preferred_language"),
+                "business_phone": identity_user.get("business_phone"),
+                "mobile_phone": identity_user.get("mobile_phone"),
+                "manager_email": identity_user.get("manager_email"),
+                "manager_display_name": identity_user.get("manager_display_name"),
+            })
+
+            update_local_user(user_id, username, 1 if action == "activate" else 0)
+            updated_count += 1
+
+        except Exception as exc:
+            skipped_count += 1
+            current_app.logger.exception("Unable to bulk update user_id=%s", user_id)
+            errors.append(f"User {user_id}: {exc}")
+
+    return jsonify({
+        "ok": True,
+        "action": action,
+        "updated_count": updated_count,
+        "skipped_count": skipped_count,
+        "errors": errors,
+        "message": f"{'Activated' if action == 'activate' else 'Disabled'} {updated_count} user(s).",
+    })
+
+
 @launchpad_ui_bp.route("/settings/staff-status", methods=["GET", "POST"])
 @login_required
 @require_permission("launchpad.settings.staff_status.view")
@@ -1476,9 +1176,7 @@ def settings_staff_status():
         enabled_departments = request.form.getlist("enabled_departments")
         daily_reset_enabled = 1 if request.form.get("daily_reset_enabled") == "1" else 0
         daily_reset_time = (request.form.get("daily_reset_time") or "01:00").strip()
-        board_refresh_seconds = (
-            request.form.get("board_refresh_seconds") or "15"
-        ).strip()
+        board_refresh_seconds = (request.form.get("board_refresh_seconds") or "15").strip()
 
         set_setting("staff_status.enabled_departments", ",".join(enabled_departments))
         set_setting("staff_status.daily_reset_enabled", daily_reset_enabled)
@@ -1487,9 +1185,7 @@ def settings_staff_status():
 
         for department_name in available_departments:
             is_enabled = department_name in enabled_departments
-            home_location = (
-                request.form.get(f"home_location_{department_name}") or ""
-            ).strip()
+            home_location = (request.form.get(f"home_location_{department_name}") or "").strip()
 
             set_setting(
                 f"staff_status.department.{department_name}.home_location",
@@ -1526,62 +1222,56 @@ def settings_staff_status():
             department_record.get("home_location_label", "") if department_record else "",
         )
 
-        department_rows.append(
-            {
-                "department_name": department_name,
-                "is_enabled": department_name in enabled_departments,
-                "home_location": home_location or "",
-                "kiosk_enabled": kiosk_enabled,
-                "kiosk_token": kiosk_token,
-                "board_token": board_token,
-                "kiosk_url": (
-                    build_staff_status_public_url("staff_status.kiosk", token=kiosk_token)
-                    if kiosk_enabled and kiosk_token
-                    else ""
-                ),
-                "board_url": (
-                    build_staff_status_public_url("staff_status.board_public", token=board_token)
-                    if board_token
-                    else ""
-                ),
-            }
-        )
+        department_rows.append({
+            "department_name": department_name,
+            "is_enabled": department_name in enabled_departments,
+            "home_location": home_location or "",
+            "kiosk_enabled": kiosk_enabled,
+            "kiosk_token": kiosk_token,
+            "board_token": board_token,
+            "kiosk_url": (
+                build_staff_status_public_url("staff_status.kiosk", token=kiosk_token)
+                if kiosk_enabled and kiosk_token
+                else ""
+            ),
+            "board_url": (
+                build_staff_status_public_url("staff_status.board_public", token=board_token)
+                if board_token
+                else ""
+            ),
+        })
 
     settings = {
         "enabled_departments": enabled_departments,
         "daily_reset_enabled": get_bool_setting("staff_status.daily_reset_enabled", True),
         "daily_reset_time": get_setting("staff_status.daily_reset_time", "01:00"),
-        "board_refresh_seconds": get_setting(
-            "staff_status.board_refresh_seconds", "15"
-        ),
+        "board_refresh_seconds": get_setting("staff_status.board_refresh_seconds", "15"),
     }
-
-    department_operator_assignments = list_staff_status_access_with_users()
-    assignable_users = list_users(active_only=True)
 
     return render_template(
         "launchpad_ui/settings/staff_status.html",
         active_section="staff_status",
         settings=settings,
         department_rows=department_rows,
-        department_operator_assignments=department_operator_assignments,
-        assignable_users=assignable_users,
+        department_operator_assignments=list_staff_status_access_with_users(),
+        assignable_users=list_users(active_only=True),
     )
+
 
 @launchpad_ui_bp.route("/settings/integrations")
 @login_required
 @require_permission("launchpad.settings.view")
 def settings_integrations():
-    user_permissions = _user_permissions()
+    perms = user_permissions()
 
     return render_template(
         "launchpad_ui/settings/integrations.html",
         active_section="integrations",
-        can_view_microsoft="launchpad.settings.saml.view" in user_permissions,
-        can_view_google="launchpad.settings.saml.view" in user_permissions,
-        can_view_saml="launchpad.settings.saml.view" in user_permissions,
-        can_view_snipeit="launchpad.settings.snipeops.view" in user_permissions,
-        can_view_email="launchpad.settings.view" in user_permissions,
+        can_view_microsoft="launchpad.settings.saml.view" in perms,
+        can_view_google="launchpad.settings.saml.view" in perms,
+        can_view_saml="launchpad.settings.saml.view" in perms,
+        can_view_snipeit="launchpad.settings.snipeops.view" in perms,
+        can_view_email="launchpad.settings.view" in perms,
     )
 
 
@@ -1589,29 +1279,93 @@ def settings_integrations():
 @login_required
 @require_permission("launchpad.settings.saml.view")
 def settings_integrations_microsoft():
+    active_tab = (
+        request.form.get("active_tab")
+        or request.args.get("tab")
+        or "signin"
+    ).strip().lower()
+
+    if active_tab not in {"signin", "intune"}:
+        active_tab = "signin"
+
     if request.method == "POST":
         if not _require_manage_permission(
             "launchpad.settings.saml.manage",
             "You do not have permission to update Microsoft integration settings.",
         ):
-            return redirect(url_for("launchpad_ui.settings_integrations_microsoft"))
+            return redirect(url_for("launchpad_ui.settings_integrations_microsoft", tab=active_tab))
 
-        set_setting("auth.microsoft_oidc.enabled", 1 if request.form.get("microsoft_oidc_enabled") == "1" else 0)
-        set_setting("auth.microsoft_oidc.client_id", (request.form.get("microsoft_client_id") or "").strip())
-        microsoft_secret = (request.form.get("microsoft_client_secret") or "").strip()
-        if microsoft_secret:
-            set_setting("auth.microsoft_oidc.client_secret", microsoft_secret, is_sensitive=1)
-        set_setting("auth.microsoft_oidc.tenant_id", (request.form.get("microsoft_tenant_id") or "common").strip())
-        set_setting("auth.microsoft_oidc.redirect_uri", (request.form.get("microsoft_redirect_uri") or "").strip())
+        action = (request.form.get("action") or "save").strip().lower()
 
-        flash("Microsoft integration settings saved.", "success")
-        return redirect(url_for("launchpad_ui.settings_integrations_microsoft"))
+        if action == "save_oidc":
+            set_setting(
+                "auth.microsoft_oidc.enabled",
+                1 if request.form.get("microsoft_oidc_enabled") == "1" else 0,
+            )
+            set_setting(
+                "auth.microsoft_oidc.client_id",
+                (request.form.get("microsoft_client_id") or "").strip(),
+            )
 
-    settings = _microsoft_integration_settings()
+            microsoft_secret = (request.form.get("microsoft_client_secret") or "").strip()
+            if microsoft_secret:
+                set_setting("auth.microsoft_oidc.client_secret", microsoft_secret, is_sensitive=1)
+
+            set_setting(
+                "auth.microsoft_oidc.tenant_id",
+                (request.form.get("microsoft_tenant_id") or "common").strip(),
+            )
+            set_setting(
+                "auth.microsoft_oidc.redirect_uri",
+                (request.form.get("microsoft_redirect_uri") or "").strip(),
+            )
+
+            flash("Microsoft sign-in settings saved.", "success")
+            return redirect(url_for("launchpad_ui.settings_integrations_microsoft", tab=active_tab))
+
+        if action == "save_intune":
+            set_setting(
+                "integrations.microsoft.intune.enabled",
+                1 if request.form.get("intune_enabled") == "1" else 0,
+            )
+            set_setting(
+                "integrations.microsoft.intune.tenant_id",
+                (request.form.get("intune_tenant_id") or "").strip(),
+            )
+            set_setting(
+                "integrations.microsoft.intune.client_id",
+                (request.form.get("intune_client_id") or "").strip(),
+            )
+
+            intune_client_secret = (request.form.get("intune_client_secret") or "").strip()
+            if intune_client_secret:
+                set_setting(
+                    "integrations.microsoft.intune.client_secret",
+                    intune_client_secret,
+                    is_sensitive=1,
+                )
+
+            graph_base_url = (
+                request.form.get("intune_graph_base_url")
+                or "https://graph.microsoft.com/v1.0"
+            ).strip().rstrip("/")
+
+            set_setting(
+                "integrations.microsoft.intune.graph_base_url",
+                graph_base_url,
+            )
+
+            flash("Microsoft Intune settings saved.", "success")
+            return redirect(url_for("launchpad_ui.settings_integrations_microsoft", tab="intune"))
+
+        flash("Unsupported Microsoft integration action.", "error")
+        return redirect(url_for("launchpad_ui.settings_integrations_microsoft", tab=active_tab))
+
     return render_template(
         "launchpad_ui/settings/integrations_microsoft.html",
         active_section="integrations",
-        settings=settings,
+        active_tab=active_tab,
+        settings=microsoft_integration_settings(),
     )
 
 
@@ -1628,20 +1382,21 @@ def settings_integrations_google():
 
         set_setting("auth.google_oidc.enabled", 1 if request.form.get("google_oidc_enabled") == "1" else 0)
         set_setting("auth.google_oidc.client_id", (request.form.get("google_client_id") or "").strip())
+
         google_secret = (request.form.get("google_client_secret") or "").strip()
         if google_secret:
             set_setting("auth.google_oidc.client_secret", google_secret, is_sensitive=1)
+
         set_setting("auth.google_oidc.hosted_domain", (request.form.get("google_hosted_domain") or "").strip())
         set_setting("auth.google_oidc.redirect_uri", (request.form.get("google_redirect_uri") or "").strip())
 
         flash("Google integration settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_integrations_google"))
 
-    settings = _google_integration_settings()
     return render_template(
         "launchpad_ui/settings/integrations_google.html",
         active_section="integrations",
-        settings=settings,
+        settings=google_integration_settings(),
     )
 
 
@@ -1675,7 +1430,6 @@ def settings_integrations_saml():
             metadata_xml_value = (get_setting("auth.saml.metadata_xml", "") or "").strip()
 
         set_setting("auth.saml.metadata_xml", metadata_xml_value, is_sensitive=1)
-
         set_setting("auth.saml.idp_entity_id", (request.form.get("saml_idp_entity_id") or "").strip())
         set_setting("auth.saml.sso_url", (request.form.get("saml_sso_url") or "").strip())
         set_setting("auth.saml.slo_url", (request.form.get("saml_slo_url") or "").strip())
@@ -1692,18 +1446,18 @@ def settings_integrations_saml():
         flash("SAML integration settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_integrations_saml"))
 
-    settings = _saml_integration_settings()
     return render_template(
         "launchpad_ui/settings/integrations_saml.html",
         active_section="integrations",
-        settings=settings,
+        settings=saml_integration_settings(),
     )
+
 
 @launchpad_ui_bp.route("/settings/integrations/snipeit", methods=["GET", "POST"])
 @login_required
 @require_permission("launchpad.settings.snipeops.view")
 def settings_integrations_snipeit():
-    current_settings = _get_snipeops_settings()
+    current_settings = get_snipeops_settings()
 
     if request.method == "POST":
         if not _require_manage_permission(
@@ -1742,24 +1496,57 @@ def settings_integrations_snipeit():
         settings=settings,
     )
 
+@launchpad_ui_bp.route("/settings/integrations/mosyle", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.snipeops.view")
+def settings_integrations_mosyle():
+    if request.method == "POST":
+        if not _require_manage_permission(
+            "launchpad.settings.snipeops.manage",
+            "You do not have permission to update Mosyle integration settings.",
+        ):
+            return redirect(url_for("launchpad_ui.settings_integrations_mosyle"))
+
+        enabled = 1 if request.form.get("mosyle_enabled") == "1" else 0
+        base_url = (
+            request.form.get("mosyle_base_url")
+            or "https://managerapi.mosyle.com/v2"
+        ).strip().rstrip("/")
+        username = (request.form.get("mosyle_username") or "").strip()
+        password = (request.form.get("mosyle_password") or "").strip()
+        access_token = (request.form.get("mosyle_access_token") or "").strip()
+
+        set_setting("integrations.mosyle.enabled", enabled)
+        set_setting("integrations.mosyle.base_url", base_url)
+        set_setting("integrations.mosyle.username", username)
+
+        if password:
+            set_setting("integrations.mosyle.password", password, is_sensitive=1)
+
+        if access_token:
+            set_setting("integrations.mosyle.access_token", access_token, is_sensitive=1)
+
+        flash("Mosyle integration settings saved.", "success")
+        return redirect(url_for("launchpad_ui.settings_integrations_mosyle"))
+
+    return render_template(
+        "launchpad_ui/settings/integrations_mosyle.html",
+        active_section="integrations",
+        settings=mosyle_integration_settings(),
+    )
+
 @launchpad_ui_bp.route("/settings/finance", methods=["GET", "POST"])
 @login_required
 @require_permission("launchpad.settings.finance.view")
 def settings_finance():
-    # -----------------------------
-    # Determine active tab
-    # -----------------------------
-    if request.method == "POST":
-        active_finance_tab = (request.form.get("active_finance_tab") or "notifications").strip().lower()
-    else:
-        active_finance_tab = (request.args.get("tab") or "notifications").strip().lower()
+    active_finance_tab = (
+        (request.form.get("active_finance_tab") if request.method == "POST" else request.args.get("tab"))
+        or "notifications"
+    ).strip().lower()
 
     if active_finance_tab not in {"notifications", "template"}:
         active_finance_tab = "notifications"
 
-    # -----------------------------
-    # POST
-    # -----------------------------
     if request.method == "POST":
         if not _require_manage_permission(
             "launchpad.settings.finance.manage",
@@ -1821,14 +1608,13 @@ def settings_finance():
         if uploaded_logo and uploaded_logo.filename:
             try:
                 original_logo_name = uploaded_logo.filename
-                logo_path = _save_finance_notification_logo(uploaded_logo)
+                logo_path = save_finance_notification_logo(uploaded_logo)
                 set_setting("finance.notifications.logo_path", logo_path)
                 set_setting("finance.notifications.logo_original_name", original_logo_name)
             except ValueError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
 
-        # Save current form values before either sending test email or normal save
         set_setting("finance.notifications.enabled", notifications_enabled)
         set_setting("finance.notifications.sender_email", sender_email)
         set_setting("finance.notifications.default_recipients", default_recipients)
@@ -1866,8 +1652,8 @@ def settings_finance():
                 return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
 
             try:
-                preview_context = _build_finance_template_preview_context()
-                preview_lines = _build_finance_preview_lines(
+                preview_context = build_finance_template_preview_context()
+                preview_lines = build_finance_preview_lines(
                     {
                         "include_title": bool(include_title),
                         "include_department_name": bool(include_department_name),
@@ -1905,18 +1691,15 @@ def settings_finance():
         flash("Finance notification settings saved.", "success")
         return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
 
-    # -----------------------------
-    # GET
-    # -----------------------------
-    settings = _finance_notification_settings()
-    preview_context = _build_finance_template_preview_context()
+    settings = finance_notification_settings()
+    preview_context = build_finance_template_preview_context()
 
-    preview_subject = _render_finance_template_tokens(
+    preview_subject = render_finance_template_tokens(
         settings.get("template_subject", ""),
         preview_context,
     )
 
-    preview_lines = _build_finance_preview_lines(settings, preview_context)
+    preview_lines = build_finance_preview_lines(settings, preview_context)
 
     return render_template(
         "launchpad_ui/settings/finance.html",
@@ -1927,6 +1710,7 @@ def settings_finance():
         preview_subject=preview_subject,
         preview_lines=preview_lines,
     )
+
 
 @launchpad_ui_bp.route("/settings/integrations/email", methods=["GET", "POST"])
 @login_required
@@ -1964,8 +1748,10 @@ def settings_integrations_email():
         set_setting("mail.smtp_host", smtp_host)
         set_setting("mail.smtp_port", smtp_port)
         set_setting("mail.smtp_username", smtp_username)
+
         if smtp_password:
             set_setting("mail.smtp_password", smtp_password, is_sensitive=1)
+
         set_setting("mail.smtp_use_tls", smtp_use_tls)
         set_setting("mail.from_name", from_name)
         set_setting("mail.test_recipient", test_email_recipient)
@@ -2030,3 +1816,94 @@ def settings_integrations_email():
         active_section="integrations",
         settings=settings,
     )
+
+
+@launchpad_ui_bp.route("/settings/integrations/api", methods=["GET", "POST"])
+@login_required
+@require_permission("launchpad.settings.snipeops.view")
+def settings_integrations_api():
+    generated_key = session.pop("generated_api_key", None)
+    user_id = session.get("user_id")
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip()
+
+        if action == "create_api_key":
+            if not _require_manage_permission(
+                "launchpad.settings.snipeops.manage",
+                "You do not have permission to manage integrations.",
+            ):
+                return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+            friendly_name = (request.form.get("friendly_name") or "").strip()
+
+            try:
+                generated_key = create_api_key(
+                    friendly_name=friendly_name,
+                    created_by_user_id=user_id,
+                )
+                session["generated_api_key"] = generated_key
+                flash("API key created. Copy it now; it will not be shown again.", "success")
+            except ValueError as exc:
+                flash(str(exc), "error")
+
+            return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+        if action == "revoke_api_key":
+            if not _require_manage_permission(
+                "launchpad.settings.snipeops.manage",
+                "You do not have permission to manage integrations.",
+            ):
+                return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+            api_key_id = request.form.get("api_key_id", type=int)
+            if api_key_id:
+                revoke_api_key(
+                    api_key_id=api_key_id,
+                    revoked_by_user_id=user_id,
+                )
+                flash("API key revoked.", "success")
+
+            return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+        if action == "delete_api_key":
+            if not _require_manage_permission(
+                "launchpad.settings.snipeops.manage",
+                "You do not have permission to manage integrations.",
+            ):
+                return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+            api_key_id = request.form.get("api_key_id", type=int)
+            if api_key_id:
+                delete_api_key(api_key_id=api_key_id)
+                flash("API key deleted.", "success")
+
+            return redirect(url_for("launchpad_ui.settings_integrations_api"))
+
+    return render_template(
+        "launchpad_ui/settings/integrations_api.html",
+        active_section="integrations",
+        api_keys=list_api_keys(),
+        generated_key=generated_key,
+    )
+
+
+@launchpad_ui_bp.route("/account/theme", methods=["POST"])
+@login_required
+def update_account_theme():
+    theme_preference = (request.form.get("theme_preference") or "").strip().lower()
+
+    if theme_preference not in ("light", "dark"):
+        return jsonify({"ok": False, "error": "Invalid theme."}), 400
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "error": "User session is missing."}), 400
+
+    update_user_theme_preference(user_id, theme_preference)
+    session["theme_preference"] = theme_preference
+
+    return jsonify({
+        "ok": True,
+        "theme_preference": theme_preference,
+    })

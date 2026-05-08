@@ -186,6 +186,44 @@ def init_finance_db():
                 uploaded_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS finance_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                department_name TEXT NOT NULL,
+                import_run_id INTEGER,
+                source_type TEXT,
+                source_row_number INTEGER,
+
+                transaction_type TEXT,
+                review_status TEXT NOT NULL DEFAULT 'needs_review',
+
+                title TEXT,
+                description TEXT,
+
+                vendor_id INTEGER,
+                vendor_code TEXT,
+                vendor_name TEXT,
+
+                fund TEXT,
+                budget_unit TEXT,
+                account_code TEXT,
+                po_number TEXT,
+                purchase_date TEXT,
+
+                expenditure_amount TEXT,
+                encumbrance_amount TEXT,
+                cumulative_balance TEXT,
+
+                suggested_record_type TEXT,
+                is_promotable INTEGER NOT NULL DEFAULT 0,
+                promoted_record_id INTEGER,
+
+                raw_json TEXT,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_finance_attachments_record
             ON finance_attachments(finance_record_id, uploaded_at DESC);
 

@@ -1,0 +1,72 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('staff_status.static', filename='staff_status.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  {% include "staff_status/_subnav.html" %}
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} URLs</h1>
+      <p class="page-subtitle">
+        Access links for kiosk and public board. Tokens are managed in Staff Status settings.
+      </p>
+    </div>
+  </div>
+
+  <div class="staff-status-url-grid">
+
+    <div class="content-card staff-status-url-card">
+      <div class="staff-status-url-card-header">
+        <div>
+          <h2>Kiosk URL</h2>
+          <p class="muted">Used on kiosk/iPad check-in stations.</p>
+        </div>
+
+        {% if kiosk_url %}
+          <a class="staff-status-url-btn" href="{{ kiosk_url }}" target="_blank" rel="noopener">
+            Open Kiosk
+          </a>
+        {% endif %}
+      </div>
+
+      {% if kiosk_url %}
+        <div class="form-field">
+          <label for="kiosk-url">Kiosk Link</label>
+          <input id="kiosk-url" type="text" readonly value="{{ kiosk_url }}">
+        </div>
+      {% else %}
+        <p class="muted">No kiosk URL available.</p>
+      {% endif %}
+    </div>
+
+    <div class="content-card staff-status-url-card">
+      <div class="staff-status-url-card-header">
+        <div>
+          <h2>Public Board URL</h2>
+          <p class="muted">Used for display boards and TVs.</p>
+        </div>
+
+        {% if board_url %}
+          <a class="staff-status-url-btn" href="{{ board_url }}" target="_blank" rel="noopener">
+            Open Board
+          </a>
+        {% endif %}
+      </div>
+
+      {% if board_url %}
+        <div class="form-field">
+          <label for="board-url">Board Link</label>
+          <input id="board-url" type="text" readonly value="{{ board_url }}">
+        </div>
+      {% else %}
+        <p class="muted">No public board URL available.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}
