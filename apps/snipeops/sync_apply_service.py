@@ -10,17 +10,32 @@ def _norm(value):
     return str(value or "").strip()
 
 
+def _model_key(value):
+    return _norm(value).lower().replace("-", "").replace(" ", "")
+
+
+def _selected_int(value):
+    try:
+        value = _norm(value)
+        return int(value) if value else None
+    except Exception:
+        return None
+
+
 def _find_model_id(model_name):
-    target = _norm(model_name).lower()
+    target = _model_key(model_name)
     if not target:
         return None
 
     for model in get_models():
-        name = _norm(model.get("name")).lower()
-        model_number = _norm(model.get("model_number")).lower()
+        candidates = [
+            model.get("name"),
+            model.get("model_number"),
+        ]
 
-        if target == name or target == model_number:
-            return model.get("id")
+        for candidate in candidates:
+            if target == _model_key(candidate):
+                return model.get("id")
 
     return None
 
@@ -33,9 +48,14 @@ def apply_sync_action(form):
     assigned_user = _norm(form.get("assigned_user"))
     snipe_id = _norm(form.get("snipe_id"))
 
-    fallback_model_id = form.get("fallback_model_id", type=int)
-    default_status_id = form.get("default_status_id", type=int)
-    default_location_id = form.get("default_location_id", type=int)
+    fallback_model_id = _selected_int(form.get("fallback_model_id"))
+    default_status_id = _selected_int(form.get("default_status_id"))
+
+    # Used only when creating an asset. This should usually be Technology Office.
+    default_location_id = _selected_int(form.get("default_location_id"))
+
+    # Used only when updating an existing asset's current Location field.
+    location_id = _selected_int(form.get("location_id"))
 
     if not action:
         raise ValueError("Sync action is required.")
@@ -44,10 +64,12 @@ def apply_sync_action(form):
         model_id = _find_model_id(model) or fallback_model_id
 
         if not model_id:
-            raise ValueError(f"No matching Snipe-IT model found for '{model}'. Select a fallback model.")
+            raise ValueError(
+                f"No matching Snipe-IT model found for '{model}'. Select a Snipe model."
+            )
 
         if not default_status_id or not default_location_id:
-            raise ValueError("Default status and location are required to create assets.")
+            raise ValueError("Default status and default location are required to create assets.")
 
         result = create_asset(
             {
@@ -71,31 +93,48 @@ def apply_sync_action(form):
         raise ValueError("Snipe asset id is required for update actions.")
 
     if action in {"update_model", "update_all"}:
-        model_id = _find_model_id(model)
-        if not model_id:
-            raise ValueError(f"No matching Snipe-IT model found for '{model}'.")
+        model_id = _find_model_id(model) or fallback_model_id
 
-        update_asset(
-            snipe_id,
-            {
-                "model_id": int(model_id),
-                "name": name,
-            },
-        )
+        if not model_id:
+            raise ValueError(
+                f"No matching Snipe-IT model found for '{model}'. Select a Snipe model."
+            )
+
+        payload = {
+            "model_id": int(model_id),
+            "name": name,
+        }
+
+        if location_id:
+            payload["location_id"] = int(location_id)
+
+        update_asset(snipe_id, payload)
 
     if action in {"update_assignment", "update_all"}:
-        if not assigned_user:
-            raise ValueError("Assigned user is required for assignment update.")
+        if location_id:
+            update_asset(
+                snipe_id,
+                {
+                    "location_id": int(location_id),
+                },
+            )
 
-        checkout_asset_to_user(snipe_id, assigned_user)
+        if assigned_user:
+            checkout_asset_to_user(snipe_id, assigned_user)
 
     if action == "update_model":
+        if location_id:
+            return f"Updated model/name and location for serial {serial}."
         return f"Updated model/name for serial {serial}."
 
     if action == "update_assignment":
+        if assigned_user and location_id:
+            return f"Updated assignment and location for serial {serial}."
+        if location_id:
+            return f"Updated location for serial {serial}."
         return f"Updated assignment for serial {serial}."
 
     if action == "update_all":
-        return f"Updated model/name and assignment for serial {serial}."
+        return f"Updated model/name, assignment, and location for serial {serial}."
 
     raise ValueError(f"Unsupported sync action: {action}")

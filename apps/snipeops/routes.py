@@ -129,12 +129,31 @@ def mosyle_sync():
 @require_permission("snipeops.home.view")
 def apply_sync():
     source = (request.form.get("source") or "intune").strip().lower()
+    wants_json = request.headers.get("X-Requested-With") == "fetch"
 
     try:
         message = apply_sync_action(request.form)
+
+        if wants_json:
+            return {
+                "ok": True,
+                "message": message,
+                "source": source,
+            }
+
         flash(message, "success")
+
     except Exception as exc:
-        flash(f"Sync action failed: {exc}", "error")
+        message = f"Sync action failed: {exc}"
+
+        if wants_json:
+            return {
+                "ok": False,
+                "message": message,
+                "source": source,
+            }, 400
+
+        flash(message, "error")
 
     if source == "mosyle":
         return redirect(url_for("snipeops.mosyle_sync", preview=1))

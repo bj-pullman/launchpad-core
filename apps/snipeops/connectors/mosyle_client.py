@@ -134,20 +134,28 @@ def _normalize_device(row):
     if not serial:
         return None
 
-    model = _first_value(row, [
-        "model_name",
-        "modelName",
-        "device_model",
-        "deviceModel",
-        "product_name",
-        "productName",
+    friendly_model = _first_value(row, [
         "marketing_name",
         "marketingName",
-        "model_identifier",
-        "modelIdentifier",
+        "product_name",
+        "productName",
+        "device_model",
+        "deviceModel",
+        "model_name",
+        "modelName",
+    ])
+
+    generic_model = _first_value(row, [
         "model",
         "Model",
     ])
+
+    model_identifier = _first_value(row, [
+        "model_identifier",
+        "modelIdentifier",
+    ])
+
+    model = friendly_model or model_identifier or generic_model
 
     os_version = _first_value(row, [
         "os_version",
@@ -190,6 +198,9 @@ def _normalize_device(row):
         ]),
         "manufacturer": "Apple",
         "model": model,
+        "generic_model": generic_model,
+        "model_identifier": model_identifier,
+        "friendly_model": friendly_model,
         "os": _first_value(row, [
             "os",
             "os_type",
@@ -205,6 +216,9 @@ def _normalize_device(row):
             "lastSeen",
         ]),
         "raw_model_data": str({
+            "friendly_model": friendly_model,
+            "generic_model": generic_model,
+            "model_identifier": model_identifier,
             "model": row.get("model"),
             "model_name": row.get("model_name"),
             "modelName": row.get("modelName"),
@@ -212,17 +226,13 @@ def _normalize_device(row):
             "deviceModel": row.get("deviceModel"),
             "product_name": row.get("product_name"),
             "productName": row.get("productName"),
-            "model_identifier": row.get("model_identifier"),
-            "modelIdentifier": row.get("modelIdentifier"),
-            "os_version": row.get("os_version"),
-            "osVersion": row.get("osVersion"),
-            "username": row.get("username"),
-            "email": row.get("email"),
+            "marketing_name": row.get("marketing_name"),
+            "marketingName": row.get("marketingName"),
         }),
     }
 
 
-def list_mosyle_devices(limit=100):
+def list_mosyle_devices(limit=None):
     cfg = _settings()
 
     if not cfg["enabled"]:
@@ -231,7 +241,9 @@ def list_mosyle_devices(limit=100):
     if not cfg["base_url"] or not cfg["access_token"] or not cfg["username"] or not cfg["password"]:
         raise ValueError("Mosyle integration is missing base URL, access token, username, or password.")
 
-    limit = max(1, min(int(limit), 100))
+    limit = None if limit is None else max(1, min(int(limit), 500))
+    page_size = 500 if limit is None else limit
+
     bearer = _login(cfg)
 
     response = requests.post(
@@ -246,7 +258,7 @@ def list_mosyle_devices(limit=100):
             "options": {
                 "os": "mac",
                 "page": 1,
-                "page_size": limit,
+                "page_size": page_size,
             },
         },
         timeout=30,
@@ -261,7 +273,7 @@ def list_mosyle_devices(limit=100):
     rows = _extract_rows(payload)
 
     devices = []
-    for row in rows[:limit]:
+    for row in rows if limit is None else rows[:limit]:
         device = _normalize_device(row)
         if device:
             devices.append(device)

@@ -109,9 +109,11 @@ def _compare_fields(source, snipe):
 
     if model_source and model_snipe and _norm_lower(model_source) != _norm_lower(model_snipe):
         diffs.append({
-            "field": "model",
+            "field": "model_reference",
+            "label": "Model reference",
             "source": model_source,
             "snipe": model_snipe,
+            "actionable": False,
         })
 
     manufacturer_source = _norm(source.get("manufacturer"))
@@ -123,9 +125,11 @@ def _compare_fields(source, snipe):
         and _norm_lower(manufacturer_source) != _norm_lower(manufacturer_snipe)
     ):
         diffs.append({
-            "field": "manufacturer",
+            "field": "manufacturer_reference",
+            "label": "Manufacturer reference",
             "source": manufacturer_source,
             "snipe": manufacturer_snipe,
+            "actionable": False,
         })
 
     source_user = _norm(source.get("assigned_user"))
@@ -134,8 +138,10 @@ def _compare_fields(source, snipe):
     if source_user and snipe_user and not _users_match(source_user, snipe_user):
         diffs.append({
             "field": "assigned_user",
+            "label": "Assigned user",
             "source": source_user,
             "snipe": snipe_user,
+            "actionable": True,
         })
 
     return diffs
@@ -163,11 +169,12 @@ def build_sync_preview(source_devices):
             continue
 
         diffs = _compare_fields(device, snipe_asset)
-        diff_fields = [item["field"] for item in diffs]
+        actionable_diffs = [item for item in diffs if item.get("actionable", True)]
+        diff_fields = [item["field"] for item in actionable_diffs]
 
         results.append({
             **device,
-            "status": "update" if diffs else "match",
+            "status": "update" if actionable_diffs else "match",
             "diffs": diffs,
             "diff_fields": diff_fields,
             "snipe_id": snipe_asset.get("id"),

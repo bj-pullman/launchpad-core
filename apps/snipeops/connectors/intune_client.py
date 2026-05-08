@@ -51,14 +51,16 @@ def get_intune_token():
     return response.json()["access_token"]
 
 
-def list_intune_devices(limit=100):
+def list_intune_devices(limit=None):
     cfg = _settings()
     token = get_intune_token()
+
+    top = 100 if limit is None else max(1, min(int(limit), 999))
 
     url = (
         f"{cfg['graph_base_url']}/deviceManagement/managedDevices"
         "?$select=id,deviceName,serialNumber,manufacturer,model,operatingSystem,osVersion,userPrincipalName,azureADDeviceId,lastSyncDateTime"
-        f"&$top={int(limit)}"
+        f"&$top={top}"
     )
 
     headers = {
@@ -68,7 +70,7 @@ def list_intune_devices(limit=100):
 
     devices = []
 
-    while url and len(devices) < limit:
+    while url and (limit is None or len(devices) < limit):
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         payload = response.json()
@@ -92,7 +94,7 @@ def list_intune_devices(limit=100):
                 "last_seen": row.get("lastSyncDateTime") or "",
             })
 
-            if len(devices) >= limit:
+            if limit is not None and len(devices) >= limit:
                 break
 
         url = payload.get("@odata.nextLink")
