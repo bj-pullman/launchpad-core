@@ -37,6 +37,7 @@ from modules.core.bootstrap.finance_seed import ensure_efinance_daily_import_pro
 from modules.core.identity.user_service import get_user_by_id
 
 from tasks.scheduler import configure_jobs
+from tasks.job_runs import init_job_runs_db
 
 load_dotenv()
 
@@ -73,6 +74,7 @@ def create_app() -> Flask:
     seed_default_mappings()
     init_local_auth_db()
     init_settings_db()
+    init_job_runs_db()
     init_rbac_db()
     init_staff_status_db()
     init_finance_db()

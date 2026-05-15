@@ -165,9 +165,112 @@
     <div class="content-card" style="margin-bottom: 16px;">
       <details class="staff-status-location-create-details">
         <summary>Add Absence</summary>
+
         <div class="optional-details-body" style="margin-top: 16px;">
-          <!-- existing form unchanged -->
-          {{ super() }}
+          <form method="post" class="settings-form staff-status-add-absence-form">
+            <input type="hidden" name="action" value="create_absence">
+
+            <div class="form-grid-equal">
+              <div class="form-field">
+                <label>User</label>
+
+                <select name="user_id" required>
+                  <option value="">Choose user</option>
+
+                  {% for user in users %}
+                    <option value="{{ user.id }}">
+                      {{ user.resolved_display_name }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label>Absence Type</label>
+
+                <select name="absence_type" required>
+                  {% for absence_type in absence_types %}
+                    <option value="{{ absence_type }}">
+                      {{ absence_type|title }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label>Duration</label>
+
+                <select
+                  id="duration_mode"
+                  name="duration_mode"
+                  required
+                >
+                  {% for option in duration_options %}
+                    <option value="{{ option.value }}">
+                      {{ option.label }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid-equal">
+              <div class="form-field">
+                <label>Start Date</label>
+
+                <input
+                  type="date"
+                  name="start_date"
+                  required
+                >
+              </div>
+
+              <div
+                id="end-date-field"
+                class="form-field"
+                hidden
+              >
+                <label>End Date</label>
+
+                <input
+                  type="date"
+                  name="end_date"
+                >
+              </div>
+            </div>
+
+            <div
+              id="days-value-field"
+              class="form-field"
+              hidden
+            >
+              <label>Total Days</label>
+
+              <input
+                type="number"
+                step="0.25"
+                name="days_value"
+              >
+            </div>
+
+            <div class="form-field">
+              <label>Note</label>
+
+              <input
+                type="text"
+                name="note"
+              >
+            </div>
+
+            <div class="form-actions">
+              <button
+                type="submit"
+                class="btn btn-primary"
+              >
+                Save Absence
+              </button>
+            </div>
+          </form>
         </div>
       </details>
     </div>
