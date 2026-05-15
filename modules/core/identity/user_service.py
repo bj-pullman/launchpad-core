@@ -97,6 +97,30 @@ def get_user_by_id(user_id: int):
 
     return row_to_dict(row)
 
+def normalize_theme_preference(value: str | None) -> str:
+    value = (value or "light").strip().lower()
+    if value not in ("light", "dark"):
+        return "light"
+    return value
+
+
+def update_user_theme_preference(user_id: int, theme_preference: str):
+    theme_preference = normalize_theme_preference(theme_preference)
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET theme_preference = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (theme_preference, now, user_id),
+        )
+        conn.commit()
+
+    return get_user_by_id(user_id)
+
 
 def create_user(data: dict):
     payload = build_user_payload(data)

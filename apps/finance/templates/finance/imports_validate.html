@@ -69,28 +69,76 @@
   <div class="content-card">
     <div class="finance-section-header">
       <div>
-        <h3 class="finance-section-title">Mapped Row Preview</h3>
-        <p class="finance-section-subtitle">First 20 mapped rows before import.</p>
+        <h2>Mapped Row Preview</h2>
+        <p class="page-subtitle">First {{ validation.preview_rows|length }} mapped rows before import.</p>
       </div>
     </div>
 
     {% if validation.preview_rows %}
       <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table finance-preview-table">
           <thead>
-            <tr>
-              {% for key in validation.preview_rows[0].keys() %}
-                <th>{{ key|replace("_", " ")|title }}</th>
-              {% endfor %}
-            </tr>
+            {% if run.import_type == "transactions" %}
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Vendor</th>
+                <th>Type</th>
+                <th class="text-right">Spent</th>
+                <th class="text-right">Encumbered</th>
+                <th>Suggested</th>
+              </tr>
+            {% else %}
+              <tr>
+                <th>Title</th>
+                <th>Vendor</th>
+                <th>Account</th>
+                <th>PO</th>
+                <th class="text-right">Cost</th>
+                <th>Status</th>
+              </tr>
+            {% endif %}
           </thead>
+
           <tbody>
             {% for row in validation.preview_rows %}
-              <tr>
-                {% for value in row.values() %}
-                  <td>{{ value or "—" }}</td>
-                {% endfor %}
-              </tr>
+              {% if run.import_type == "transactions" %}
+                <tr>
+                  <td class="finance-nowrap">{{ row.purchase_date or "—" }}</td>
+
+                  <td>
+                    <div class="finance-record-title">
+                      {{ row.title or row.description or "Untitled Transaction" }}
+                    </div>
+                    {% if row.account_code or row.po_number %}
+                      <div class="finance-meta">
+                        {% if row.account_code %}Acct {{ row.account_code }}{% endif %}
+                        {% if row.account_code and row.po_number %} · {% endif %}
+                        {% if row.po_number %}PO {{ row.po_number }}{% endif %}
+                      </div>
+                    {% endif %}
+                  </td>
+
+                  <td>{{ row.vendor_name or "—" }}</td>
+                  <td>
+                    <span class="finance-pill">
+                      {{ row.transaction_type or "other" }}
+                    </span>
+                  </td>
+                  <td class="text-right">{{ row.expenditure_amount or "0.00" }}</td>
+                  <td class="text-right">{{ row.encumbrance_amount or "0.00" }}</td>
+                  <td>{{ row.suggested_record_type or "—" }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td>{{ row.title or "—" }}</td>
+                  <td>{{ row.vendor_name or "—" }}</td>
+                  <td>{{ row.account_code or "—" }}</td>
+                  <td>{{ row.po_number or "—" }}</td>
+                  <td class="text-right">{{ row.cost or "—" }}</td>
+                  <td>{{ row.status or "—" }}</td>
+                </tr>
+              {% endif %}
             {% endfor %}
           </tbody>
         </table>
@@ -98,7 +146,7 @@
     {% else %}
       <div class="finance-empty">
         <h3>No preview rows</h3>
-        <p>No mapped rows were available for preview.</p>
+        <p>No rows were available for preview.</p>
       </div>
     {% endif %}
   </div>

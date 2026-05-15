@@ -146,6 +146,32 @@
     </a>
     {% endif %}
 
+    {% if can_view_snipeit %}
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_mosyle') }}"
+      class="integration-brand-card integration-brand-card-mosyle"
+    >
+      <div class="integration-brand-logo-wrap">
+        <img
+          src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/img/integrations/mosyle.png') }}"
+          alt="Mosyle logo"
+          class="integration-brand-logo-image"
+        />
+      </div>
+
+      <div class="integration-brand-title">Mosyle</div>
+
+      <div class="integration-brand-body">
+        Apple MDM inventory sync for macOS, iOS, and Apple device lifecycle management.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+    {% endif %}
+
     {% if can_view_email %}
     <a
       href="{{ url_for('launchpad_ui.settings_integrations_email') }}"
@@ -170,7 +196,40 @@
       </div>
     </a>
     {% endif %}
-    
+
+    <a
+      href="{{ url_for('launchpad_ui.settings_integrations_api') }}"
+      class="integration-brand-card integration-brand-card-api"
+    >
+      <div class="integration-brand-logo-wrap">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="34"
+          height="34"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.9"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1"></path>
+          <path d="M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1"></path>
+        </svg>
+      </div>
+
+      <div class="integration-brand-title">API Keys</div>
+
+      <div class="integration-brand-body">
+        Create and manage API keys for automated integrations such as Finance imports and external system connections.
+      </div>
+
+      <div class="integration-brand-cta">
+        <span>Open</span>
+        <span class="settings-index-card-cta-arrow">→</span>
+      </div>
+    </a>
+
   </div>
 </div>
 {% endblock %}

@@ -7,6 +7,8 @@ from apps.snipeops.snipe_catalog.snipe_api import (
     fetch_statuslabels,
     fetch_suppliers,
     fetch_depreciations,
+    fetch_categories,
+    fetch_manufacturers,
 )
 
 from apps.snipeops.snipe_catalog.catalog_db import (
@@ -16,6 +18,8 @@ from apps.snipeops.snipe_catalog.catalog_db import (
     upsert_statuslabels,
     upsert_suppliers,
     upsert_depreciations,
+    upsert_categories,
+    upsert_manufacturers,
 )
 
 def run_full_sync() -> dict:
@@ -29,12 +33,17 @@ def run_full_sync() -> dict:
         statuslabels = fetch_statuslabels()
         suppliers = fetch_suppliers()
         depreciations = fetch_depreciations()
+        categories = fetch_categories()
+        manufacturers = fetch_manufacturers()
 
         c_models = upsert_models(models)
         c_locations = upsert_locations(locations)
         c_status = upsert_statuslabels(statuslabels)
         c_suppliers = upsert_suppliers(suppliers)
         c_depr = upsert_depreciations(depreciations)
+
+        c_categories = upsert_categories(categories)
+        c_manufacturers = upsert_manufacturers(manufacturers)
 
         set_meta("last_sync_utc", datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
 
@@ -46,6 +55,8 @@ def run_full_sync() -> dict:
                 "statuslabels": c_status,
                 "suppliers": c_suppliers,
                 "depreciations": c_depr,
+                "categories": c_categories,
+                "manufacturers": c_manufacturers,
             }
         }
 

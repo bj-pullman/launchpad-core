@@ -21,6 +21,12 @@ SETTINGS_SECTIONS = [
         ],
     },
     {
+        "key": "snipeops",
+        "label": "SnipeOps",
+        "endpoint": "launchpad_ui.settings_snipeops",
+        "permission": "launchpad.settings.snipeops.view",
+    },
+    {
         "key": "staff_status",
         "label": "Staff Status",
         "endpoint": "launchpad_ui.settings_staff_status",

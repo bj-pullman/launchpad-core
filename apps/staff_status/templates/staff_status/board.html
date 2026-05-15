@@ -33,7 +33,7 @@
         id="staff-status-board-grid"
         class="staff-status-board-grid"
         data-data-url="{{ url_for('staff_status.board_data', department_name=department_name) }}"
-        data-refresh-seconds="{{ refresh_seconds|default(5) }}"
+        data-refresh-seconds="{{ refresh_seconds|default(30) }}"
         data-timezone="{{ app_timezone }}"
         data-stream-url="{{ stream_url }}"
       >

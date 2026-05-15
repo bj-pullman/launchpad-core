@@ -1,0 +1,145 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}API Keys - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+/>
+{% endblock %}
+
+{% block content %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_integrations') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Integrations</span>
+    </a>
+  </div>
+
+  <div class="settings-page-header">
+    <div>
+      <h1>API Keys</h1>
+      <p class="muted">Manage API access for Launchpad integrations.</p>
+    </div>
+  </div>
+
+  <div class="settings-section-stack">
+    <div class="settings-content-card">
+      <h2>Create API Key</h2>
+      <p class="muted">Use a friendly name like “eFinance Server”. The key is only shown once.</p>
+
+      <form method="post" class="settings-form">
+        <input type="hidden" name="action" value="create_api_key">
+
+        <div class="api-key-create-grid">
+          <div class="form-field">
+            <label for="friendly_name">Friendly Name</label>
+            <input id="friendly_name" name="friendly_name" required placeholder="Google API Key">
+            <small>Use a name that describes the external system or script using this key.</small>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary">Generate API Key</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="settings-content-card">
+      <h2>Existing API Keys</h2>
+
+      {% if api_keys %}
+      <div class="table-wrap">
+        <table class="table api-key-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Last Active</th>
+              <th>Last Action</th>
+              <th>Status</th>
+              <th class="table-action-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for key in api_keys %}
+            <tr>
+              <td>{{ key.friendly_name }}</td>
+              <td>{{ key.last_used_at or "Never" }}</td>
+              <td>{{ key.last_used_action or "—" }}</td>
+              <td>
+                <span class="settings-status-badge {% if key.is_active %}api-key-status-active{% else %}api-key-status-revoked{% endif %}">
+                  {{ "Active" if key.is_active else "Revoked" }}
+                </span>
+              </td>
+              <td>
+                {% if key.is_active %}
+                <form method="post" class="api-key-row-form">
+                  <input type="hidden" name="action" value="revoke_api_key">
+                  <input type="hidden" name="api_key_id" value="{{ key.id }}">
+                  <button class="btn btn-secondary">Revoke</button>
+                </form>
+                {% else %}
+                <form
+                  method="post"
+                  class="api-key-row-form inline-delete-form"
+                  data-confirm-title="Delete API Key"
+                  data-confirm-message="Delete this revoked API key from the list?"
+                  data-confirm-button-label="Delete"
+                >
+                  <input type="hidden" name="action" value="delete_api_key">
+                  <input type="hidden" name="api_key_id" value="{{ key.id }}">
+                  <button class="btn btn-secondary">Delete</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <h3>No API keys yet</h3>
+        <p class="muted">Create an API key above to connect external systems to Launchpad.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if generated_key %}
+<div class="api-key-modal-backdrop" id="api-key-modal">
+  <div class="api-key-modal" role="dialog" aria-modal="true" aria-labelledby="api-key-modal-title">
+    <h2 id="api-key-modal-title">API Key Created</h2>
+    <p class="muted">
+      Copy this key now. You will not be able to view it again after closing this window.
+    </p>
+
+    <div class="form-field">
+      <label for="generated-api-key">API Key</label>
+      <input id="generated-api-key" type="text" readonly value="{{ generated_key.raw_key }}">
+    </div>
+
+    <div class="api-key-modal-actions">
+      <button type="button" class="btn btn-secondary" id="copy-api-key-btn">
+        Copy to Clipboard
+      </button>
+
+      <button type="button" class="btn btn-primary" id="close-api-key-modal-btn">
+        OK, I copied it
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.js') }}"></script>
+{% endblock %}

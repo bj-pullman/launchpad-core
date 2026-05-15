@@ -1,14 +1,19 @@
-from flask import Blueprint, render_template, jsonify
+from collections import Counter
+
+from flask import Blueprint, render_template, jsonify, request
 
 from modules.core.auth.decorators import login_required, require_permission
 
 from apps.snipeops.snipe_catalog.catalog_db import (
-    init_db, set_meta, get_meta,
-    upsert_models, upsert_locations, upsert_statuslabels, upsert_suppliers, upsert_depreciations,
+    init_db,
+    get_meta,
     list_table,
 )
-from apps.snipeops.snipe_catalog.snipe_api import get_paginated
 from apps.snipeops.snipe_catalog.sync import run_full_sync
+from apps.snipeops.snipe_catalog.snipe_api import create_model
+from apps.snipeops.mapping_service import list_mappings, upsert_mapping
+from apps.snipeops.connectors.intune_client import list_intune_devices
+from apps.snipeops.connectors.mosyle_client import list_mosyle_devices
 
 bp = Blueprint(
     "snipe_catalog",
@@ -19,6 +24,53 @@ bp = Blueprint(
 )
 
 init_db()
+
+
+def _norm(value):
+    return str(value or "").strip()
+
+
+def _model_display(model):
+    name = _norm(model.get("name"))
+    model_number = _norm(model.get("model_number"))
+
+    if name and model_number:
+        return f"{name} — {model_number}"
+
+    return name or model_number
+
+
+def _discover_source_models(source, limit):
+    if source == "mosyle":
+        devices = list_mosyle_devices(limit=limit)
+    else:
+        devices = list_intune_devices(limit=limit)
+
+    counts = Counter()
+
+    for device in devices:
+        raw_model = _norm(device.get("model"))
+        if raw_model:
+            counts[raw_model] += 1
+
+    existing_mappings = {
+        _norm(item.get("raw_value")).lower(): item
+        for item in list_mappings(field="model", source=source)
+    }
+
+    rows = []
+    for raw_value, count in counts.most_common():
+        mapping = existing_mappings.get(raw_value.lower())
+
+        rows.append({
+            "source": source,
+            "raw_value": raw_value,
+            "count": count,
+            "mapped_value": mapping.get("mapped_value") if mapping else "",
+            "mapping_id": mapping.get("id") if mapping else None,
+        })
+
+    return rows
 
 
 @bp.get("/")
@@ -70,3 +122,145 @@ def api_suppliers():
 @require_permission("snipeops.snipe_catalog.view")
 def api_depreciations():
     return jsonify({"ok": True, "rows": list_table("catalog_depreciations")})
+
+
+@bp.get("/api/model-mappings")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def api_model_mappings():
+    source = _norm(request.args.get("source")).lower() or "intune"
+    limit_raw = _norm(request.args.get("limit")).lower()
+    limit = None if limit_raw in {"", "all"} else max(1, min(int(limit_raw), 5000))
+
+    if source not in {"intune", "mosyle"}:
+        return jsonify({"ok": False, "error": "Invalid source."}), 400
+
+    try:
+        discovered = _discover_source_models(source, limit)
+
+        models = list_table("catalog_models")
+        categories = list_table("catalog_categories")
+        manufacturers = list_table("catalog_manufacturers")
+
+        return jsonify({
+            "ok": True,
+            "source": source,
+            "limit": limit,
+            "rows": discovered,
+            "models": [
+                {
+                    "id": model.get("id"),
+                    "name": model.get("name"),
+                    "model_number": model.get("model_number"),
+                    "manufacturer_name": model.get("manufacturer_name"),
+                    "display": _model_display(model),
+                }
+                for model in models
+            ],
+            "categories": [
+                {
+                    "id": row.get("id"),
+                    "name": row.get("name"),
+                }
+                for row in categories
+            ],
+
+            "manufacturers": [
+                {
+                    "id": row.get("id"),
+                    "name": row.get("name"),
+                }
+                for row in manufacturers
+            ],
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post("/api/model-mappings")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def save_model_mappings():
+    payload = request.get_json(silent=True) or {}
+    source = _norm(payload.get("source")).lower()
+    mappings = payload.get("mappings") or []
+
+    if source not in {"intune", "mosyle"}:
+        return jsonify({"ok": False, "error": "Invalid source."}), 400
+
+    saved = []
+
+    try:
+        for item in mappings:
+            raw_value = _norm(item.get("raw_value"))
+            mapped_value = _norm(item.get("mapped_value"))
+
+            if not raw_value or not mapped_value:
+                continue
+
+            saved.append(
+                upsert_mapping(
+                    source=source,
+                    field="model",
+                    raw_value=raw_value,
+                    mapped_value=mapped_value,
+                    notes="Managed from Snipe Catalog model mapping.",
+                )
+            )
+
+        return jsonify({
+            "ok": True,
+            "saved": len(saved),
+            "message": f"Saved {len(saved)} model mapping(s).",
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    
+@bp.post("/api/models")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def create_snipe_model():
+    payload = request.get_json(silent=True) or {}
+
+    name = _norm(payload.get("name"))
+    model_number = _norm(payload.get("model_number"))
+    category_id = payload.get("category_id")
+    manufacturer_id = payload.get("manufacturer_id")
+
+    if not name:
+        return jsonify({"ok": False, "error": "Model name is required."}), 400
+
+    if not category_id:
+        return jsonify({"ok": False, "error": "Category is required to create a Snipe model."}), 400
+
+    try:
+        result = create_model(
+            name=name,
+            category_id=category_id,
+            manufacturer_id=manufacturer_id,
+            model_number=model_number,
+        )
+
+        # Refresh model catalog after create so dropdowns can use it.
+        run_full_sync()
+
+        return jsonify({
+            "ok": True,
+            "message": f"Created Snipe model: {name}",
+            "result": result,
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    
+@bp.get("/api/categories")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def api_categories():
+    return jsonify({"ok": True, "rows": list_table("catalog_categories")})
+
+
+@bp.get("/api/manufacturers")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def api_manufacturers():
+    return jsonify({"ok": True, "rows": list_table("catalog_manufacturers")})

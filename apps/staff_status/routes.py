@@ -36,6 +36,16 @@ from .service import (
     update_location,
     update_user_status,
     build_public_url,
+    get_department_record,
+    reorder_locations_for_department,
+    ABSENCE_DURATION_OPTIONS,
+    build_absence_csv_export,
+    build_absence_pdf_export,
+    list_absences_for_department,
+    resolve_absence_duration,
+    get_current_school_year_range,
+    get_school_year_rollover_reminder,
+    get_department_absence_usage_summary,
 )
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.identity.user_service import get_user_by_id
@@ -94,18 +104,15 @@ def department_overview(department_name: str):
 
     accessible_departments = list_accessible_departments_for_user(user_id)
 
-    # NEW: timeframe handling
     range_key = normalize_overview_range(request.args.get("range", "30d"))
 
-    # NEW: analytics payload
     overview_analytics = get_department_overview_analytics(
         department_name,
         range_key,
     )
-    
-    # upccoming absence highlight
+
     highlight_7_day = (date.today() + timedelta(days=7)).isoformat()
-    
+
     upcoming_absences = list_recent_absences_for_department(
         department_name,
         limit=10,
@@ -113,6 +120,13 @@ def department_overview(department_name: str):
         sort_dir="asc",
         view="upcoming",
     )
+
+    absence_usage_payload = get_department_absence_usage_summary(
+        department_name=department_name,
+    )
+
+    school_year = get_current_school_year_range()
+    school_year_rollover_reminder = get_school_year_rollover_reminder()
 
     return render_template(
         "staff_status/department_overview.html",
@@ -122,6 +136,10 @@ def department_overview(department_name: str):
         range_options=get_overview_range_options(),
         overview_analytics=overview_analytics,
         upcoming_absences=upcoming_absences,
+        absence_usage_summary=absence_usage_payload["rows"],
+        absence_usage_school_year=absence_usage_payload["school_year"],
+        school_year=school_year,
+        school_year_rollover_reminder=school_year_rollover_reminder,
         accessible_department_count=len(accessible_departments),
         is_staff_status_admin=has_staff_status_admin(user_id),
         highlight_7_day=highlight_7_day,
@@ -212,6 +230,48 @@ def locations(department_name: str):
         can_operate=can_operate,
     )
 
+@bp.route("/<department_name>/locations/reorder", methods=["POST"])
+@login_required
+def locations_reorder(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_operate_department(user_id, department_name):
+        abort(403)
+
+    payload = request.get_json(silent=True) or {}
+    location_ids = payload.get("location_ids") or []
+
+    normalized_location_ids = []
+    for raw_location_id in location_ids:
+        try:
+            location_id = int(raw_location_id)
+        except (TypeError, ValueError):
+            continue
+
+        if location_id > 0:
+            normalized_location_ids.append(location_id)
+
+    if not normalized_location_ids:
+        return jsonify({
+            "ok": False,
+            "error": "No locations were provided.",
+        }), 400
+
+    reorder_locations_for_department(
+        department_name=department_name,
+        location_ids=normalized_location_ids,
+    )
+
+    return jsonify({
+        "ok": True,
+        "updated_count": len(normalized_location_ids),
+    })
+
 @bp.route("/<department_name>/board")
 @login_required
 def board(department_name: str):
@@ -223,7 +283,7 @@ def board(department_name: str):
         abort(403)
 
     accessible_departments = list_accessible_departments_for_user(user_id)
-    refresh_seconds = int(get_setting("staff_status.board_refresh_seconds", "5") or "5")
+    refresh_seconds = 30
     app_timezone = get_setting("general.timezone", "America/Chicago") or "America/Chicago"
 
     return render_template(
@@ -319,27 +379,73 @@ def kiosk_submit(token: str):
         return jsonify({"ok": False, "error": "Invalid kiosk token."}), 404
 
     department_name = department["department_name"]
-    user_id = request.form.get("user_id", type=int)
+
+    user_ids = request.form.getlist("user_ids")
+    if not user_ids:
+        legacy_user_id = request.form.get("user_id", type=int)
+        if legacy_user_id:
+            user_ids = [legacy_user_id]
+
+    normalized_user_ids = []
+    for raw_user_id in user_ids:
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            continue
+
+        if user_id > 0:
+            normalized_user_ids.append(user_id)
+
+    normalized_user_ids = list(dict.fromkeys(normalized_user_ids))
+
     location_labels = request.form.getlist("location_labels")
 
-    if not user_id:
-        return jsonify({"ok": False, "error": "A user must be selected."}), 400
+    if not normalized_user_ids:
+        return jsonify({"ok": False, "error": "At least one user must be selected."}), 400
+
     if not location_labels:
         return jsonify({"ok": False, "error": "At least one location must be selected."}), 400
 
-    update_user_status(
-        user_id=user_id,
-        department_name=department_name,
-        location_labels=location_labels,
-        committed_by_user_id=None,
-        committed_by_display_name=f"Kiosk:{department_name}",
-        updated_by_source="kiosk_token",
-        source_ip=request.headers.get("X-Forwarded-For", request.remote_addr),
-        source_device=request.user_agent.string[:255] if request.user_agent else None,
-    )
+    active_department_users = list_active_users_for_department(department_name)
+    allowed_user_ids = {int(user["id"]) for user in active_department_users}
+
+    selected_user_ids = [
+        user_id
+        for user_id in normalized_user_ids
+        if user_id in allowed_user_ids
+    ]
+
+    if not selected_user_ids:
+        return jsonify({
+            "ok": False,
+            "error": "No valid users were selected for this department.",
+        }), 400
+
+    source_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    source_device = request.user_agent.string[:255] if request.user_agent else None
+
+    updated_count = 0
+
+    for user_id in selected_user_ids:
+        update_user_status(
+            user_id=user_id,
+            department_name=department_name,
+            location_labels=location_labels,
+            committed_by_user_id=None,
+            committed_by_display_name=f"Kiosk:{department_name}",
+            updated_by_source="kiosk_token",
+            source_ip=source_ip,
+            source_device=source_device,
+        )
+        updated_count += 1
+
     publish_department_update(department_name)
 
-    return jsonify({"ok": True, "department_name": department_name})
+    return jsonify({
+        "ok": True,
+        "department_name": department_name,
+        "updated_count": updated_count,
+    })
 
 
 @bp.route("/<department_name>/absences", methods=["GET", "POST"])
@@ -368,28 +474,7 @@ def absences(department_name: str):
         action = (request.form.get("action") or "").strip()
 
         if action == "update_absence":
-            duration_mode = (request.form.get("duration_mode") or "").strip()
-            days_value_raw = (request.form.get("days_value") or "").strip()
-
-            duration_lookup = {
-                "quarter_day": 0.25,
-                "half_day": 0.5,
-                "three_quarter_day": 0.75,
-                "full_day": 1.0,
-            }
-
-            if duration_mode == "multi_day":
-                try:
-                    days_value = float(days_value_raw)
-                except ValueError:
-                    days_value = None
-            else:
-                days_value = duration_lookup.get(duration_mode)
-
-            if duration_mode != "multi_day":
-                end_date = (request.form.get("start_date") or "").strip()
-            else:
-                end_date = (request.form.get("end_date") or "").strip()
+            duration_mode, days_value, end_date = resolve_absence_duration(request.form)
 
             update_absence(
                 absence_id=request.form.get("absence_id", type=int),
@@ -402,6 +487,7 @@ def absences(department_name: str):
                 updated_by_user_id=actor["id"],
                 updated_by_display_name=actor.get("display_name") or actor.get("email") or f"User {actor['id']}",
             )
+
             publish_department_update(department_name)
             return redirect(url_for("staff_status.absences", department_name=department_name))
 
@@ -411,31 +497,11 @@ def absences(department_name: str):
                 updated_by_user_id=actor["id"],
                 updated_by_display_name=actor.get("display_name") or actor.get("email") or f"User {actor['id']}",
             )
+
             publish_department_update(department_name)
             return redirect(url_for("staff_status.absences", department_name=department_name))
 
-        duration_mode = (request.form.get("duration_mode") or "").strip()
-        days_value_raw = (request.form.get("days_value") or "").strip()
-
-        duration_lookup = {
-            "quarter_day": 0.25,
-            "half_day": 0.5,
-            "three_quarter_day": 0.75,
-            "full_day": 1.0,
-        }
-
-        if duration_mode == "multi_day":
-            try:
-                days_value = float(days_value_raw)
-            except ValueError:
-                days_value = None
-        else:
-            days_value = duration_lookup.get(duration_mode)
-
-        if duration_mode != "multi_day":
-            end_date = (request.form.get("start_date") or "").strip()
-        else:
-            end_date = (request.form.get("end_date") or "").strip()
+        duration_mode, days_value, end_date = resolve_absence_duration(request.form)
 
         create_absence(
             user_id=request.form.get("user_id", type=int),
@@ -449,12 +515,9 @@ def absences(department_name: str):
             created_by_user_id=actor["id"],
             created_by_display_name=actor.get("display_name") or actor.get("email") or f"User {actor['id']}",
         )
+
         publish_department_update(department_name)
         return redirect(url_for("staff_status.absences", department_name=department_name))
-
-    sort_by = (request.args.get("sort") or "start_date").strip()
-    sort_dir = (request.args.get("dir") or "desc").strip().lower()
-    view = (request.args.get("view") or "active").strip().lower()
 
     absence_type_filter = (request.args.get("absence_type") or "").strip().lower()
     current_absence_types = [absence_type_filter] if absence_type_filter else []
@@ -465,29 +528,111 @@ def absences(department_name: str):
         if item.strip()
     ]
 
+    current_start_date = (request.args.get("start_date") or "").strip()
+    current_end_date = (request.args.get("end_date") or "").strip()
+
+    upcoming_absences = list_absences_for_department(
+        department_name=department_name,
+        timing="upcoming",
+        absence_types=current_absence_types,
+        user_ids=current_user_ids,
+        start_date=current_start_date,
+        end_date=current_end_date,
+    )
+
+    past_absences = list_absences_for_department(
+        department_name=department_name,
+        timing="past",
+        absence_types=current_absence_types,
+        user_ids=current_user_ids,
+        start_date=current_start_date,
+        end_date=current_end_date,
+    )
+
     return render_template(
         "staff_status/absences.html",
         department_name=department_name,
         users=users,
         absence_types=absence_types,
-        recent_absences=list_recent_absences_for_department(
-            department_name,
-            sort_by=sort_by,
-            sort_dir=sort_dir,
-            view=view,
-            absence_types=current_absence_types,
-            user_ids=current_user_ids,
-        ),
+        duration_options=ABSENCE_DURATION_OPTIONS,
+        upcoming_absences=upcoming_absences,
+        past_absences=past_absences,
         active_tab="absences",
-        current_sort=sort_by,
-        current_dir=sort_dir,
-        current_view=view,
         current_absence_types=current_absence_types,
         current_user_ids=current_user_ids,
+        current_start_date=current_start_date,
+        current_end_date=current_end_date,
         accessible_department_count=len(accessible_departments),
         is_staff_status_admin=has_staff_status_admin(user_id),
         can_operate=can_operate,
     )
+
+
+@bp.route("/<department_name>/absences/export")
+@login_required
+def absences_export(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    absence_type_filter = (request.args.get("absence_type") or "").strip().lower()
+    current_absence_types = [absence_type_filter] if absence_type_filter else []
+
+    current_user_ids = [
+        item.strip()
+        for item in request.args.getlist("user_ids")
+        if item.strip()
+    ]
+
+    timing = (request.args.get("timing") or "all").strip().lower()
+    if timing not in {"upcoming", "past", "all"}:
+        timing = "all"
+
+    format_type = (request.args.get("format") or "csv").strip().lower()
+    if format_type not in {"csv", "pdf"}:
+        format_type = "csv"
+
+    start_date = (request.args.get("start_date") or "").strip()
+    end_date = (request.args.get("end_date") or "").strip()
+
+    if format_type == "pdf":
+        pdf_content, filename = build_absence_pdf_export(
+            department_name=department_name,
+            timing=timing,
+            absence_types=current_absence_types,
+            user_ids=current_user_ids,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        return Response(
+            pdf_content,
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            },
+        )
+
+    csv_content, filename = build_absence_csv_export(
+        department_name=department_name,
+        timing=timing,
+        absence_types=current_absence_types,
+        user_ids=current_user_ids,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    return Response(
+        csv_content,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        },
+    )
+
 
 @bp.route("/board/<token>")
 def board_public(token: str):
@@ -496,7 +641,7 @@ def board_public(token: str):
         abort(404)
 
     department_name = department["department_name"]
-    refresh_seconds = int(get_setting("staff_status.board_refresh_seconds", "5") or "5")
+    refresh_seconds = 30
     app_timezone = get_setting("general.timezone", "America/Chicago") or "America/Chicago"
 
     return render_template(
@@ -590,4 +735,42 @@ def rotate_department_board_token_for_settings(department_name: str):
                 token=department["board_token"],
             ),
         }
+    )
+
+@bp.route("/<department_name>/urls")
+@login_required
+def urls(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    accessible_departments = list_accessible_departments_for_user(user_id)
+    department = get_department_record(department_name) or {}
+
+    kiosk_url = None
+    board_url = None
+
+    if department.get("kiosk_token"):
+        kiosk_url = build_public_url(
+            "staff_status.kiosk",
+            token=department["kiosk_token"],
+        )
+
+    if department.get("board_token"):
+        board_url = build_public_url(
+            "staff_status.board_public",
+            token=department["board_token"],
+        )
+
+    return render_template(
+        "staff_status/urls.html",
+        department_name=department_name,
+        active_tab="urls",
+        kiosk_url=kiosk_url,
+        board_url=board_url,
+        accessible_department_count=len(accessible_departments),
+        is_staff_status_admin=has_staff_status_admin(user_id),
     )

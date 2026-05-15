@@ -114,6 +114,7 @@ def start_user_session(local_user: dict, userinfo: dict, remember: bool = False)
     session["user_role"] = next(iter(get_user_role_keys(user_id)), "viewer")
     session["user_roles"] = list(get_user_role_keys(user_id))
     session["user_permissions"] = list(get_user_permission_keys(user_id))
+    session["theme_preference"] = local_user.get("theme_preference") or "light"
     session["google_sub"] = userinfo.get("sub", "")
     session["authenticated_at"] = to_iso(now)
     session["last_activity"] = to_iso(now)

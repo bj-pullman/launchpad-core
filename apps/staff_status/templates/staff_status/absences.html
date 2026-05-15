@@ -7,304 +7,41 @@
 >
 {% endblock %}
 
-{% macro sort_arrow(column) -%}
-  {% if current_sort == column %}
-    {% if current_dir == "asc" %}
-      <span class="table-sort-indicator" aria-hidden="true">▲</span>
-    {% else %}
-      <span class="table-sort-indicator" aria-hidden="true">▼</span>
-    {% endif %}
-  {% else %}
-    <span class="table-sort-indicator table-sort-indicator-inactive" aria-hidden="true">↕</span>
-  {% endif %}
-{%- endmacro %}
-
-{% block content %}
-<div class="page-shell">
-  {% include "staff_status/_subnav.html" %}
-
-  <div class="page-header">
-    <div>
-      <h1>{{ department_name }} Absences</h1>
-      <p class="page-subtitle">Record and review recent absences for this department.</p>
-    </div>
-  </div>
-
-  {% if not can_operate %}
-    <div class="content-card" style="margin-bottom: 16px;">
-      <p class="muted">You have view-only access for this department.</p>
-    </div>
-  {% endif %}
-
-  {% if can_operate %}
-    <div class="content-card" style="margin-bottom: 16px;">
-      <details class="staff-status-location-create-details">
-        <summary>Add Absence</summary>
-
-        <div class="optional-details-body" style="margin-top: 16px;">
-          <form method="post" class="settings-form">
-            <div class="form-field">
-              <label for="user_id">User</label>
-              <select id="user_id" name="user_id" required>
-                <option value="">Select a user</option>
-                {% for user in users %}
-                  <option value="{{ user.id }}">{{ user.resolved_display_name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="form-grid-equal">
-              <div class="form-field">
-                <label for="absence_type">Absence Type</label>
-                <select id="absence_type" name="absence_type" required>
-                  {% for absence_type in absence_types %}
-                    <option value="{{ absence_type }}">{{ absence_type|title }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-
-              <div class="form-field">
-                <label for="duration_mode">Duration</label>
-                <select id="duration_mode" name="duration_mode" required>
-                  <option value="quarter_day">1/4 Day</option>
-                  <option value="half_day">Half Day</option>
-                  <option value="three_quarter_day">3/4 Day</option>
-                  <option value="full_day" selected>Full Day</option>
-                  <option value="multi_day">Multiple Days</option>
-                </select>
-              </div>
-
-              <div class="form-field">
-                <label for="note">Note</label>
-                <input type="text" id="note" name="note">
-              </div>
-            </div>
-
-            <div class="form-grid-equal">
-              <div class="form-field">
-                <label for="start_date">Start Date</label>
-                <input type="date" id="start_date" name="start_date" required>
-              </div>
-
-              <div class="form-field" id="end-date-field" hidden>
-                <label for="end_date">End Date</label>
-                <input type="date" id="end_date" name="end_date">
-              </div>
-            </div>
-
-            <div class="form-field" id="days-value-field" hidden>
-              <label for="days_value">Total Days</label>
-              <input
-                type="number"
-                id="days_value"
-                name="days_value"
-                min="0.25"
-                step="0.25"
-                placeholder="4"
-              >
-            </div>
-
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Save Absence</button>
-            </div>
-          </form>
-        </div>
-      </details>
-    </div>
-  {% endif %}
-
-  <div class="content-card">
+{% macro absence_table(title, rows) %}
+  <div class="content-card" style="margin-bottom: 16px;">
     <div class="staff-status-table-header-row">
-      <h2>
-        {% if current_view == "today" %}
-          Today's Absences
-        {% elif current_view == "upcoming" %}
-          Upcoming Absences
-        {% elif current_view == "all" %}
-          All Absences
-        {% else %}
-          Active Absences
-        {% endif %}
-      </h2>
+      <h2>{{ title }}</h2>
     </div>
 
-    <div class="staff-status-filter-wrap" style="margin-bottom: 16px;">
-      <details class="staff-status-filter-details">
-        <summary>Filters</summary>
-
-        <div class="optional-details-body" style="margin-top: 16px;">
-          <form method="get" class="staff-status-table-filters" id="absence-filter-form">
-            <div class="form-grid-equal">
-              <div class="form-field">
-                <label for="view">View</label>
-                <select id="view" name="view">
-                  <option value="active" {% if current_view == "active" %}selected{% endif %}>Active</option>
-                  <option value="today" {% if current_view == "today" %}selected{% endif %}>Today</option>
-                  <option value="upcoming" {% if current_view == "upcoming" %}selected{% endif %}>Upcoming</option>
-                  <option value="all" {% if current_view == "all" %}selected{% endif %}>All</option>
-                </select>
-              </div>
-
-              <div class="form-field">
-                <label for="absence_type_filter">Absence Type</label>
-                <select id="absence_type_filter" name="absence_type">
-                  <option value="">All Types</option>
-                  {% for absence_type in absence_types %}
-                    <option
-                      value="{{ absence_type }}"
-                      {% if current_absence_types and current_absence_types[0] == absence_type %}selected{% endif %}
-                    >
-                      {{ absence_type|title }}
-                    </option>
-                  {% endfor %}
-                </select>
-              </div>
-
-              <div class="form-field">
-                <label for="absence-user-search">Users</label>
-                <input
-                  type="text"
-                  id="absence-user-search"
-                  class="staff-status-user-filter-search"
-                  placeholder="Type a name"
-                  autocomplete="off"
-                >
-                <div id="absence-user-filter-list" class="staff-status-user-filter-list" hidden>
-                  {% for user in users %}
-                    <label
-                      class="staff-status-user-filter-option"
-                      data-user-label="{{ user.resolved_display_name|lower }}"
-                    >
-                      <input
-                        type="checkbox"
-                        name="user_ids"
-                        value="{{ user.id }}"
-                        {% if user.id|string in current_user_ids %}checked{% endif %}
-                      >
-                      <span>{{ user.resolved_display_name }}</span>
-                    </label>
-                  {% endfor %}
-                </div>
-              </div>
-            </div>
-
-            <input type="hidden" name="sort" value="{{ current_sort }}">
-            <input type="hidden" name="dir" value="{{ current_dir }}">
-
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Apply Filters</button>
-            </div>
-          </form>
-        </div>
-      </details>
-    </div>
-
-    {% set has_active_filters = (current_view and current_view != "active") or current_absence_types or current_user_ids %}
-
-    {% if has_active_filters %}
-      <div class="staff-status-active-filters-bar">
-        <div class="staff-status-active-filters">
-          {% if current_view and current_view != "active" %}
-            <span class="badge-filter">
-              View: {{ current_view|replace('_', ' ')|title }}
-            </span>
-          {% endif %}
-
-          {% for absence_type in current_absence_types %}
-            <span class="badge-filter">
-              Type: {{ absence_type|title }}
-            </span>
-          {% endfor %}
-
-          {% for user in users %}
-            {% if user.id|string in current_user_ids %}
-              <span class="badge-filter">
-                User: {{ user.resolved_display_name }}
-              </span>
-            {% endif %}
-          {% endfor %}
-        </div>
-
-        <div class="staff-status-active-filters-actions">
-          <a
-            href="{{ url_for('staff_status.absences', department_name=department_name) }}"
-            class="staff-status-clear-filters-link"
-          >
-            Clear Filters
-          </a>
-        </div>
-      </div>
-    {% endif %}
-
-    {% if recent_absences %}
+    {% if rows %}
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <th>
-                <a
-                  href="{{ url_for('staff_status.absences', department_name=department_name, view=current_view, absence_type=current_absence_types, user_ids=current_user_ids, sort='user', dir='asc' if current_sort != 'user' or current_dir == 'desc' else 'desc') }}"
-                  class="table-sort-link"
-                >
-                  User {{ sort_arrow('user') }}
-                </a>
-              </th>
-              <th>
-                <a
-                  href="{{ url_for('staff_status.absences', department_name=department_name, view=current_view, absence_type=current_absence_types, user_ids=current_user_ids, sort='absence_type', dir='asc' if current_sort != 'absence_type' or current_dir == 'desc' else 'desc') }}"
-                  class="table-sort-link"
-                >
-                  Type {{ sort_arrow('absence_type') }}
-                </a>
-              </th>
-              <th>
-                <a
-                  href="{{ url_for('staff_status.absences', department_name=department_name, view=current_view, absence_type=current_absence_types, user_ids=current_user_ids, sort='start_date', dir='asc' if current_sort != 'start_date' or current_dir == 'desc' else 'desc') }}"
-                  class="table-sort-link"
-                >
-                  Start {{ sort_arrow('start_date') }}
-                </a>
-              </th>
-              <th>
-                <a
-                  href="{{ url_for('staff_status.absences', department_name=department_name, view=current_view, absence_type=current_absence_types, user_ids=current_user_ids, sort='end_date', dir='asc' if current_sort != 'end_date' or current_dir == 'desc' else 'desc') }}"
-                  class="table-sort-link"
-                >
-                  End {{ sort_arrow('end_date') }}
-                </a>
-              </th>
+              <th>User</th>
+              <th>Type</th>
+              <th>Start</th>
+              <th>End</th>
               <th>Duration</th>
-              <th>
-                <a
-                  href="{{ url_for('staff_status.absences', department_name=department_name, view=current_view, absence_type=current_absence_types, user_ids=current_user_ids, sort='days_value', dir='asc' if current_sort != 'days_value' or current_dir == 'desc' else 'desc') }}"
-                  class="table-sort-link"
-                >
-                  Days {{ sort_arrow('days_value') }}
-                </a>
-              </th>
+              <th>Days</th>
+              <th>Hours</th>
               <th>Entered By</th>
-              <th>
-                <a
-                  href="{{ url_for('staff_status.absences', department_name=department_name, view=current_view, absence_type=current_absence_types, user_ids=current_user_ids, sort='created_at', dir='asc' if current_sort != 'created_at' or current_dir == 'desc' else 'desc') }}"
-                  class="table-sort-link"
-                >
-                  Created {{ sort_arrow('created_at') }}
-                </a>
-              </th>
+              <th>Created</th>
               {% if can_operate %}
                 <th>Actions</th>
               {% endif %}
             </tr>
           </thead>
           <tbody>
-            {% for item in recent_absences %}
+            {% for item in rows %}
               <tr>
                 <td class="table-primary">{{ item.user_display_name or ("User " ~ item.user_id) }}</td>
                 <td>{{ item.absence_type|title }}</td>
                 <td>{{ item.start_date|localdate }}</td>
                 <td>{{ item.end_date|localdate }}</td>
-                <td>{{ item.duration_mode|replace('_', ' ')|title if item.duration_mode else "—" }}</td>
+                <td>{{ item.duration_label }}</td>
                 <td>{{ item.days_value if item.days_value is not none else "—" }}</td>
+                <td>{{ item.hours_value }}</td>
                 <td>{{ item.created_by_display_name }}</td>
                 <td>{{ item.created_at|localtime }}</td>
                 {% if can_operate %}
@@ -322,7 +59,7 @@
 
               {% if can_operate %}
                 <tr id="edit-absence-{{ item.id }}" class="staff-status-edit-row" hidden>
-                  <td colspan="9">
+                  <td colspan="10">
                     <div class="staff-status-edit-card">
                       <form method="post" class="settings-form staff-status-edit-absence-form">
                         <input type="hidden" name="action" value="update_absence">
@@ -343,11 +80,11 @@
                           <div class="form-field">
                             <label>Duration</label>
                             <select name="duration_mode" class="staff-status-edit-duration-mode">
-                              <option value="quarter_day" {% if item.duration_mode == "quarter_day" %}selected{% endif %}>1/4 Day</option>
-                              <option value="half_day" {% if item.duration_mode == "half_day" %}selected{% endif %}>Half Day</option>
-                              <option value="three_quarter_day" {% if item.duration_mode == "three_quarter_day" %}selected{% endif %}>3/4 Day</option>
-                              <option value="full_day" {% if item.duration_mode == "full_day" %}selected{% endif %}>Full Day</option>
-                              <option value="multi_day" {% if item.duration_mode == "multi_day" %}selected{% endif %}>Multiple Days</option>
+                              {% for option in duration_options %}
+                                <option value="{{ option.value }}" {% if item.duration_mode == option.value %}selected{% endif %}>
+                                  {{ option.label }}
+                                </option>
+                              {% endfor %}
                             </select>
                           </div>
                         </div>
@@ -400,11 +137,259 @@
       </div>
     {% else %}
       <div class="empty-state">
-        <h3>No absences found</h3>
+        <h3>No {{ title|lower }} found</h3>
         <p class="muted">Adjust your filters or add a new absence above.</p>
       </div>
     {% endif %}
   </div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-shell">
+  {% include "staff_status/_subnav.html" %}
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Absences</h1>
+      <p class="page-subtitle">Record and review upcoming and past absences for this department.</p>
+    </div>
+  </div>
+
+  {% if not can_operate %}
+    <div class="content-card" style="margin-bottom: 16px;">
+      <p class="muted">You have view-only access for this department.</p>
+    </div>
+  {% endif %}
+
+  {% if can_operate %}
+    <div class="content-card" style="margin-bottom: 16px;">
+      <details class="staff-status-location-create-details">
+        <summary>Add Absence</summary>
+
+        <div class="optional-details-body" style="margin-top: 16px;">
+          <form method="post" class="settings-form staff-status-add-absence-form">
+            <input type="hidden" name="action" value="create_absence">
+
+            <div class="form-grid-equal">
+              <div class="form-field">
+                <label>User</label>
+
+                <select name="user_id" required>
+                  <option value="">Choose user</option>
+
+                  {% for user in users %}
+                    <option value="{{ user.id }}">
+                      {{ user.resolved_display_name }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label>Absence Type</label>
+
+                <select name="absence_type" required>
+                  {% for absence_type in absence_types %}
+                    <option value="{{ absence_type }}">
+                      {{ absence_type|title }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label>Duration</label>
+
+                <select
+                  id="duration_mode"
+                  name="duration_mode"
+                  required
+                >
+                  {% for option in duration_options %}
+                    <option value="{{ option.value }}">
+                      {{ option.label }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid-equal">
+              <div class="form-field">
+                <label>Start Date</label>
+
+                <input
+                  type="date"
+                  name="start_date"
+                  required
+                >
+              </div>
+
+              <div
+                id="end-date-field"
+                class="form-field"
+                hidden
+              >
+                <label>End Date</label>
+
+                <input
+                  type="date"
+                  name="end_date"
+                >
+              </div>
+            </div>
+
+            <div
+              id="days-value-field"
+              class="form-field"
+              hidden
+            >
+              <label>Total Days</label>
+
+              <input
+                type="number"
+                step="0.25"
+                name="days_value"
+              >
+            </div>
+
+            <div class="form-field">
+              <label>Note</label>
+
+              <input
+                type="text"
+                name="note"
+              >
+            </div>
+
+            <div class="form-actions">
+              <button
+                type="submit"
+                class="btn btn-primary"
+              >
+                Save Absence
+              </button>
+            </div>
+          </form>
+        </div>
+      </details>
+    </div>
+  {% endif %}
+
+  <div class="content-card" style="margin-bottom: 16px;">
+    <details class="staff-status-filter-details" {% if current_absence_types or current_user_ids or current_start_date or current_end_date %}open{% endif %}>
+      <summary>Filters & Reports</summary>
+
+      <div class="optional-details-body" style="margin-top: 16px;">
+        <form method="get" class="staff-status-table-filters" id="absence-filter-form">
+
+          <div class="form-grid-equal">
+            <div class="form-field">
+              <label>Absence Type</label>
+              <select name="absence_type">
+                <option value="">All Types</option>
+                {% for absence_type in absence_types %}
+                  <option value="{{ absence_type }}" {% if current_absence_types and current_absence_types[0] == absence_type %}selected{% endif %}>
+                    {{ absence_type|title }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>Start Date</label>
+              <input type="date" name="start_date" value="{{ current_start_date }}">
+            </div>
+
+            <div class="form-field">
+              <label>End Date</label>
+              <input type="date" name="end_date" value="{{ current_end_date }}">
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label>Users</label>
+            <input type="text" id="absence-user-search" placeholder="Type a name">
+            <div id="absence-user-filter-list" hidden>
+              {% for user in users %}
+                <label data-user-label="{{ user.resolved_display_name|lower }}">
+                  <input type="checkbox" name="user_ids" value="{{ user.id }}" {% if user.id|string in current_user_ids %}checked{% endif %}>
+                  {{ user.resolved_display_name }}
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Apply Filters</button>
+
+            <a
+              href="{{ url_for('staff_status.absences', department_name=department_name) }}"
+              class="btn btn-secondary"
+            >
+              Clear Filters
+            </a>
+
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="absence-export-open"
+            >
+              Export
+            </button>
+          </div>
+
+          <p class="muted" style="margin-top: 10px;">
+            Reports include any upcoming and past absences that match the selected filters, date range, and users.
+          </p>
+
+        </form>
+      </div>
+    </details>
+    <div id="absence-export-modal" class="modal-backdrop" hidden>
+
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Export Absence Report</h2>
+        <button type="button" class="modal-close" id="absence-export-close">×</button>
+      </div>
+
+      <p class="muted">
+        This report will include upcoming and past absences that match the filters currently selected on this page.
+      </p>
+
+      <div class="form-actions" style="margin-top: 16px;">
+        <button
+          type="submit"
+          form="absence-filter-form"
+          formaction="{{ url_for('staff_status.absences_export', department_name=department_name) }}"
+          formmethod="get"
+          name="format"
+          value="csv"
+          class="btn btn-success"
+        >
+          Export CSV
+        </button>
+
+        <button
+          type="submit"
+          form="absence-filter-form"
+          formaction="{{ url_for('staff_status.absences_export', department_name=department_name) }}"
+          formmethod="get"
+          name="format"
+          value="pdf"
+          class="btn btn-danger"
+        >
+          Export PDF
+        </button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  {{ absence_table("Upcoming Absences", upcoming_absences) }}
+  {{ absence_table("Past Absences", past_absences) }}
+
 </div>
 {% endblock %}
 

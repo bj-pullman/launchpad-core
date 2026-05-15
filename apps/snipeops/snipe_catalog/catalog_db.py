@@ -65,6 +65,23 @@ def init_db() -> None:
             updated_at TEXT
         )
         """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS catalog_categories (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            raw_json TEXT,
+            updated_at TEXT
+        )
+        """)
+
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS catalog_manufacturers (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            raw_json TEXT,
+            updated_at TEXT
+        )
+        """)
         conn.commit()
 
 
@@ -177,3 +194,10 @@ def list_table(table: str, limit: int = 5000) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(f"SELECT * FROM {table} ORDER BY name LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
+    
+def upsert_categories(rows: list[dict]) -> int:
+    return _upsert_simple("catalog_categories", rows)
+
+
+def upsert_manufacturers(rows: list[dict]) -> int:
+    return _upsert_simple("catalog_manufacturers", rows)

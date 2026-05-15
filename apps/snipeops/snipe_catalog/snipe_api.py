@@ -102,3 +102,101 @@ def fetch_suppliers():
 
 def fetch_depreciations():
     return get_paginated("/api/v1/depreciations")
+
+def post_json(endpoint, payload):
+    settings = _get_snipeops_settings()
+    base_url = settings["base_url"]
+    verify_ssl = settings["verify_ssl"]
+
+    if not base_url:
+        raise ValueError("SnipeOps base URL is missing from settings.")
+
+    url = f"{base_url.rstrip()}{endpoint}"
+
+    response = requests.post(
+        url,
+        headers=_headers(),
+        verify=verify_ssl,
+        timeout=30,
+        json=payload,
+    )
+    response.raise_for_status()
+
+    data = response.json()
+
+    if isinstance(data, dict) and data.get("status") == "error":
+        messages = data.get("messages") or data.get("message") or data
+        raise ValueError(f"Snipe-IT model create failed: {messages}")
+
+    return data
+
+
+def create_model(name, category_id, manufacturer_id=None, model_number=None):
+    payload = {
+        "name": str(name or "").strip(),
+        "category_id": int(category_id),
+    }
+
+    if manufacturer_id:
+        payload["manufacturer_id"] = int(manufacturer_id)
+
+    if model_number:
+        payload["model_number"] = str(model_number).strip()
+
+    if not payload["name"]:
+        raise ValueError("Model name is required.")
+
+    return post_json("/api/v1/models", payload)
+
+def fetch_categories():
+    return get_paginated("/api/v1/categories")
+
+
+def fetch_manufacturers():
+    return get_paginated("/api/v1/manufacturers")
+
+
+def post_json(endpoint, payload):
+    settings = _get_snipeops_settings()
+    base_url = settings["base_url"]
+    verify_ssl = settings["verify_ssl"]
+
+    if not base_url:
+        raise ValueError("SnipeOps base URL is missing from settings.")
+
+    url = f"{base_url.rstrip('/')}{endpoint}"
+
+    response = requests.post(
+        url,
+        headers=_headers(),
+        verify=verify_ssl,
+        timeout=30,
+        json=payload,
+    )
+    response.raise_for_status()
+
+    data = response.json()
+
+    if isinstance(data, dict) and data.get("status") == "error":
+        messages = data.get("messages") or data.get("message") or data
+        raise ValueError(f"Snipe-IT model create failed: {messages}")
+
+    return data
+
+
+def create_model(name, category_id, manufacturer_id=None, model_number=None):
+    payload = {
+        "name": str(name or "").strip(),
+        "category_id": int(category_id),
+    }
+
+    if manufacturer_id:
+        payload["manufacturer_id"] = int(manufacturer_id)
+
+    if model_number:
+        payload["model_number"] = str(model_number).strip()
+
+    if not payload["name"]:
+        raise ValueError("Model name is required.")
+
+    return post_json("/api/v1/models", payload)

@@ -10,14 +10,33 @@
 {% block content %}
 <div class="page-shell finance-shell">
   <div class="finance-subnav">
-    <a href="{{ url_for('finance.department_overview', department_name=department_name) }}"
-       class="{% if active_tab == 'overview' %}active{% endif %}">Overview</a>
-    <a href="{{ url_for('finance.records', department_name=department_name) }}"
-       class="{% if active_tab == 'records' %}active{% endif %}">Records</a>
-    <a href="{{ url_for('finance.vendors', department_name=department_name) }}"
-       class="{% if active_tab == 'vendors' %}active{% endif %}">Vendors</a>
-  </div>
+    <a
+      href="{{ url_for('finance.department_overview', department_name=department_name) }}"
+      class="{% if active_tab == 'overview' %}active{% endif %}"
+    >Overview</a>
 
+    <a
+      href="{{ url_for('finance.records', department_name=department_name) }}"
+      class="{% if active_tab == 'records' %}active{% endif %}"
+    >Records</a>
+
+    <a
+      href="{{ url_for('finance.transactions', department_name=department_name) }}"
+      class="{% if active_tab == 'transactions' %}active{% endif %}"
+    >Transactions</a>
+
+    <a
+      href="{{ url_for('finance.vendors', department_name=department_name) }}"
+      class="{% if active_tab == 'vendors' %}active{% endif %}"
+    >Vendors</a>
+
+    {% if can_view_budget %}
+      <a
+        href="{{ url_for('finance.budget', department_name=department_name) }}"
+        class="{% if active_tab == 'budget' %}active{% endif %}"
+      >Budget</a>
+    {% endif %}
+  </div>
   <div class="page-header">
     <div>
       <h1>{{ department_name }} Archived Vendors</h1>
@@ -38,6 +57,30 @@
        class="{% if vendor_tab == 'archived' %}active{% endif %}">Archived</a>
     <a href="{{ url_for('finance.vendors_deleted', department_name=department_name) }}"
        class="{% if vendor_tab == 'deleted' %}active{% endif %}">Deleted</a>
+  </div>
+
+  <div class="content-card finance-filter-card">
+    <form method="get" class="finance-vendor-filters">
+      <div class="form-field">
+        <label>Search Vendors</label>
+        <input
+          type="text"
+          name="q"
+          value="{{ selected_vendor_q or '' }}"
+          placeholder="Vendor name, code, email, website..."
+        >
+      </div>
+
+      <div class="finance-filter-actions">
+        <button class="btn btn-primary">Filter</button>
+        <a
+          class="btn btn-ghost"
+          href="{% if vendor_tab == 'archived' %}{{ url_for('finance.vendors_archived', department_name=department_name) }}{% elif vendor_tab == 'deleted' %}{{ url_for('finance.vendors_deleted', department_name=department_name) }}{% else %}{{ url_for('finance.vendors', department_name=department_name) }}{% endif %}"
+        >
+          Reset
+        </a>
+      </div>
+    </form>
   </div>
 
   <div class="content-card">
@@ -75,6 +118,12 @@
       {% endif %}
 
       <div class="table-wrap">
+        {% if vendor_page %}
+          <p class="finance-pagination-meta finance-pagination-meta-top">
+            Showing page {{ vendor_page.page }} of {{ vendor_page.total_pages }}
+            · {{ vendor_page.total }} vendor(s)
+          </p>
+        {% endif %}
         <table class="data-table">
           <thead>
             <tr>
@@ -112,6 +161,34 @@
           </tbody>
         </table>
       </div>
+      {% if vendor_page and vendor_page.total_pages > 1 %}
+        <div class="finance-pagination">
+          <div class="finance-pagination-meta">
+            Showing page {{ vendor_page.page }} of {{ vendor_page.total_pages }}
+            · {{ vendor_page.total }} vendor(s)
+          </div>
+
+          <div class="finance-pagination-actions">
+            {% if vendor_page.has_prev %}
+              <a
+                class="btn"
+                href="{% if vendor_tab == 'archived' %}{{ url_for('finance.vendors_archived', department_name=department_name, q=selected_vendor_q or '', page=vendor_page.prev_page) }}{% elif vendor_tab == 'deleted' %}{{ url_for('finance.vendors_deleted', department_name=department_name, q=selected_vendor_q or '', page=vendor_page.prev_page) }}{% else %}{{ url_for('finance.vendors', department_name=department_name, q=selected_vendor_q or '', page=vendor_page.prev_page) }}{% endif %}"
+              >
+                Previous
+              </a>
+            {% endif %}
+
+            {% if vendor_page.has_next %}
+              <a
+                class="btn btn-primary"
+                href="{% if vendor_tab == 'archived' %}{{ url_for('finance.vendors_archived', department_name=department_name, q=selected_vendor_q or '', page=vendor_page.next_page) }}{% elif vendor_tab == 'deleted' %}{{ url_for('finance.vendors_deleted', department_name=department_name, q=selected_vendor_q or '', page=vendor_page.next_page) }}{% else %}{{ url_for('finance.vendors', department_name=department_name, q=selected_vendor_q or '', page=vendor_page.next_page) }}{% endif %}"
+              >
+                Next
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
     {% else %}
       <div class="finance-empty">
         <h3>No archived vendors</h3>
