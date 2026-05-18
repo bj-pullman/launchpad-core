@@ -35,6 +35,7 @@ function initFinanceUI() {
   initTermCalculation();
   initFinanceBudgetChart();
   initFinanceTransactionBulkSelection();
+  initFinanceSettingsModal();
 }
 
 function initVendorFormToggle() {
@@ -346,5 +347,187 @@ function initFinanceTransactionBulkSelection() {
       "finance-transactions-bulk-ignore-ids",
       "finance-transactions-bulk-review-ids",
     ],
+  });
+}
+
+function initFinanceSettingsModal() {
+  const params = new URLSearchParams(window.location.search);
+  const openModalId = params.get("open_modal");
+  const openTab = params.get("open_tab");
+  const openPanelId = params.get("open_panel");
+
+  const fyStartDate = document.getElementById("fy_start_date");
+  const fyEndDate = document.getElementById("fy_end_date");
+
+  if (fyStartDate && fyEndDate) {
+    fyStartDate.addEventListener("change", function () {
+      if (!fyStartDate.value) {
+        return;
+      }
+
+      const startDate = new Date(`${fyStartDate.value}T00:00:00`);
+
+      if (Number.isNaN(startDate.getTime())) {
+        return;
+      }
+
+      const endDate = new Date(startDate.getTime());
+      endDate.setFullYear(endDate.getFullYear() + 1);
+      endDate.setDate(endDate.getDate() - 1);
+
+      const year = endDate.getFullYear();
+      const month = String(endDate.getMonth() + 1).padStart(2, "0");
+      const day = String(endDate.getDate()).padStart(2, "0");
+
+      fyEndDate.value = `${year}-${month}-${day}`;
+    });
+  }
+
+  if (openModalId) {
+    const modal = document.getElementById(openModalId);
+
+    if (modal) {
+      modal.hidden = false;
+      document.body.classList.add("finance-modal-open");
+
+      if (openTab) {
+        modal
+          .querySelectorAll("[data-finance-settings-tab]")
+          .forEach((button) => button.classList.remove("active"));
+
+        modal
+          .querySelectorAll("[data-finance-settings-panel]")
+          .forEach((panel) => panel.classList.remove("active"));
+
+        const tabButton = modal.querySelector(
+          `[data-finance-settings-tab="${openTab}"]`
+        );
+
+        const tabPanel = modal.querySelector(
+          `[data-finance-settings-panel="${openTab}"]`
+        );
+
+        if (tabButton) tabButton.classList.add("active");
+        if (tabPanel) tabPanel.classList.add("active");
+      }
+
+      if (openPanelId) {
+        const checklistPanel = document.getElementById(openPanelId);
+
+        if (checklistPanel) {
+          checklistPanel.hidden = false;
+        }
+      }
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    const openButton = event.target.closest("[data-finance-modal-open]");
+
+    if (openButton) {
+      const modalId = openButton.getAttribute("data-finance-modal-open");
+      const modal = document.getElementById(modalId);
+
+      if (modal) {
+        modal.hidden = false;
+        document.body.classList.add("finance-modal-open");
+      }
+
+      return;
+    }
+
+    const closeButton = event.target.closest("[data-finance-modal-close]");
+
+    if (closeButton) {
+      const modal = closeButton.closest(".finance-modal-backdrop");
+
+      if (modal) {
+        modal.hidden = true;
+        document.body.classList.remove("finance-modal-open");
+      }
+
+      return;
+    }
+
+    if (event.target.classList.contains("finance-modal-backdrop")) {
+      event.target.hidden = true;
+      document.body.classList.remove("finance-modal-open");
+      return;
+    }
+
+    const tabButton = event.target.closest("[data-finance-settings-tab]");
+
+    if (tabButton) {
+      const modal = tabButton.closest(".finance-modal");
+      const tabName = tabButton.getAttribute("data-finance-settings-tab");
+
+      modal
+        .querySelectorAll("[data-finance-settings-tab]")
+        .forEach((button) => button.classList.remove("active"));
+
+      modal
+        .querySelectorAll("[data-finance-settings-panel]")
+        .forEach((panel) => panel.classList.remove("active"));
+
+      tabButton.classList.add("active");
+
+      const panel = modal.querySelector(
+        `[data-finance-settings-panel="${tabName}"]`
+      );
+
+      if (panel) {
+        panel.classList.add("active");
+      }
+
+      return;
+    }
+
+    const checklistOpenButton = event.target.closest("[data-finance-checklist-open]");
+
+    if (checklistOpenButton) {
+      const panelId = checklistOpenButton.getAttribute("data-finance-checklist-open");
+      const panel = document.getElementById(panelId);
+
+      if (panel) {
+        panel.hidden = !panel.hidden;
+
+        if (!panel.hidden) {
+          setTimeout(function () {
+            panel.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          }, 100);
+        }
+      }
+
+      return;
+    }
+
+    const checklistCloseButton = event.target.closest("[data-finance-checklist-close]");
+
+    if (checklistCloseButton) {
+      const panel = checklistCloseButton.closest(".finance-checklist-panel");
+
+      if (panel) {
+        panel.hidden = true;
+      }
+
+      return;
+    }
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    document
+      .querySelectorAll(".finance-modal-backdrop:not([hidden])")
+      .forEach((modal) => {
+        modal.hidden = true;
+      });
+
+    document.body.classList.remove("finance-modal-open");
   });
 }

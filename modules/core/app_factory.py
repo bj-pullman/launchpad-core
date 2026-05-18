@@ -1,5 +1,8 @@
 import os
+import logging
+from logging.handlers import RotatingFileHandler
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, request, session, url_for
@@ -42,6 +45,69 @@ from tasks.job_runs import init_job_runs_db
 load_dotenv()
 
 
+def configure_logging():
+    log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
+
+    def get_logging_timezone():
+        try:
+            return get_setting("general.timezone", "America/Chicago") or "America/Chicago"
+        except Exception:
+            return "America/Chicago"
+
+    class TimezoneFormatter(logging.Formatter):
+        def formatTime(self, record, datefmt=None):
+            tz_name = get_logging_timezone()
+
+            try:
+                tz = ZoneInfo(tz_name)
+                dt = datetime.fromtimestamp(record.created, tz)
+            except Exception:
+                dt = datetime.fromtimestamp(record.created)
+
+            if datefmt:
+                return dt.strftime(datefmt)
+
+            return dt.isoformat()
+
+    formatter = TimezoneFormatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        "%Y-%m-%d %H:%M:%S %Z",
+    )
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    log_dir = os.getenv("LOG_DIR") or os.path.join(base_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    file_handler = RotatingFileHandler(
+        os.path.join(log_dir, "launchpad.log"),
+        maxBytes=10_000_000,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
+
+    logging.getLogger("waitress").setLevel(log_level)
+    logging.getLogger("waitress.queue").setLevel(logging.WARNING)
+    logging.getLogger("apscheduler").setLevel(logging.INFO)
+
+    logging.info("Logging initialized")
+    
+configure_logging()
+
 def str_to_bool(value, default=False):
     if value is None:
         return default
@@ -62,6 +128,8 @@ def create_app() -> Flask:
         static_folder="../../static",
     )
 
+    app.logger.info("Starting Launchpad application")
+
     # Core base config
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
     app.config["SYSTEM_TIMEZONE"] = os.getenv("SYSTEM_TIMEZONE", "UTC")
@@ -81,7 +149,7 @@ def create_app() -> Flask:
 
     # Seed Finance defaults (safe/idempotent)
     ensure_efinance_daily_import_profile()
-    
+
     init_api_keys_db()
 
     seed_permissions()
@@ -91,7 +159,7 @@ def create_app() -> Flask:
     # Authentication settings
     # DB-backed source of truth
     # -----------------------------
-    
+
     # URL Config
     app.config["PREFERRED_URL_SCHEME"] = os.getenv("PREFERRED_URL_SCHEME", "https")
 
@@ -133,7 +201,9 @@ def create_app() -> Flask:
     app.config["GOOGLE_OIDC_SCOPES"] = "openid email profile"
     app.config["GOOGLE_OIDC_REDIRECT_URI"] = get_setting(
         "auth.google_oidc.redirect_uri",
-        f"{app.config['general.public_base_url']}/auth/google/callback" if app.config.get("general.public_base_url") else "",
+        f"{app.config['general.public_base_url']}/auth/google/callback"
+        if app.config.get("general.public_base_url")
+        else "",
     )
     app.config["AUTH_GOOGLE_HOSTED_DOMAIN"] = get_setting(
         "auth.google_oidc.hosted_domain", ""
@@ -248,7 +318,7 @@ def create_app() -> Flask:
     app.register_blueprint(staff_status_bp)
     app.register_blueprint(finance_bp)
     app.register_blueprint(finance_api_bp)
-    
+
     should_start_scheduler = True
 
     if app.debug:
@@ -320,7 +390,7 @@ def create_app() -> Flask:
     @app.template_filter("localtime")
     def localtime_filter(value):
         return format_system_time(value)
-    
+
     @app.template_filter("localdate")
     def localdate_filter(value):
         if not value:
@@ -388,5 +458,5 @@ def create_app() -> Flask:
             "current_user_theme": current_user_theme,
         }
 
+    app.logger.info("Launchpad application startup complete")
     return app
-

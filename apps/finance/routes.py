@@ -82,6 +82,22 @@ from .service import (
     bulk_update_transactions_review_status,
 )
 
+from .budget_service import (
+    get_budget_definition_summary,
+    import_budget_definitions,
+)
+
+from .fiscal_year_service import (
+    create_fiscal_year,
+    get_fiscal_year_setup_summary,
+    list_fiscal_year_checklist,
+    set_checklist_item_state,
+    update_fiscal_year_status,
+    activate_fiscal_year_after_start_checklist,
+    close_fiscal_year_after_close_checklist,
+    get_fiscal_year_workflow_context,
+)
+
 @bp.route("/")
 @login_required
 def index():
@@ -139,6 +155,22 @@ def department_overview(department_name: str):
 
     summary = get_finance_dashboard_summary(department_name)
 
+    fiscal_year_setup = get_fiscal_year_workflow_context()
+
+    start_checklists = {}
+    close_checklists = {}
+
+    for year in fiscal_year_setup.get("fiscal_years", []):
+        fiscal_year_id = year["id"]
+        start_checklists[fiscal_year_id] = list_fiscal_year_checklist(
+            fiscal_year_id,
+            "start_year",
+        )
+        close_checklists[fiscal_year_id] = list_fiscal_year_checklist(
+            fiscal_year_id,
+            "close_year",
+        )
+
     return render_template(
         "finance/department_overview.html",
         department_name=department_name,
@@ -150,6 +182,9 @@ def department_overview(department_name: str):
             "Budget access is separate and must be assigned explicitly."
         ),
         can_manage=can_manage_department(user_id, department_name),
+        fiscal_year_setup=fiscal_year_setup,
+        start_checklists=start_checklists,
+        close_checklists=close_checklists,
     )
 
 
@@ -1283,11 +1318,14 @@ def imports(department_name: str):
             return redirect(url_for("finance.imports", department_name=department_name))
 
     return render_template(
-        "finance/imports_upload.html",
+        "finance/imports.html",
         department_name=department_name,
         active_tab="overview",
         import_tab="upload",
         profiles=list_import_profiles(),
+        import_runs=list_import_runs(),
+        import_sources=list_import_sources(),
+        budget_definition_summary=get_budget_definition_summary(),
         can_manage=can_manage,
     )
 
@@ -1349,6 +1387,80 @@ def imports_sftp(department_name: str):
         import_tab="sftp",
         import_sources=list_import_sources(),
         can_manage=can_manage_department(user_id, department_name),
+    )
+
+@bp.route("/<department_name>/imports/budget-definitions", methods=["GET", "POST"])
+@login_required
+def imports_budget_definitions(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    can_manage = can_manage_department(user_id, department_name)
+
+    if request.method == "POST":
+        if not can_manage:
+            abort(403)
+
+        fiscal_year = (request.form.get("fiscal_year") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+        upload = request.files.get("definition_file")
+
+        if not fiscal_year:
+            flash("Fiscal year is required.", "error")
+            return redirect(
+                url_for("finance.imports_budget_definitions", department_name=department_name)
+            )
+
+        if not upload or not upload.filename:
+            flash("Please choose a Budget Definitions file to upload.", "error")
+            return redirect(
+                url_for("finance.imports_budget_definitions", department_name=department_name)
+            )
+
+        file_bytes = upload.read()
+
+        if not file_bytes:
+            flash("The selected Budget Definitions file was empty.", "error")
+            return redirect(
+                url_for("finance.imports_budget_definitions", department_name=department_name)
+            )
+
+        try:
+            stored_filename = save_import_upload(upload.filename, file_bytes)
+
+            result = import_budget_definitions(
+                stored_filename=stored_filename,
+                original_filename=upload.filename,
+                fiscal_year=fiscal_year,
+                uploaded_by_user_id=user_id,
+                notes=notes,
+            )
+
+            flash(
+                f"Budget Definitions imported for {result['fiscal_year']}. "
+                f"Imported {result['imported_count']} row(s), "
+                f"skipped {result['skipped_count']} row(s).",
+                "success",
+            )
+
+        except Exception as exc:
+            flash(f"Budget Definitions import failed: {exc}", "error")
+
+        return redirect(
+            url_for("finance.imports_budget_definitions", department_name=department_name)
+        )
+
+    return render_template(
+        "finance/imports_budget_definitions.html",
+        department_name=department_name,
+        active_tab="overview",
+        import_tab="budget_definitions",
+        summary=get_budget_definition_summary(),
+        can_manage=can_manage,
     )
 
 @bp.route("/<department_name>/imports/runs/<int:run_id>/mapping", methods=["GET", "POST"])
@@ -1669,6 +1781,268 @@ def export_import_errors(run_id: int):
     response = Response(csv_data, mimetype="text/csv")
     response.headers["Content-Disposition"] = f"attachment; filename=finance-import-errors-run-{run_id}.csv"
     return response
+
+@bp.route("/<department_name>/fiscal-years", methods=["GET", "POST"])
+@login_required
+def fiscal_years(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    if request.method == "POST":
+        year_number = request.form.get("year_number", type=int)
+        start_date = (request.form.get("start_date") or "").strip()
+        end_date = (request.form.get("end_date") or "").strip()
+        friendly_name = (request.form.get("friendly_name") or "").strip()
+
+        make_current = False
+        make_next = True
+
+        if not year_number or not start_date or not end_date:
+            flash("Fiscal year, start date, and end date are required.", "error")
+            return redirect(
+                url_for("finance.department_overview", department_name=department_name)
+                + "?open_modal=finance-settings-modal&open_tab=start-year"
+            )
+
+        try:
+            fiscal_year_id = create_fiscal_year(
+                year_number=year_number,
+                start_date=start_date,
+                end_date=end_date,
+                friendly_name=friendly_name,
+                make_current=make_current,
+                make_next=make_next,
+                created_by_user_id=user_id,
+            )
+
+            flash("Fiscal year created successfully.", "success")
+
+            return redirect(
+                url_for("finance.department_overview", department_name=department_name)
+                + (
+                    "?open_modal=finance-settings-modal"
+                    "&open_tab=start-year"
+                    f"&open_panel=start-checklist-{fiscal_year_id}"
+                )
+            )
+
+        except Exception as exc:
+            flash(f"Fiscal year setup failed: {exc}", "error")
+
+            return redirect(
+                url_for("finance.department_overview", department_name=department_name)
+                + "?open_modal=finance-settings-modal&open_tab=start-year"
+            )
+
+    return redirect(
+        url_for("finance.department_overview", department_name=department_name)
+        + "?open_modal=finance-settings-modal&open_tab=start-year"
+    )
+
+
+@bp.route("/<department_name>/fiscal-years/<int:fiscal_year_id>/status", methods=["POST"])
+@login_required
+def fiscal_year_status_update(department_name: str, fiscal_year_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    status = (request.form.get("status") or "").strip()
+    is_current = request.form.get("is_current") == "1"
+    is_next = request.form.get("is_next") == "1"
+
+    try:
+        update_fiscal_year_status(
+            fiscal_year_id=fiscal_year_id,
+            status=status,
+            is_current=is_current,
+            is_next=is_next,
+        )
+
+        flash("Fiscal year updated successfully.", "success")
+
+    except Exception as exc:
+        flash(f"Fiscal year update failed: {exc}", "error")
+
+    return redirect(url_for("finance.fiscal_years", department_name=department_name))
+
+
+@bp.route("/<department_name>/fiscal-years/<int:fiscal_year_id>/checklist/<string:checklist_type>")
+@login_required
+def fiscal_year_checklist(department_name: str, fiscal_year_id: int, checklist_type: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    if checklist_type not in {"start_year", "close_year"}:
+        abort(404)
+
+    return render_template(
+        "finance/fiscal_year_checklist.html",
+        department_name=department_name,
+        active_tab="overview",
+        fiscal_year_id=fiscal_year_id,
+        checklist_type=checklist_type,
+        checklist_items=list_fiscal_year_checklist(fiscal_year_id, checklist_type),
+        can_manage=True,
+    )
+
+
+@bp.route("/<department_name>/fiscal-years/checklist-items/<int:checklist_item_id>", methods=["POST"])
+@login_required
+def fiscal_year_checklist_item_update(department_name: str, checklist_item_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    fiscal_year_id = request.form.get("fiscal_year_id", type=int)
+    checklist_type = (request.form.get("checklist_type") or "").strip()
+    action = (request.form.get("action") or "").strip()
+
+    try:
+        if action == "complete":
+            set_checklist_item_state(
+                checklist_item_id=checklist_item_id,
+                complete=True,
+                skipped=False,
+                user_id=user_id,
+            )
+            flash("Checklist item marked complete.", "success")
+
+        elif action == "skip":
+            set_checklist_item_state(
+                checklist_item_id=checklist_item_id,
+                complete=False,
+                skipped=True,
+                user_id=user_id,
+            )
+            flash("Checklist item skipped.", "success")
+
+        elif action == "reset":
+            set_checklist_item_state(
+                checklist_item_id=checklist_item_id,
+                complete=False,
+                skipped=False,
+                user_id=user_id,
+            )
+            flash("Checklist item reset.", "success")
+
+        else:
+            flash("Choose a valid checklist action.", "error")
+
+    except Exception as exc:
+        flash(f"Checklist update failed: {exc}", "error")
+
+    return_to = (request.form.get("return_to") or "").strip()
+    open_modal = (request.form.get("open_modal") or "").strip()
+    open_panel = (request.form.get("open_panel") or "").strip()
+    open_tab = (request.form.get("open_tab") or "").strip()
+
+    if return_to == "department_overview":
+        return redirect(
+            url_for("finance.department_overview", department_name=department_name)
+            + f"?open_modal={open_modal}&open_tab={open_tab}&open_panel={open_panel}"
+        )
+
+    return redirect(
+        url_for(
+            "finance.fiscal_year_checklist",
+            department_name=department_name,
+            fiscal_year_id=fiscal_year_id,
+            checklist_type=checklist_type,
+        )
+    )
+
+@bp.route("/<department_name>/fiscal-years/<int:fiscal_year_id>/activate", methods=["POST"])
+@login_required
+def fiscal_year_activate(department_name: str, fiscal_year_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    try:
+        activate_fiscal_year_after_start_checklist(
+            fiscal_year_id=fiscal_year_id,
+        )
+
+        flash("Fiscal year activated successfully.", "success")
+
+    except Exception as exc:
+        flash(f"Fiscal year activation failed: {exc}", "error")
+
+    return redirect(
+        url_for("finance.department_overview", department_name=department_name)
+        + (
+            "?open_modal=finance-settings-modal"
+            "&open_tab=start-year"
+            f"&open_panel=start-checklist-{fiscal_year_id}"
+        )
+    )
+
+
+@bp.route("/<department_name>/fiscal-years/<int:fiscal_year_id>/close", methods=["POST"])
+@login_required
+def fiscal_year_close(department_name: str, fiscal_year_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    try:
+        close_fiscal_year_after_close_checklist(
+            fiscal_year_id=fiscal_year_id,
+        )
+
+        flash("Fiscal year closed successfully.", "success")
+
+    except Exception as exc:
+        flash(f"Fiscal year close failed: {exc}", "error")
+
+    return redirect(
+        url_for("finance.department_overview", department_name=department_name)
+        + (
+            "?open_modal=finance-settings-modal"
+            "&open_tab=close-year"
+            f"&open_panel=close-checklist-{fiscal_year_id}"
+        )
+    )
+
 
 @bp.route("/<department_name>/budget")
 @login_required
