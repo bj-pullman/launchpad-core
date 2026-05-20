@@ -80,6 +80,13 @@ from .service import (
     get_transaction_by_id,
     mark_transaction_promoted,
     bulk_update_transactions_review_status,
+    list_renewal_records_for_department,
+    validate_vendors_import,
+    execute_vendors_import,
+    approve_category_import_suggestion,
+    get_budget_dashboard_for_department,
+    save_budget_target_for_department,
+    bulk_promote_transactions_to_records,
 )
 
 from .budget_service import (
@@ -216,6 +223,44 @@ def records(department_name: str):
         "finance/records.html",
         department_name=department_name,
         active_tab="records",
+        records=record_page["rows"],
+        record_page=record_page,
+        categories=list_categories(),
+        selected_q=q,
+        selected_vendor_q=vendor_q,
+        selected_category_id=category_id,
+        can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route("/<department_name>/renewals")
+@login_required
+def renewals(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    q = (request.args.get("q") or "").strip()
+    vendor_q = (request.args.get("vendor_q") or "").strip()
+    category_id = request.args.get("category_id", type=int)
+    page = request.args.get("page", default=1, type=int)
+
+    record_page = list_renewal_records_for_department(
+        department_name,
+        q=q,
+        category_id=category_id,
+        vendor_q=vendor_q,
+        page=page,
+        per_page=100,
+    )
+
+    return render_template(
+        "finance/renewals.html",
+        department_name=department_name,
+        active_tab="renewals",
         records=record_page["rows"],
         record_page=record_page,
         categories=list_categories(),
@@ -1316,6 +1361,11 @@ def imports(department_name: str):
         except Exception as exc:
             flash(f"Import upload failed: {exc}", "error")
             return redirect(url_for("finance.imports", department_name=department_name))
+        
+    selected_import_type = (request.args.get("import_type") or "").strip().lower()
+
+    if selected_import_type not in {"records", "vendors", "transactions"}:
+        selected_import_type = ""
 
     return render_template(
         "finance/imports.html",
@@ -1327,6 +1377,7 @@ def imports(department_name: str):
         import_sources=list_import_sources(),
         budget_definition_summary=get_budget_definition_summary(),
         can_manage=can_manage,
+        selected_import_type=selected_import_type,
     )
 
 
@@ -1461,6 +1512,40 @@ def imports_budget_definitions(department_name: str):
         import_tab="budget_definitions",
         summary=get_budget_definition_summary(),
         can_manage=can_manage,
+    )
+
+@bp.route(
+    "/<department_name>/imports/runs/<int:run_id>/category-suggestions/<int:suggestion_id>/approve",
+    methods=["POST"],
+)
+@login_required
+def imports_category_suggestion_approve(department_name: str, run_id: int, suggestion_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    run = get_import_run_by_id(run_id)
+    if not run:
+        abort(404)
+
+    try:
+        approve_category_import_suggestion(suggestion_id)
+        flash("Category suggestion approved. The import validation has been refreshed.", "success")
+    except Exception as exc:
+        flash(f"Category suggestion approval failed: {exc}", "error")
+
+    return redirect(
+        url_for(
+            "finance.imports_validate",
+            department_name=department_name,
+            run_id=run_id,
+        )
     )
 
 @bp.route("/<department_name>/imports/runs/<int:run_id>/mapping", methods=["GET", "POST"])
@@ -1681,8 +1766,14 @@ def imports_validate(department_name: str, run_id: int):
             default_department_name=department_name,
             preview_limit=20,
         )
+    elif run["import_type"] == "vendors":
+        validation = validate_vendors_import(
+            run_id=run_id,
+            profile_id=profile_id,
+            preview_limit=20,
+        )
     else:
-        flash("Vendor validation is next.", "error")
+        flash("Unsupported import type.", "error")
         return redirect(url_for("finance.imports", department_name=department_name))
 
     if request.method == "POST":
@@ -1694,6 +1785,22 @@ def imports_validate(department_name: str, run_id: int):
             return redirect(
                 url_for("finance.imports_validate", department_name=department_name, run_id=run_id)
             )
+        
+        if run["import_type"] == "vendors":
+            result = execute_vendors_import(
+                run_id=run_id,
+                profile_id=profile_id,
+                created_by_user_id=user_id,
+            )
+
+            flash(
+                f"Vendor import finished. Created {result['created_rows']} vendor(s), "
+                f"updated {result['updated_rows']} vendor(s), "
+                f"skipped {result['skipped_rows']}, errors {result['error_rows']}.",
+                "success",
+            )
+
+            return redirect(url_for("finance.vendors", department_name=department_name))
 
         try:
             if run["import_type"] == "transactions":
@@ -2044,7 +2151,7 @@ def fiscal_year_close(department_name: str, fiscal_year_id: int):
     )
 
 
-@bp.route("/<department_name>/budget")
+@bp.route("/<department_name>/budget", methods=["GET", "POST"])
 @login_required
 def budget(department_name: str):
     user_id = session.get("user_id")
@@ -2054,30 +2161,78 @@ def budget(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
-    if not can_access_budget_department(user_id, department_name):
+    if not has_budget_view(user_id):
         abort(403)
 
-    year = request.args.get("year", type=int)
-    group_by = (request.args.get("group_by") or "category").strip().lower()
-    q = (request.args.get("q") or "").strip()
+    can_manage = can_manage_department(user_id, department_name)
 
-    if group_by not in {"category", "vendor", "month"}:
-        group_by = "category"
+    if request.method == "POST":
+        if not can_manage:
+            abort(403)
+
+        fiscal_year = request.form.get("fiscal_year", type=int)
+        total_budget = (request.form.get("total_budget") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+
+        try:
+            save_budget_target_for_department(
+                department_name=department_name,
+                fiscal_year=fiscal_year,
+                total_budget=total_budget,
+                notes=notes,
+                created_by_user_id=user_id,
+            )
+
+            flash("Budget settings saved successfully.", "success")
+
+        except Exception as exc:
+            flash(f"Budget settings failed: {exc}", "error")
+
+        return redirect(
+            url_for(
+                "finance.budget",
+                department_name=department_name,
+                year=fiscal_year,
+            )
+        )
 
     year_options = get_budget_year_options_for_department(department_name)
-    if not year and year_options:
-        year = year_options[0]
 
-    summary = get_budget_summary_for_department(
+    selected_year = request.args.get("year", type=int)
+    if not selected_year:
+        selected_year = year_options[0] if year_options else None
+
+    selected_group_by = (request.args.get("group_by") or "category").strip().lower()
+
+    allowed_group_by = {
+        "category",
+        "vendor",
+        "month",
+        "record_type",
+        "status",
+    }
+
+    if selected_group_by not in allowed_group_by:
+        selected_group_by = "category"
+
+    q = (request.args.get("q") or "").strip()
+
+    budget_summary = get_budget_summary_for_department(
         department_name=department_name,
-        year=year,
+        year=selected_year,
         q=q,
     )
 
-    breakdown = get_budget_breakdown_for_department(
+    budget_breakdown = get_budget_breakdown_for_department(
         department_name=department_name,
-        year=year,
-        group_by=group_by,
+        year=selected_year,
+        group_by=selected_group_by,
+        q=q,
+    )
+
+    budget_dashboard = get_budget_dashboard_for_department(
+        department_name=department_name,
+        year=selected_year,
         q=q,
     )
 
@@ -2085,15 +2240,16 @@ def budget(department_name: str):
         "finance/budget.html",
         department_name=department_name,
         active_tab="budget",
-        can_manage=can_manage_department(user_id, department_name),
-        can_view_budget=has_budget_view(user_id),
-        budget_summary=summary,
-        budget_breakdown=breakdown,
-        selected_year=year,
+        can_manage=can_manage,
+        can_view_budget=True,
         year_options=year_options,
-        selected_group_by=group_by,
-        search_query=q,
-    )       
+        selected_year=selected_year,
+        selected_group_by=selected_group_by,
+        selected_q=q,
+        budget_summary=budget_summary,
+        budget_breakdown=budget_breakdown,
+        budget_dashboard=budget_dashboard,
+    )      
 
 @bp.route("/<department_name>/transactions")
 @login_required
@@ -2250,7 +2406,27 @@ def transactions_bulk_review_status(department_name: str):
         if item.strip().isdigit()
     ]
 
-    if action == "ignore":
+    if not transaction_ids:
+        flash("No transactions were selected.", "error")
+        return redirect(url_for("finance.transactions", department_name=department_name))
+
+    if action == "promote":
+        result = bulk_promote_transactions_to_records(
+            transaction_ids=transaction_ids,
+            department_name=department_name,
+            created_by_user_id=user_id,
+        )
+
+        if result["created"]:
+            flash(f"{result['created']} transaction(s) moved to Finance Records.", "success")
+
+        if result["skipped"]:
+            flash(f"{result['skipped']} transaction(s) skipped.", "error")
+
+            for error in result.get("errors", [])[:10]:
+                flash(error, "error")
+
+    elif action == "ignore":
         updated = bulk_update_transactions_review_status(
             transaction_ids=transaction_ids,
             department_name=department_name,

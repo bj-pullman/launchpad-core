@@ -9,34 +9,8 @@
 
 {% block content %}
 <div class="page-shell finance-shell">
-  <div class="finance-subnav">
-    <a
-      href="{{ url_for('finance.department_overview', department_name=department_name) }}"
-      class="{% if active_tab == 'overview' %}active{% endif %}"
-    >Overview</a>
 
-    <a
-      href="{{ url_for('finance.records', department_name=department_name) }}"
-      class="{% if active_tab == 'records' %}active{% endif %}"
-    >Records</a>
-
-    <a
-      href="{{ url_for('finance.transactions', department_name=department_name) }}"
-      class="{% if active_tab == 'transactions' %}active{% endif %}"
-    >Transactions</a>
-
-    <a
-      href="{{ url_for('finance.vendors', department_name=department_name) }}"
-      class="{% if active_tab == 'vendors' %}active{% endif %}"
-    >Vendors</a>
-
-    {% if can_view_budget %}
-      <a
-        href="{{ url_for('finance.budget', department_name=department_name) }}"
-        class="{% if active_tab == 'budget' %}active{% endif %}"
-      >Budget</a>
-    {% endif %}
-  </div>
+{% include "finance/_finance_tabs.html" %}
 
   <div class="page-header">
     <div>
@@ -45,7 +19,7 @@
     </div>
     {% if can_manage %}
       <div class="page-header-actions">
-        <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name) }}">Import</a>
+        <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name, import_type='records') }}">Import</a>
         <a class="btn btn-primary" href="{{ url_for('finance.record_create', department_name=department_name) }}">Add Record</a>
       </div>
     {% endif %}

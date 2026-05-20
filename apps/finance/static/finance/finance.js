@@ -36,6 +36,7 @@ function initFinanceUI() {
   initFinanceBudgetChart();
   initFinanceTransactionBulkSelection();
   initFinanceSettingsModal();
+  initializeFinanceImportTypeHelp();
 }
 
 function initVendorFormToggle() {
@@ -314,27 +315,379 @@ function initFinanceBulkSelection(config) {
 }
 
 function initFinanceBudgetChart() {
-  const canvas = document.getElementById("finance-budget-chart");
-  const data = window.financeBudgetData;
+  const dataEl = document.getElementById("finance-budget-dashboard-data");
+  const dashboard = document.getElementById("finance-budget-chart-dashboard");
+  const toggles = document.querySelectorAll("[data-budget-chart-toggle]");
 
-  if (!canvas || !data || !window.Chart) return;
+  if (!dataEl || !dashboard || !window.ApexCharts) {
+    return;
+  }
 
-  new Chart(canvas, {
-    type: data.groupBy === "month" ? "line" : "bar",
-    data: {
-      labels: data.labels,
-      datasets: [
-        {
-          label: "Amount Spent",
-          data: data.values
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false
+  let chartData = {};
+
+  try {
+    chartData = JSON.parse(dataEl.textContent || "{}");
+  } catch (error) {
+    console.error("Failed to parse budget dashboard data.", error);
+    return;
+  }
+
+  const chartLabels = {
+    category: "Category",
+    vendor: "Vendor",
+    month: "Monthly Trend",
+    record_type: "Record Type",
+    status: "Status",
+  };
+
+  const chartInstances = {};
+  const chartPalette = [
+    "#2563eb",
+    "#0f766e",
+    "#7c3aed",
+    "#ea580c",
+    "#0891b2",
+    "#16a34a",
+    "#9333ea",
+    "#dc2626",
+    "#ca8a04",
+    "#475569",
+  ];
+
+  function formatMoney(value) {
+    return Number(value || 0).toLocaleString(undefined, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function formatCompactMoney(value) {
+    const amount = Number(value || 0);
+
+    if (Math.abs(amount) >= 1000000) {
+      return `$${(amount / 1000000).toFixed(1)}M`;
     }
+
+    if (Math.abs(amount) >= 1000) {
+      return `$${(amount / 1000).toFixed(0)}K`;
+    }
+
+    return `$${amount.toFixed(0)}`;
+  }
+
+  function getSelectedChartKeys() {
+    return Array.from(toggles)
+      .filter((toggle) => toggle.checked)
+      .map((toggle) => toggle.value)
+      .slice(0, 4);
+  }
+
+  function syncToggleLimit() {
+    const selectedCount = Array.from(toggles).filter((toggle) => toggle.checked).length;
+
+    toggles.forEach((toggle) => {
+      toggle.disabled = !toggle.checked && selectedCount >= 4;
+    });
+
+    dashboard.dataset.chartCount = String(selectedCount);
+  }
+
+  function destroyCharts() {
+    Object.keys(chartInstances).forEach((key) => {
+      chartInstances[key].destroy();
+      delete chartInstances[key];
+    });
+  }
+
+  function topItems(item, limit = 10) {
+    const labels = item.labels || [];
+    const values = item.values || [];
+
+    return labels
+      .map((label, index) => ({
+        label,
+        rawValue: Number(values[index] || 0),
+        value: Number(values[index] || 0),
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, limit);
+
+      const maxValue = Math.max(...items.map((x) => x.value), 1);
+
+      items.forEach((item) => {
+        const ratio = item.value / maxValue;
+
+        if (ratio < 0.12) {
+          item.value = maxValue * 0.12;
+        }
+      });
+  }
+
+  function getChartOptions(key, item) {
+    const isMonth = key === "month";
+    const isDonut = key === "record_type" || key === "status";
+    const items = isMonth
+      ? (item.labels || []).map((label, index) => ({
+          label,
+          value: Number((item.values || [])[index] || 0),
+        }))
+      : topItems(item, 10);
+
+    const labels = items.map((entry) => entry.label);
+    const values = items.map((entry) => entry.value);
+
+    if (isDonut) {
+      return {
+        colors: chartPalette,
+        chart: {
+          type: "donut",
+          height: 300,
+          toolbar: { show: false },
+          fontFamily: "inherit",
+          parentHeightOffset: 0,
+        },
+        labels,
+        series: values,
+        legend: {
+          position: "bottom",
+          fontSize: "13px",
+        },
+        dataLabels: {
+          enabled: false,
+        },
+        tooltip: {
+          y: {
+            formatter: formatMoney,
+          },
+        },
+        stroke: {
+          width: 3,
+          colors: ["#ffffff"],
+        },
+        plotOptions: {
+          pie: {
+            donut: {
+              size: "72%",
+              labels: {
+                show: true,
+                name: {
+                  show: true,
+                  fontSize: "13px",
+                  color: "#64748b",
+                },
+                value: {
+                  show: true,
+                  fontSize: "18px",
+                  fontWeight: 800,
+                  color: "#0f172a",
+                  formatter: formatMoney,
+                },
+                total: {
+                  show: true,
+                  label: "Total",
+                  fontSize: "12px",
+                  color: "#64748b",
+                  formatter: function (w) {
+                    const total = w.globals.seriesTotals.reduce((sum, value) => sum + value, 0);
+                    return formatMoney(total);
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+    }
+
+    if (isMonth) {
+      return {
+        colors: ["#2563eb"],
+        chart: {
+          type: "area",
+          height: 260,
+          toolbar: { show: false },
+          fontFamily: "inherit",
+        },
+        series: [
+          {
+            name: "Spend",
+            data: values,
+          },
+        ],
+        xaxis: {
+          categories: labels,
+          labels: {
+            rotate: -30,
+          },
+        },
+        yaxis: {
+          labels: {
+            formatter: function (value) {
+              return formatMoney(value);
+            },
+          },
+        },
+        dataLabels: {
+          enabled: false,
+        },
+        stroke: {
+          curve: "smooth",
+          width: 3,
+        },
+        fill: {
+          type: "gradient",
+          gradient: {
+            shadeIntensity: 1,
+            opacityFrom: 0.35,
+            opacityTo: 0.05,
+            stops: [0, 90, 100],
+          },
+        },
+        tooltip: {
+          y: {
+            formatter: function(value, opts) {
+              const raw =
+                items?.[opts?.dataPointIndex]?.rawValue ?? value;
+
+              return formatMoney(raw);
+            },
+          },
+        },
+        grid: {
+          borderColor: "rgba(148, 163, 184, 0.25)",
+        },
+      };
+    }
+
+    return {
+      colors: chartPalette,
+      chart: {
+        type: "bar",
+        height: Math.max(350, labels.length * 38),
+        toolbar: { show: false },
+        fontFamily: "inherit",
+        parentHeightOffset: 18,
+        redrawOnParentResize: true,
+        redrawOnWindowResize: true,
+      },
+      series: [
+        {
+          name: "Spend",
+          data: values,
+        },
+      ],
+      plotOptions: {
+        bar: {
+          horizontal: true,
+          distributed: key === "vendor" || key === "category",
+          borderRadius: 6,
+          barHeight: "52%",
+          dataLabels: {
+            position: "right",
+          },
+        },
+      },
+      xaxis: {
+        categories: labels,
+        tickAmount: 3,
+        labels: {
+          formatter: formatCompactMoney,
+          style: {
+            fontSize: "11px",
+          },
+        },
+      },
+      yaxis: {
+        labels: {
+          maxWidth: 150,
+          style: {
+            fontSize: "11px",
+          },
+        },
+      },
+      dataLabels: {
+        enabled: false,
+      },
+      tooltip: {
+        y: {
+            formatter: function(value, opts) {
+              const raw =
+                items?.[opts?.dataPointIndex]?.rawValue ?? value;
+
+              return formatMoney(raw);
+            },
+        },
+      },
+      grid: {
+        borderColor: "rgba(148, 163, 184, 0.22)",
+        padding: {
+          top: 22,
+          left: 8,
+          right: 18,
+        },
+      },
+      legend: {
+        show: false,
+      },
+    };
+  }
+
+  function renderCharts() {
+    destroyCharts();
+    dashboard.innerHTML = "";
+
+    const selectedKeys = getSelectedChartKeys();
+    dashboard.dataset.chartCount = String(selectedKeys.length);
+
+    if (!selectedKeys.length) {
+      dashboard.innerHTML = `
+        <div class="finance-empty">
+          <h3>No charts selected</h3>
+          <p>Select up to 4 budget charts to compare.</p>
+        </div>
+      `;
+      syncToggleLimit();
+      return;
+    }
+
+    selectedKeys.forEach((key) => {
+      const item = chartData[key];
+
+      if (!item || !Array.isArray(item.labels) || !Array.isArray(item.values)) {
+        return;
+      }
+
+      const panel = document.createElement("div");
+      panel.className = "finance-budget-chart-panel";
+      panel.dataset.chartKey = key;
+
+      const title = document.createElement("div");
+      title.className = "finance-budget-chart-panel-title";
+      title.textContent = chartLabels[key] || key;
+
+      const chartTarget = document.createElement("div");
+      chartTarget.className = "finance-budget-apex-chart";
+      chartTarget.id = `finance-budget-chart-${key}`;
+
+      panel.appendChild(title);
+      panel.appendChild(chartTarget);
+      dashboard.appendChild(panel);
+
+      const chart = new ApexCharts(chartTarget, getChartOptions(key, item));
+      chart.render();
+
+      chartInstances[key] = chart;
+    });
+
+    syncToggleLimit();
+  }
+
+  toggles.forEach((toggle) => {
+    toggle.addEventListener("change", renderCharts);
   });
+
+  renderCharts();
 }
 
 function initFinanceTransactionBulkSelection() {
@@ -344,6 +697,7 @@ function initFinanceTransactionBulkSelection() {
     bulkBarId: "finance-transactions-bulk-bar",
     countId: "finance-transactions-bulk-count",
     hiddenInputIds: [
+      "finance-transactions-bulk-promote-ids",
       "finance-transactions-bulk-ignore-ids",
       "finance-transactions-bulk-review-ids",
     ],
@@ -530,4 +884,56 @@ function initFinanceSettingsModal() {
 
     document.body.classList.remove("finance-modal-open");
   });
+}
+
+function initializeFinanceImportTypeHelp() {
+  const select = document.querySelector("[data-import-type-select]");
+  const cards = document.querySelectorAll("[data-import-help-card]");
+
+  if (!select) {
+    return;
+  }
+
+  function updateImportHelp() {
+    const selectedType = select.value || "";
+
+    cards.forEach((card) => {
+      const cardType = card.getAttribute("data-import-help-card");
+      const isActive = selectedType && cardType === selectedType;
+
+      card.classList.toggle("is-active", Boolean(isActive));
+      card.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+
+  function chooseImportType(card) {
+    const cardType = card.getAttribute("data-import-help-card");
+
+    if (!cardType) {
+      return;
+    }
+
+    select.value = cardType;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    updateImportHelp();
+  }
+
+  cards.forEach((card) => {
+    card.addEventListener("click", function () {
+      chooseImportType(card);
+    });
+
+    card.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+
+      event.preventDefault();
+      chooseImportType(card);
+    });
+  });
+
+  select.addEventListener("change", updateImportHelp);
+
+  updateImportHelp();
 }

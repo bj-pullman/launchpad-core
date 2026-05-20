@@ -28,7 +28,66 @@
     </div>
   </div>
 
-{% include "finance/_imports_tabs.html" %}
+  {% include "finance/_imports_tabs.html" %}
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">What should I import?</h3>
+        <p class="finance-section-subtitle">Use this quick guide if you have not worked in Finance imports recently.</p>
+      </div>
+    </div>
+
+    <div class="finance-import-help-grid">
+      <div
+        class="finance-import-help-card"
+        data-import-help-card="records"
+        role="button"
+        tabindex="0"
+        aria-label="Choose Records import type"
+      >
+        <h4>Records</h4>
+
+        <p>
+          Use records for tracked finance items such as renewals, purchases,
+          subscriptions, service contracts, assets, and operational expenses
+          that should remain visible in the Finance module.
+        </p>
+      </div>
+
+      <div
+        class="finance-import-help-card"
+        data-import-help-card="transactions"
+        role="button"
+        tabindex="0"
+        aria-label="Choose Transactions import type"
+      >
+        <h4>Transactions</h4>
+
+        <p>
+          Use transactions for raw ERP, accounting, purchasing, or ledger
+          activity rows imported for review, reconciliation, reporting,
+          or later promotion into tracked finance records.
+        </p>
+      </div>
+
+      <div
+        class="finance-import-help-card"
+        data-import-help-card="vendors"
+        role="button"
+        tabindex="0"
+        aria-label="Choose Vendors import type"
+      >
+        <h4>Vendors</h4>
+
+        <p>
+          Use vendors to create or update supplier, provider, reseller,
+          or contractor contact information including websites, phone numbers,
+          billing contacts, support contacts, and sales representatives.
+        </p>
+      </div>
+    </div>
+  </div>
 
   <div class="content-card">
     <div class="finance-section-header">
@@ -43,10 +102,11 @@
         <div class="finance-form-grid">
           <div class="finance-field">
             <label for="import_type">Import Type</label>
-            <select id="import_type" name="import_type">
-              <option value="records">Records</option>
-              <option value="vendors">Vendors</option>
-              <option value="transactions">Transactions</option>
+            <select id="import_type" name="import_type" data-import-type-select>
+              <option value="" {% if not selected_import_type %}selected{% endif %}>Choose a type</option>
+              <option value="records" {% if selected_import_type == "records" %}selected{% endif %}>Records</option>
+              <option value="transactions" {% if selected_import_type == "transactions" %}selected{% endif %}>Transactions</option>
+              <option value="vendors" {% if selected_import_type == "vendors" %}selected{% endif %}>Vendors</option>
             </select>
           </div>
 

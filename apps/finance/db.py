@@ -68,6 +68,32 @@ def init_finance_db():
                 updated_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS finance_category_aliases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER NOT NULL,
+                alias_name TEXT NOT NULL,
+                normalized_alias TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_category_import_suggestions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                imported_category_name TEXT NOT NULL,
+                normalized_imported_name TEXT NOT NULL UNIQUE,
+                suggested_category_id INTEGER NULL,
+                confidence_score REAL NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_finance_category_aliases_category
+            ON finance_category_aliases(category_id);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_category_suggestions_status
+            ON finance_category_import_suggestions(status, confidence_score);
+
             CREATE TABLE IF NOT EXISTS finance_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 record_type TEXT NOT NULL DEFAULT 'renewal',
@@ -222,6 +248,18 @@ def init_finance_db():
 
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_budget_targets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                department_name TEXT NOT NULL,
+                fiscal_year INTEGER NOT NULL,
+                total_budget TEXT NOT NULL DEFAULT '0',
+                notes TEXT NULL,
+                created_by_user_id INTEGER NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(department_name, fiscal_year)
             );
 
             CREATE TABLE IF NOT EXISTS finance_budget_definition_sets (
