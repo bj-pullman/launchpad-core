@@ -1,0 +1,503 @@
+{% if can_manage %}
+<div
+  class="finance-modal-backdrop"
+  id="finance-settings-modal"
+  hidden
+>
+  <div
+    class="finance-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="finance-settings-title"
+  >
+    <div class="finance-modal-header">
+      <div>
+        <h2 id="finance-settings-title">Finance Setup</h2>
+
+        <p>
+          Manage fiscal years, rollover workflow, and year-start/year-close checklists.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        class="finance-modal-close"
+        data-finance-modal-close
+        aria-label="Close Finance Setup"
+      >
+        ×
+      </button>
+    </div>
+
+    <div class="finance-modal-tabs">
+      <button
+        type="button"
+        class="active"
+        data-finance-settings-tab="fiscal-years"
+      >
+        Fiscal Years
+      </button>
+
+      <button
+        type="button"
+        data-finance-settings-tab="start-year"
+      >
+        Start New Year
+      </button>
+
+      <button
+        type="button"
+        data-finance-settings-tab="close-year"
+      >
+        Close Fiscal Year
+      </button>
+    </div>
+
+    <div class="finance-modal-body">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <div class="finance-modal-flashes">
+        {% for category, message in messages %}
+            <div class="finance-modal-flash finance-modal-flash-{{ category }}">
+            {{ message }}
+            </div>
+        {% endfor %}
+        </div>
+    {% endif %}
+    {% endwith %}
+
+      <!-- Fiscal Years -->
+
+      <section
+        class="finance-settings-panel active"
+        data-finance-settings-panel="fiscal-years"
+      >
+        <h3>Fiscal Years</h3>
+
+        <p class="finance-settings-help">
+          Review configured fiscal years and their workflow status.
+        </p>
+
+        {% if fiscal_year_setup and fiscal_year_setup.fiscal_years %}
+          <div class="table-wrap finance-modal-table">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fiscal Year</th>
+                  <th>Dates</th>
+                  <th>Status</th>
+                  <th>Role</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {% for year in fiscal_year_setup.fiscal_years %}
+                  <tr>
+
+                    <td>
+                      <strong>{{ year.code }}</strong>
+
+                      <div class="finance-field-help">
+                        {{ year.friendly_name }}
+                      </div>
+                    </td>
+
+                    <td>
+                      {{ year.start_date }}
+                      →
+                      {{ year.end_date }}
+                    </td>
+
+                    <td>
+                      {{ year.status|replace("_", " ")|title }}
+                    </td>
+
+                    <td>
+                      {% if year.is_current %}
+                        <span class="finance-pill">
+                          Current
+                        </span>
+                      {% endif %}
+
+                      {% if year.is_next %}
+                        <span class="finance-pill">
+                          Next
+                        </span>
+                      {% endif %}
+
+                      {% if not year.is_current and not year.is_next %}
+                        —
+                      {% endif %}
+                    </td>
+
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="finance-empty">
+            <h3>No fiscal years configured</h3>
+
+            <p>
+              Create the current fiscal year and the next fiscal year to begin.
+            </p>
+          </div>
+        {% endif %}
+      </section>
+
+      <!-- Start Fiscal Year -->
+
+      <section
+        class="finance-settings-panel"
+        data-finance-settings-panel="start-year"
+      >
+        <h3>Start New Fiscal Year</h3>
+
+        <p class="finance-settings-help">
+          Create or prepare the next fiscal year. Planning fiscal years must complete
+          the start checklist before they should become current.
+        </p>
+
+        <div class="finance-workflow-card">
+          <h4>Create Planning Fiscal Year</h4>
+
+          <p>
+            Use this to create the next fiscal year if it does not exist yet.
+            The fiscal year will be created in Planning status and marked as Next.
+          </p>
+
+          <form
+            method="post"
+            action="{{ url_for('finance.fiscal_years', department_name=department_name) }}"
+            class="finance-form"
+          >
+            <div class="finance-form-grid finance-fy-create-grid">
+
+              <div class="finance-field">
+                <label for="fy_year_number">
+                  Fiscal Year
+                </label>
+
+                <input
+                  id="fy_year_number"
+                  name="year_number"
+                  type="number"
+                  min="2000"
+                  max="2100"
+                  placeholder="2027"
+                  required
+                >
+
+                <div class="finance-field-help">
+                  Creates FY2027, FY27, and 2027 aliases.
+                </div>
+              </div>
+
+              <div class="finance-field">
+                <label for="fy_friendly_name">
+                  Friendly Name
+                </label>
+
+                <input
+                  id="fy_friendly_name"
+                  name="friendly_name"
+                  type="text"
+                  placeholder="Fiscal Year 2027"
+                >
+              </div>
+
+              <div class="finance-field finance-field-date">
+                <label for="fy_start_date">
+                  Start Date
+                </label>
+
+                <input
+                  id="fy_start_date"
+                  name="start_date"
+                  type="date"
+                  required
+                >
+              </div>
+
+              <div class="finance-field finance-field-date">
+                <label for="fy_end_date">
+                  End Date
+                </label>
+
+                <input
+                  id="fy_end_date"
+                  name="end_date"
+                  type="date"
+                  required
+                >
+              </div>
+
+              <div class="finance-field finance-fy-role-field">
+                <div class="finance-role-box">
+
+                  <div class="finance-role-box-title">
+                    Fiscal Year Role
+                  </div>
+
+                  <div class="finance-role-options">
+
+                    <label class="finance-checkbox-row">
+                      <input
+                        type="checkbox"
+                        name="make_current"
+                        value="1"
+                      >
+
+                      <span>
+                        <strong>Current fiscal year</strong><br>
+
+                        Used as the default year for imports and reporting.
+                      </span>
+                    </label>
+
+                    <label class="finance-checkbox-row">
+                      <input
+                        type="checkbox"
+                        name="make_next"
+                        value="1"
+                      >
+
+                      <span>
+                        <strong>Next fiscal year</strong><br>
+
+                        Used for planning and upcoming Budget Definitions.
+                      </span>
+                    </label>
+
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div class="finance-form-actions">
+              <button
+                type="submit"
+                class="btn btn-primary finance-action-button"
+              >
+                Create Planning Fiscal Year
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {% if fiscal_year_setup and fiscal_year_setup.fiscal_years %}
+          <div class="finance-workflow-card">
+
+            <h4>Start Workflow</h4>
+
+            <p>
+              Select a planning fiscal year to review the start checklist.
+              Once setup is complete, that fiscal year can become current.
+            </p>
+
+            <div class="table-wrap finance-modal-table">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Fiscal Year</th>
+                    <th>Dates</th>
+                    <th>Status</th>
+                    <th>Role</th>
+                    <th>Start Workflow</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for year in fiscal_year_setup.fiscal_years %}
+                    {% if year.status == "planning" %}
+                      <tr>
+
+                        <td>
+                          <strong>{{ year.code }}</strong>
+
+                          <div class="finance-field-help">
+                            {{ year.friendly_name }}
+                          </div>
+                        </td>
+
+                        <td>
+                          {{ year.start_date }}
+                          →
+                          {{ year.end_date }}
+                        </td>
+
+                        <td>
+                          {{ year.status|replace("_", " ")|title }}
+                        </td>
+
+                        <td>
+                          {% if year.is_current %}
+                            <span class="finance-pill">
+                              Current
+                            </span>
+                          {% endif %}
+
+                          {% if year.is_next %}
+                            <span class="finance-pill">
+                              Next
+                            </span>
+                          {% endif %}
+
+                          {% if not year.is_current and not year.is_next %}
+                            —
+                          {% endif %}
+                        </td>
+
+                        <td>
+                          <button
+                            type="button"
+                            class="btn btn-primary finance-action-button"
+                            data-finance-checklist-open="start-checklist-{{ year.id }}"
+                          >
+                            Begin Start
+                          </button>
+                        </td>
+
+                      </tr>
+
+                      <tr>
+                        <td colspan="5">
+
+                          {% set panel_id = "start-checklist-" ~ year.id %}
+                          {% set fiscal_year_id = year.id %}
+                          {% set checklist_type = "start_year" %}
+                          {% set checklist_items = start_checklists.get(year.id, []) %}
+                          {% set title = year.code ~ " Start Checklist" %}
+                          {% set subtitle = "Complete required start tasks before activating this fiscal year." %}
+
+                          {% include "finance/_fiscal_year_checklist_panel.html" %}
+
+                        </td>
+                      </tr>
+
+                    {% endif %}
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        {% endif %}
+      </section>
+
+      <!-- Close Fiscal Year -->
+
+      <section
+        class="finance-settings-panel"
+        data-finance-settings-panel="close-year"
+      >
+        <h3>Close Fiscal Year</h3>
+
+        <p class="finance-settings-help">
+          Choose the fiscal year you want to close. You will review the close checklist
+          before the fiscal year can be marked closed.
+        </p>
+
+        {% if fiscal_year_setup and fiscal_year_setup.fiscal_years %}
+          <div class="table-wrap finance-modal-table">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fiscal Year</th>
+                  <th>Dates</th>
+                  <th>Status</th>
+                  <th>Role</th>
+                  <th>Close Workflow</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {% for year in fiscal_year_setup.fiscal_years %}
+                  {% if year.status != "closed" %}
+                    <tr>
+
+                      <td>
+                        <strong>{{ year.code }}</strong>
+
+                        <div class="finance-field-help">
+                          {{ year.friendly_name }}
+                        </div>
+                      </td>
+
+                      <td>
+                        {{ year.start_date }}
+                        →
+                        {{ year.end_date }}
+                      </td>
+
+                      <td>
+                        {{ year.status|replace("_", " ")|title }}
+                      </td>
+
+                      <td>
+                        {% if year.is_current %}
+                          <span class="finance-pill">
+                            Current
+                          </span>
+                        {% endif %}
+
+                        {% if year.is_next %}
+                          <span class="finance-pill">
+                            Next
+                          </span>
+                        {% endif %}
+
+                        {% if not year.is_current and not year.is_next %}
+                          —
+                        {% endif %}
+                      </td>
+
+                      <td>
+                        <button
+                          type="button"
+                          class="btn btn-secondary finance-action-button finance-fy-close-btn"
+                          data-finance-checklist-open="close-checklist-{{ year.id }}"
+                        >
+                          Begin Close
+                        </button>
+                      </td>
+
+                    </tr>
+
+                    <tr>
+                      <td colspan="5">
+
+                        {% set panel_id = "close-checklist-" ~ year.id %}
+                        {% set fiscal_year_id = year.id %}
+                        {% set checklist_type = "close_year" %}
+                        {% set checklist_items = close_checklists.get(year.id, []) %}
+                        {% set title = year.code ~ " Close Checklist" %}
+                        {% set subtitle = "Complete required close tasks before closing this fiscal year." %}
+
+                        {% include "finance/_fiscal_year_checklist_panel.html" %}
+
+                      </td>
+                    </tr>
+
+                  {% endif %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="finance-empty">
+            <h3>No fiscal years configured</h3>
+
+            <p>
+              Create a fiscal year before using close workflows.
+            </p>
+          </div>
+        {% endif %}
+      </section>
+
+    </div>
+  </div>
+</div>
+{% endif %}

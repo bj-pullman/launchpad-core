@@ -1,0 +1,36 @@
+<div class="finance-record-tabs">
+  <a
+    href="{{ url_for('finance.imports', department_name=department_name) }}"
+    class="{% if import_tab == 'upload' %}active{% endif %}"
+  >
+    Upload
+  </a>
+
+  <a
+    href="{{ url_for('finance.imports_profiles', department_name=department_name) }}"
+    class="{% if import_tab == 'profiles' %}active{% endif %}"
+  >
+    Profiles
+  </a>
+
+  <a
+    href="{{ url_for('finance.imports_history', department_name=department_name) }}"
+    class="{% if import_tab == 'history' %}active{% endif %}"
+  >
+    History
+  </a>
+
+  <a
+    href="{{ url_for('finance.imports_sftp', department_name=department_name) }}"
+    class="{% if import_tab == 'sftp' %}active{% endif %}"
+  >
+    SFTP
+  </a>
+
+  <a
+    href="{{ url_for('finance.imports_budget_definitions', department_name=department_name) }}"
+    class="{% if import_tab == 'budget_definitions' %}active{% endif %}"
+  >
+    Budget Definitions
+  </a>
+</div>

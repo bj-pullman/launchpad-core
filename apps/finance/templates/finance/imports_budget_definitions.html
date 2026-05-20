@@ -1,0 +1,196 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+
+  <div class="finance-back-row">
+    <a href="{{ url_for('finance.department_overview', department_name=department_name) }}" class="finance-back-link">
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Overview</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Budget Definitions</h1>
+      <p class="page-subtitle">
+        Upload yearly eFinance Budget Unit definition exports.
+      </p>
+    </div>
+  </div>
+
+  {% include "finance/_imports_tabs.html" %}
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">Upload Definitions</h3>
+        <p class="finance-section-subtitle">
+          Budget Definitions are used to validate and enrich imported transactions.
+        </p>
+      </div>
+    </div>
+
+    {% if can_manage %}
+      <form method="post" enctype="multipart/form-data" class="finance-form">
+        <div class="finance-form-grid">
+
+          <div class="finance-field">
+            <label for="fiscal_year">Fiscal Year</label>
+            <input
+              type="text"
+              id="fiscal_year"
+              name="fiscal_year"
+              placeholder="FY2026"
+              required
+            >
+            <div class="finance-field-help">Example: FY2026</div>
+          </div>
+
+          <div class="finance-field finance-field-span-2">
+            <label for="definition_file">Definition File</label>
+
+            <div class="finance-file-upload finance-file-upload-block">
+              <label class="finance-file-label">
+                <span class="finance-file-button">Choose CSV/XLSX</span>
+                <span class="finance-file-name" id="finance-budget-definition-file-name">
+                  No file selected
+                </span>
+                <input
+                  type="file"
+                  id="definition_file"
+                  name="definition_file"
+                  accept=".csv,.xlsx"
+                  required
+                >
+              </label>
+            </div>
+
+            <div class="finance-field-help">
+              Upload the yearly eFinance Budget Unit export.
+            </div>
+          </div>
+
+          <div class="finance-field finance-field-span-3">
+            <label for="notes">Notes</label>
+            <input
+              type="text"
+              id="notes"
+              name="notes"
+              placeholder="Optional notes"
+            >
+            <div class="finance-field-help">
+              Optional context, such as “Initial FY2026 upload” or “Updated after Finance correction.”
+            </div>
+          </div>
+
+        </div>
+
+        <div class="finance-form-actions">
+          <button type="submit" class="btn btn-primary finance-action-button">
+            Upload Budget Definitions
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <div class="finance-empty">
+        <h3>Budget Definition uploads are read-only</h3>
+        <p>Your account can view Finance, but cannot upload Budget Definitions.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">Active Definition Sets</h3>
+
+        <p class="finance-section-subtitle">
+          Uploaded yearly Budget Definition datasets.
+        </p>
+      </div>
+    </div>
+
+    {% if summary.active_sets %}
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fiscal Year</th>
+              <th>Definitions</th>
+              <th>Source File</th>
+              <th>Uploaded</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for item in summary.active_sets %}
+              <tr>
+                <td>
+                  <strong>{{ item.fiscal_year }}</strong>
+                </td>
+
+                <td>
+                  {{ item.definition_count }}
+                </td>
+
+                <td>
+                  {{ item.source_filename or "—" }}
+                </td>
+
+                <td>
+                  {{ item.uploaded_at|localtime if item.uploaded_at else "—" }}
+                </td>
+
+                <td>
+                  {{ item.notes or "—" }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% else %}
+
+      <div class="finance-empty">
+        <h3>No Budget Definitions uploaded</h3>
+
+        <p>
+          Upload a yearly Budget Unit definition export to begin validation and enrichment.
+        </p>
+      </div>
+
+    {% endif %}
+
+    {% if summary.missing_transactions %}
+
+      <div class="finance-alert finance-alert-warning mt-4">
+        <strong>Attention:</strong>
+
+        {{ summary.missing_transactions }}
+        transaction(s) currently have missing or invalid Budget Definition matches.
+      </div>
+
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

@@ -224,6 +224,127 @@ def init_finance_db():
                 updated_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS finance_budget_definition_sets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fiscal_year TEXT NOT NULL,
+                source_filename TEXT NULL,
+                uploaded_by_user_id INTEGER NULL,
+                uploaded_at TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                notes TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_budget_definitions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                definition_set_id INTEGER NOT NULL,
+                fiscal_year TEXT NOT NULL,
+
+                level_number INTEGER NULL,
+                code TEXT NULL,
+
+                fund_code TEXT NULL,
+                function_code TEXT NULL,
+                building_code TEXT NULL,
+                program_code TEXT NULL,
+                modifier_code TEXT NULL,
+                combined_code TEXT NULL,
+
+                title TEXT NULL,
+                description TEXT NULL,
+
+                raw_json TEXT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_budget_buildings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                building_code TEXT NOT NULL UNIQUE,
+                short_name TEXT NOT NULL,
+                full_name TEXT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_budget_building_aliases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                building_code TEXT NOT NULL,
+                alias TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(building_code, alias)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_finance_budget_definitions_combined
+            ON finance_budget_definitions(fiscal_year, combined_code);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_budget_definitions_segments
+            ON finance_budget_definitions(
+                fiscal_year,
+                fund_code,
+                function_code,
+                building_code,
+                program_code,
+                modifier_code
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_fiscal_years (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                short_code TEXT NULL,
+                year_number INTEGER NOT NULL,
+                friendly_name TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'planning',
+                is_current INTEGER NOT NULL DEFAULT 0,
+                is_next INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_fiscal_year_aliases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fiscal_year_id INTEGER NOT NULL,
+                alias TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(fiscal_year_id, alias)
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_fiscal_year_checklist_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fiscal_year_id INTEGER NOT NULL,
+                checklist_type TEXT NOT NULL,
+                item_key TEXT NOT NULL,
+                label TEXT NOT NULL,
+                description TEXT NULL,
+                is_required INTEGER NOT NULL DEFAULT 1,
+                is_skippable INTEGER NOT NULL DEFAULT 0,
+                is_complete INTEGER NOT NULL DEFAULT 0,
+                is_skipped INTEGER NOT NULL DEFAULT 0,
+                completed_at TEXT NULL,
+                completed_by_user_id INTEGER NULL,
+                skipped_at TEXT NULL,
+                skipped_by_user_id INTEGER NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(fiscal_year_id, checklist_type, item_key)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_finance_fiscal_years_status
+            ON finance_fiscal_years(status, is_current, is_next);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_fiscal_year_aliases_alias
+            ON finance_fiscal_year_aliases(alias);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_fiscal_year_checklist
+            ON finance_fiscal_year_checklist_items(fiscal_year_id, checklist_type);
+
             CREATE INDEX IF NOT EXISTS idx_finance_attachments_record
             ON finance_attachments(finance_record_id, uploaded_at DESC);
 
@@ -376,6 +497,76 @@ def init_finance_db():
 
                 DROP TABLE finance_import_profile_fields_old;
                 """
+            )
+
+        finance_transaction_columns = [
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(finance_transactions)").fetchall()
+        ]
+
+        transaction_budget_columns = {
+            "budget_fund_code": "TEXT NULL",
+            "budget_function_code": "TEXT NULL",
+            "budget_building_code": "TEXT NULL",
+            "budget_program_code": "TEXT NULL",
+            "budget_modifier_code": "TEXT NULL",
+            "budget_combined_code": "TEXT NULL",
+            "budget_definition_id": "INTEGER NULL",
+            "budget_definition_status": "TEXT NULL",
+        }
+
+        for column_name, column_type in transaction_budget_columns.items():
+            if column_name not in finance_transaction_columns:
+                conn.execute(
+                    f"ALTER TABLE finance_transactions ADD COLUMN {column_name} {column_type}"
+                )
+
+        budget_buildings = [
+            ("000", "District", "District / Administrative"),
+            ("018", "EEE", "East End Elementary"),
+            ("019", "SES", "Sheridan Elementary School"),
+            ("020", "SMS", "Sheridan Middle School"),
+            ("021", "SHS", "Sheridan High School"),
+            ("023", "SIS", "Sheridan Intermediate School"),
+            ("024", "EEI", "East End Intermediate"),
+            ("026", "EEM", "East End Middle School"),
+        ]
+
+        for code, short_name, full_name in budget_buildings:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO finance_budget_buildings (
+                    building_code,
+                    short_name,
+                    full_name,
+                    is_active,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, 1, ?, ?)
+                """,
+                (code, short_name, full_name, now, now),
+            )
+
+        building_aliases = [
+            ("020", "SJHS"),
+            ("020", "Sheridan Junior High"),
+            ("026", "EMS"),
+            ("026", "East End Middle"),
+        ]
+
+        for building_code, alias in building_aliases:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO finance_budget_building_aliases (
+                    building_code,
+                    alias,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (building_code, alias, now, now),
             )
 
         conn.commit()

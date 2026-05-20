@@ -1,0 +1,148 @@
+<div
+  class="finance-checklist-panel"
+  id="{{ panel_id }}"
+  hidden
+>
+  <div class="finance-checklist-panel-header">
+    <div>
+      <h4>{{ title }}</h4>
+      <p>{{ subtitle }}</p>
+    </div>
+
+    <button
+      type="button"
+      class="finance-checklist-panel-close"
+      data-finance-checklist-close
+      aria-label="Close checklist"
+    >
+      ×
+    </button>
+  </div>
+
+  {% if checklist_items %}
+    <div class="finance-checklist-list">
+      {% for item in checklist_items %}
+        <div class="finance-checklist-item">
+          <div class="finance-checklist-status">
+            {% if item.is_complete %}
+              <span class="finance-pill">Complete</span>
+            {% elif item.is_skipped %}
+              <span class="finance-pill finance-pill-muted">Skipped</span>
+            {% else %}
+              <span class="finance-pill finance-pill-muted">Open</span>
+            {% endif %}
+          </div>
+
+          <div class="finance-checklist-main">
+            <strong>{{ item.label }}</strong>
+            <p>{{ item.description }}</p>
+
+            <div class="finance-checklist-meta">
+              {% if item.is_required %}
+                Required
+              {% elif item.is_skippable %}
+                Skippable
+              {% else %}
+                Optional
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="finance-checklist-actions">
+            <form
+              method="post"
+              action="{{ url_for('finance.fiscal_year_checklist_item_update', department_name=department_name, checklist_item_id=item.id) }}"
+            >
+              <input type="hidden" name="fiscal_year_id" value="{{ fiscal_year_id }}">
+              <input type="hidden" name="checklist_type" value="{{ checklist_type }}">
+              <input type="hidden" name="return_to" value="department_overview">
+              <input type="hidden" name="open_modal" value="finance-settings-modal">
+              <input type="hidden" name="open_panel" value="{{ panel_id }}">
+              <input type="hidden" name="open_tab" value="{{ 'start-year' if checklist_type == 'start_year' else 'close-year' }}">
+
+              <button
+                type="submit"
+                name="action"
+                value="complete"
+                class="btn btn-secondary finance-action-button"
+              >
+                Complete
+              </button>
+            </form>
+
+            {% if item.is_skippable %}
+              <form
+                method="post"
+                action="{{ url_for('finance.fiscal_year_checklist_item_update', department_name=department_name, checklist_item_id=item.id) }}"
+              >
+                <input type="hidden" name="fiscal_year_id" value="{{ fiscal_year_id }}">
+                <input type="hidden" name="checklist_type" value="{{ checklist_type }}">
+                <input type="hidden" name="return_to" value="department_overview">
+                <input type="hidden" name="open_modal" value="finance-settings-modal">
+                <input type="hidden" name="open_panel" value="{{ panel_id }}">
+                <input type="hidden" name="open_tab" value="{{ 'start-year' if checklist_type == 'start_year' else 'close-year' }}">
+
+                <button
+                  type="submit"
+                  name="action"
+                  value="skip"
+                  class="btn btn-secondary finance-action-button"
+                >
+                  Skip
+                </button>
+              </form>
+            {% endif %}
+
+            <form
+              method="post"
+              action="{{ url_for('finance.fiscal_year_checklist_item_update', department_name=department_name, checklist_item_id=item.id) }}"
+            >
+              <input type="hidden" name="fiscal_year_id" value="{{ fiscal_year_id }}">
+              <input type="hidden" name="checklist_type" value="{{ checklist_type }}">
+              <input type="hidden" name="return_to" value="department_overview">
+              <input type="hidden" name="open_modal" value="finance-settings-modal">
+              <input type="hidden" name="open_panel" value="{{ panel_id }}">
+              <input type="hidden" name="open_tab" value="{{ 'start-year' if checklist_type == 'start_year' else 'close-year' }}">
+
+              <button
+                type="submit"
+                name="action"
+                value="reset"
+                class="btn btn-secondary finance-action-button"
+              >
+                Reset
+              </button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="finance-empty">
+      <h3>No checklist items found</h3>
+      <p>This fiscal year does not have checklist items yet.</p>
+    </div>
+  {% endif %}
+
+  <div class="finance-checklist-footer">
+    {% if checklist_type == "start_year" %}
+      <form
+        method="post"
+        action="{{ url_for('finance.fiscal_year_activate', department_name=department_name, fiscal_year_id=fiscal_year_id) }}"
+      >
+        <button type="submit" class="btn btn-primary finance-action-button">
+          Activate Fiscal Year
+        </button>
+      </form>
+    {% elif checklist_type == "close_year" %}
+      <form
+        method="post"
+        action="{{ url_for('finance.fiscal_year_close', department_name=department_name, fiscal_year_id=fiscal_year_id) }}"
+      >
+        <button type="submit" class="btn btn-secondary finance-action-button finance-fy-close-btn">
+          Close Fiscal Year
+        </button>
+      </form>
+    {% endif %}
+  </div>
+</div>
