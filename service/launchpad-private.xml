@@ -1,0 +1,20 @@
+<service>
+  <id>Launchpad-private</id>
+  <name>Launchpad-private</name>
+  <description>Launchpad internal Flask application running on Waitress</description>
+
+  <executable>C:\webapps\launchpad-private\venv\Scripts\waitress-serve.exe</executable>
+  <arguments>--host=127.0.0.1 --port=5000 --threads=16 wsgi:app</arguments>
+  <workingdirectory>C:\webapps\launchpad-private</workingdirectory>
+
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="20 sec" />
+  <onfailure action="restart" delay="30 sec" />
+
+  <stoptimeout>15sec</stoptimeout>
+</service>

@@ -1,28 +1,56 @@
-# Launchpad 1.0.0
+# Launchpad Update Notes
 
-## System Maintenance
+## System Maintenance Update
 
-### Added
-- Backup generation
-- Backup history database
-- Update checking
-- Rollback preparation
-- Patch notes integration
-
-### Improved
-- Production-safe update handling
-- Hosting/config protection logic
-- Settings UI consistency
-- Backup table readability
-
-### Fixed
-- Update request timeout handling
-- IIS/Waitress update-check blocking behavior
+> Adds safer update handling, manual backup support, and a more user-friendly update screen.
 
 ---
 
-## Notes
+## What's New
 
-This release introduces the first public-facing System Maintenance workflows for Launchpad.
+- Added System Maintenance under Settings.
+- Added manual backup generation.
+- Added backup history tracking.
+- Added update checking with friendly version labels.
+- Added release-note support for future updates.
+- Improved protection for hosting/config files.
 
-Update checks now support cached job processing for improved production reliability.
+---
+
+## What To Expect
+
+| Item | Behavior |
+|---|---|
+| Backup | A backup is generated automatically before updates |
+| Restart | The Launchpad service may restart |
+| `.env` | Protected |
+| `web.config` | Protected |
+| Service files | Protected |
+| Database files | Included in backups |
+
+---
+
+## Recommended Actions
+
+- Review these notes before applying the update.
+- Apply updates during a low-usage window.
+- Confirm the backup completes successfully.
+
+---
+
+<details>
+<summary>Advanced Technical Details</summary>
+
+Protected files include:
+
+```text
+.env
+web.config
+wsgi.py
+modules/core/app_factory.py
+service/*.xml
+service/*.exe
+service/*.config
+service/*.ps1
+service/*.bat
+service/*.cmd
