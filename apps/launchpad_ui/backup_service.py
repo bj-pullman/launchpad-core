@@ -119,10 +119,17 @@ def _run_powershell_script(script_name: str, args: list[str], timeout: int = 900
         completed = subprocess.run(
             command,
             cwd=str(app_root),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             timeout=timeout,
             check=False,
+            env={
+                **os.environ,
+                "GIT_TERMINAL_PROMPT": "0",
+                "GCM_INTERACTIVE": "Never",
+                "GIT_ASKPASS": "echo",
+            },
         )
     except subprocess.TimeoutExpired:
         return {
@@ -229,7 +236,7 @@ def get_update_status():
             str(get_backup_root()),
             "-CheckOnly",
         ],
-        timeout=300,
+        timeout=45,
     )
 
 

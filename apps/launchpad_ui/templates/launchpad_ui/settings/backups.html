@@ -10,21 +10,14 @@
 {% endblock %}
 
 {% block content %}
+{% set update_result = update_status.result if update_status and update_status.result else none %}
 <div class="settings-main-layout">
   <div class="settings-back-row">
     <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
       <span class="settings-back-link-icon" aria-hidden="true">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 18l-6-6 6-6"/>
         </svg>
       </span>
@@ -41,74 +34,56 @@
 
   <form method="get" action="{{ url_for('launchpad_ui.settings_backups') }}" class="settings-form">
     <div class="settings-tabs">
-      <button
-        type="submit"
-        name="tab"
-        value="backups"
-        class="settings-tab {% if active_tab == 'backups' %}active{% endif %}"
-      >
-        Backups
-      </button>
-
-      <button
-        type="submit"
-        name="tab"
-        value="updates"
-        class="settings-tab {% if active_tab == 'updates' %}active{% endif %}"
-      >
-        Updates
-      </button>
-
-      <button
-        type="submit"
-        name="tab"
-        value="rollback"
-        class="settings-tab {% if active_tab == 'rollback' %}active{% endif %}"
-      >
-        Rollback
-      </button>
+      <button type="submit" name="tab" value="backups" class="settings-tab {% if active_tab == 'backups' %}active{% endif %}">Backups</button>
+      <button type="submit" name="tab" value="updates" class="settings-tab {% if active_tab == 'updates' %}active{% endif %}">Updates</button>
+      <button type="submit" name="tab" value="rollback" class="settings-tab {% if active_tab == 'rollback' %}active{% endif %}">Rollback</button>
     </div>
   </form>
 
   {% if active_tab == "updates" %}
   <div class="settings-section-stack">
-    <div class="system-maintenance-card {% if update_status and update_status.ok and update_status.update_available %}system-maintenance-card-warning{% elif update_status and update_status.ok %}system-maintenance-card-success{% endif %}">
+    <div class="system-maintenance-card {% if update_result and update_result.ok and update_result.update_available %}system-maintenance-card-warning{% elif update_result and update_result.ok %}system-maintenance-card-success{% endif %}">
       <div class="system-maintenance-card-header">
         <div>
           <h2>Updates</h2>
-          <p class="muted">
-            Check for available Launchpad updates. Nothing happens automatically when opening this tab.
-          </p>
+          <p class="muted">Check for available Launchpad updates. Nothing happens automatically when opening this tab.</p>
         </div>
 
-        {% if not update_status %}
+        {% if not update_job or update_job.status not in ["queued", "running"] %}
         <form method="post" action="{{ url_for('launchpad_ui.settings_backups_check_update') }}">
           <button type="submit" class="btn btn-primary">Check for Updates</button>
         </form>
         {% endif %}
       </div>
 
+      {% if update_job %}
+      <div class="system-maintenance-alert">
+        <strong>Last update check:</strong>
+        {{ update_job.status|title }} — {{ update_job.message }}
+      </div>
+      {% endif %}
+
       {% if not update_status %}
       <div class="system-maintenance-alert">
-        No update check has been run yet.
+        No cached update check is available yet. Click Check for Updates to start one.
       </div>
 
-      {% elif update_status.ok %}
+      {% elif update_result and update_result.ok %}
       <div class="form-grid-equal">
         <div class="form-field">
           <label>Installed Version</label>
-          <div><strong>{{ update_status.current_version or "Installed build" }}</strong></div>
+          <div><strong>{{ update_result.current_version or "Installed build" }}</strong></div>
         </div>
 
         <div class="form-field">
           <label>Available Version</label>
-          <div><strong>{{ update_status.remote_version or "Available build" }}</strong></div>
+          <div><strong>{{ update_result.remote_version or "Available build" }}</strong></div>
         </div>
 
         <div class="form-field">
           <label>Status</label>
           <div>
-            {% if update_status.update_available %}
+            {% if update_result.update_available %}
             <span class="system-maintenance-pill system-maintenance-pill-warning">Update Available</span>
             {% else %}
             <span class="system-maintenance-pill system-maintenance-pill-success">Up to Date</span>
@@ -119,7 +94,7 @@
         <div class="form-field">
           <label>Restart Required</label>
           <div>
-            {% if update_status.release_manifest and update_status.release_manifest.requires_restart %}
+            {% if update_result.release_manifest and update_result.release_manifest.requires_restart %}
             Yes
             {% else %}
             No
@@ -128,7 +103,7 @@
         </div>
       </div>
 
-      {% if update_status.update_available %}
+      {% if update_result.update_available %}
       <div class="system-maintenance-alert">
         <strong>Update available.</strong>
         Review the update summary before applying. A pre-update backup will be generated automatically.
@@ -140,38 +115,33 @@
       </div>
       {% endif %}
 
-      {% if update_status.release_manifest %}
+      {% if update_result.release_manifest %}
       <div class="system-maintenance-release-card">
-        <h3>{{ update_status.release_manifest.title or "Update Notes" }}</h3>
+        <h3>{{ update_result.release_manifest.title or "Update Notes" }}</h3>
 
-        {% if update_status.release_manifest.summary %}
-        <p>{{ update_status.release_manifest.summary }}</p>
+        {% if update_result.release_manifest.summary %}
+        <p>{{ update_result.release_manifest.summary }}</p>
         {% endif %}
 
-        {% if update_status.release_manifest.expected_downtime %}
+        {% if update_result.release_manifest.expected_downtime %}
         <p class="muted">
           <strong>Expected downtime:</strong>
-          {{ update_status.release_manifest.expected_downtime }}
+          {{ update_result.release_manifest.expected_downtime }}
         </p>
         {% endif %}
 
-        {% if update_status.release_manifest.what_to_expect %}
+        {% if update_result.release_manifest.what_to_expect %}
         <h4>What to Expect</h4>
         <ul>
-          {% for item in update_status.release_manifest.what_to_expect %}
+          {% for item in update_result.release_manifest.what_to_expect %}
           <li>{{ item }}</li>
           {% endfor %}
         </ul>
         {% endif %}
 
-        {% if update_status.release_notes_url %}
+        {% if update_result.release_notes_url %}
         <p>
-          <a
-            href="{{ update_status.release_notes_url }}"
-            target="_blank"
-            rel="noopener"
-            class="system-maintenance-link-button"
-          >
+          <a href="{{ update_result.release_notes_url }}" target="_blank" rel="noopener" class="system-maintenance-link-button">
             View Patch Notes
           </a>
         </p>
@@ -179,14 +149,14 @@
       </div>
       {% endif %}
 
-      {% if update_status.working_tree_dirty %}
+      {% if update_result.working_tree_dirty %}
       <div class="system-maintenance-alert">
         <strong>Local changes detected.</strong>
         The updater will preserve local changes before applying updates.
       </div>
       {% endif %}
 
-      {% if update_status.protected_files_changed %}
+      {% if update_result.protected_files_changed %}
       <div class="system-maintenance-alert">
         <strong>Protected hosting/config files are included in the pending update.</strong>
         These files will not be overwritten automatically.
@@ -198,7 +168,7 @@
           <button type="submit" class="btn btn-secondary">Check Again</button>
         </form>
 
-        {% if can_manage_backups and update_status.update_available %}
+        {% if can_manage_backups and update_result.update_available %}
         <form
           method="post"
           action="{{ url_for('launchpad_ui.settings_backups_apply_update') }}"
@@ -212,7 +182,13 @@
       {% else %}
       <div class="system-maintenance-alert">
         <strong>Unable to check update status.</strong>
-        {{ update_status.error or (update_status.errors|join(" ")) }}
+        {% if update_status and update_status.result %}
+          {{ update_status.result.error or (update_status.result.errors|join(" ")) }}
+        {% elif update_status and update_status.errors %}
+          {{ update_status.errors|join(" ") }}
+        {% else %}
+          Unknown error.
+        {% endif %}
       </div>
 
       <div class="system-maintenance-actions">
@@ -230,9 +206,7 @@
       <div class="system-maintenance-card-header">
         <div>
           <h2>Rollback</h2>
-          <p class="muted">
-            Rollback options use recent backup history. Generate a fresh backup before rolling back.
-          </p>
+          <p class="muted">Rollback options use recent backup history. Generate a fresh backup before rolling back.</p>
         </div>
 
         <form method="post" action="{{ url_for('launchpad_ui.settings_backups_rollback_options') }}">
@@ -270,13 +244,13 @@
               <td>{{ backup.created_display }}</td>
               <td>
                 <div class="system-maintenance-table-status">
-                    {% if backup.ok %}
-                    <span class="system-maintenance-pill system-maintenance-pill-success">OK</span>
-                    {% else %}
-                    <span class="system-maintenance-pill system-maintenance-pill-danger">Issue</span>
-                    {% endif %}
+                  {% if backup.ok %}
+                  <span class="system-maintenance-pill system-maintenance-pill-success">OK</span>
+                  {% else %}
+                  <span class="system-maintenance-pill system-maintenance-pill-danger">Issue</span>
+                  {% endif %}
                 </div>
-                </td>
+              </td>
               <td>{{ backup.reason or "unknown" }}</td>
               <td class="system-maintenance-table-number">{{ backup.database_count }}</td>
               <td class="system-maintenance-table-number">{{ backup.protected_file_count }}</td>
@@ -299,9 +273,7 @@
       <div class="system-maintenance-card-header">
         <div>
           <h2>Generate Backup</h2>
-          <p class="muted">
-            Create a restore point before imports, updates, or high-risk changes.
-          </p>
+          <p class="muted">Create a restore point before imports, updates, or high-risk changes.</p>
         </div>
       </div>
 
@@ -314,13 +286,7 @@
         <div class="form-grid">
           <div class="form-field">
             <label for="reason">Backup Reason</label>
-            <input
-              type="text"
-              id="reason"
-              name="reason"
-              value="manual"
-              placeholder="manual, pre-import, pre-update"
-            />
+            <input type="text" id="reason" name="reason" value="manual" placeholder="manual, pre-import, pre-update" />
           </div>
         </div>
 
@@ -348,9 +314,7 @@
       <div class="system-maintenance-card-header">
         <div>
           <h2>Available Backups</h2>
-          <p class="muted">
-            Recent restore points generated by System Maintenance.
-          </p>
+          <p class="muted">Recent restore points generated by System Maintenance.</p>
         </div>
 
         {% if can_manage_backups %}
@@ -381,11 +345,13 @@
             <tr>
               <td>{{ backup.created_display }}</td>
               <td>
-                {% if backup.ok %}
-                <span class="system-maintenance-pill system-maintenance-pill-success">OK</span>
-                {% else %}
-                <span class="system-maintenance-pill system-maintenance-pill-danger">Issue</span>
-                {% endif %}
+                <div class="system-maintenance-table-status">
+                  {% if backup.ok %}
+                  <span class="system-maintenance-pill system-maintenance-pill-success">OK</span>
+                  {% else %}
+                  <span class="system-maintenance-pill system-maintenance-pill-danger">Issue</span>
+                  {% endif %}
+                </div>
               </td>
               <td>{{ backup.reason or "unknown" }}</td>
               <td class="system-maintenance-table-number">{{ backup.database_count }}</td>

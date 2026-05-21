@@ -12,6 +12,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$env:GIT_TERMINAL_PROMPT = "0"
+$env:GCM_INTERACTIVE = "Never"
+$env:GIT_ASKPASS = "echo"
+
 if (-not $CheckOnly -and -not $Apply) {
     $CheckOnly = $true
 }
