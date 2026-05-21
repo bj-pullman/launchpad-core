@@ -63,6 +63,10 @@ def seed_permissions():
         ("launchpad.settings.finance.operator", "Finance Settings Operator"),
         ("launchpad.settings.finance.admin", "Finance Settings Admin"),
 
+        # Backup & Update settings
+        ("launchpad.settings.backups.view", "Backups & Updates"),
+        ("launchpad.settings.backups.manage", "Manage Backups & Updates"),
+
         # SnipeOps app access
         ("snipeops.home.view", "SnipeOps Home"),
         ("snipeops.home.manage", "Manage SnipeOps Home"),
@@ -161,6 +165,9 @@ def seed_permissions():
         "launchpad.settings.finance.view",
         "launchpad.settings.finance.operator",
         "launchpad.settings.finance.admin",
+
+        "launchpad.settings.backups.view",
+        "launchpad.settings.backups.manage",
     ]
 
     for key in launchpad_admin_permissions:
