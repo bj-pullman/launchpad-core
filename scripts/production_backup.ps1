@@ -20,12 +20,17 @@ $ArchiveRoot = Join-Path $BackupRoot "archive"
 $BackupPath = Join-Path $ArchiveRoot $Timestamp
 $LatestPath = Join-Path $BackupRoot "latest"
 
-$ProtectedFiles = @(
+$ProtectedFilePatterns = @(
     ".env",
     "web.config",
     "wsgi.py",
-    "service\Launchpad-private.xml",
-    "service\launchpad-private.xml"
+    "modules\core\app_factory.py",
+    "service\*.xml",
+    "service\*.exe",
+    "service\*.config",
+    "service\*.ps1",
+    "service\*.bat",
+    "service\*.cmd"
 )
 
 $DatabasePatterns = @(
@@ -74,6 +79,12 @@ function Invoke-GitSafe {
     }
 }
 
+function Get-RelativePath {
+    param([string]$FullPath)
+
+    return $FullPath.Substring($AppRoot.Length).TrimStart("\", "/")
+}
+
 New-Folder $BackupRoot
 New-Folder $ArchiveRoot
 New-Folder $BackupPath
@@ -104,7 +115,6 @@ try {
     $Metadata.git.status = Invoke-GitSafe @("status", "--short")
     $Metadata.git.remotes = Invoke-GitSafe @("remote", "-v")
 
-    # Git metadata files
     $GitDir = Join-Path $BackupPath "git"
     New-Folder $GitDir
 
@@ -113,17 +123,26 @@ try {
     $Metadata.git.status | Out-File -FilePath (Join-Path $GitDir "status.txt") -Encoding UTF8
     $Metadata.git.remotes | Out-File -FilePath (Join-Path $GitDir "remotes.txt") -Encoding UTF8
 
-    # Protected/config/service files
-    foreach ($relative in $ProtectedFiles) {
-        $source = Join-Path $AppRoot $relative
-        $destination = Join-Path (Join-Path $BackupPath "protected") $relative
+    foreach ($pattern in $ProtectedFilePatterns) {
+        $matches = Get-ChildItem -Path $AppRoot -File -Recurse -Filter (Split-Path $pattern -Leaf) -ErrorAction SilentlyContinue |
+            Where-Object {
+                $relative = Get-RelativePath $_.FullName
+                $relative -like $pattern -and
+                $_.FullName -notmatch "\\.git\\" -and
+                $_.FullName -notmatch "\\venv\\" -and
+                $_.FullName -notmatch "\\__pycache__\\"
+            }
 
-        if (Copy-IfExists -Source $source -Destination $destination) {
-            $Metadata.protected_files += $relative
+        foreach ($file in $matches) {
+            $relativePath = Get-RelativePath $file.FullName
+            $destination = Join-Path (Join-Path $BackupPath "protected") $relativePath
+
+            if (Copy-IfExists -Source $file.FullName -Destination $destination) {
+                $Metadata.protected_files += $relativePath
+            }
         }
     }
 
-    # Database files
     $DatabaseDir = Join-Path $BackupPath "databases"
     New-Folder $DatabaseDir
 
@@ -136,7 +155,7 @@ try {
             }
 
         foreach ($file in $matches) {
-            $relativePath = $file.FullName.Substring($AppRoot.Length).TrimStart("\", "/")
+            $relativePath = Get-RelativePath $file.FullName
             $destination = Join-Path $DatabaseDir $relativePath
 
             if (Copy-IfExists -Source $file.FullName -Destination $destination) {
@@ -145,7 +164,6 @@ try {
         }
     }
 
-    # Optional full app snapshot, excluding noisy/heavy/runtime folders
     if ($IncludeAppSnapshot) {
         $SnapshotDir = Join-Path $BackupPath "app"
         New-Folder $SnapshotDir
@@ -163,11 +181,12 @@ try {
         $Metadata.app_snapshot = $SnapshotDir
     }
 
-    # Write metadata before latest copy
+    $Metadata.protected_files = @($Metadata.protected_files | Sort-Object -Unique)
+    $Metadata.databases = @($Metadata.databases | Sort-Object -Unique)
+
     $MetadataPath = Join-Path $BackupPath "metadata.json"
     $Metadata | ConvertTo-Json -Depth 8 | Out-File -FilePath $MetadataPath -Encoding UTF8
 
-    # Refresh latest
     if (Test-Path $LatestPath) {
         Remove-Item $LatestPath -Recurse -Force
     }
@@ -190,7 +209,6 @@ catch {
             Out-File -FilePath (Join-Path $BackupPath "metadata.json") -Encoding UTF8
     }
     catch {
-        # Do not mask original error.
     }
 }
 
