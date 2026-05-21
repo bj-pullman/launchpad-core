@@ -11,6 +11,6 @@
     "Patch notes support",
     "Improved production update safeguards"
   ],
-  "release_notes_url": "https://github.com/bj-pullman/launchpad/blob/main/release_notes/latest.md",
-  "release_notes_raw_url": "https://raw.githubusercontent.com/bj-pullman/launchpad/main/release_notes/latest.md"
+  "release_notes_url": "https://github.com/bj-pullman/launchpad-core/blob/main/release_notes/latest.md",
+  "release_notes_raw_url": "https://raw.githubusercontent.com/bj-pullman/launchpad-core/main/release_notes/latest.md"
 }
