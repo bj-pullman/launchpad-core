@@ -27,10 +27,19 @@ $ProtectedFiles = @(
     ".env",
     "web.config",
     "wsgi.py",
+    "modules/core/app_factory.py",
     "service/Launchpad-private.exe",
     "service/Launchpad-private.xml",
-    "service/launchpad-private.xml",
-    "modules/core/app_factory.py"
+    "service/launchpad-private.xml"
+)
+
+$ProtectedPatterns = @(
+    "service/*.xml",
+    "service/*.exe",
+    "service/*.config",
+    "service/*.ps1",
+    "service/*.bat",
+    "service/*.cmd"
 )
 
 function Invoke-Git {
@@ -113,67 +122,199 @@ function Invoke-External {
     }
 }
 
-function Get-UpdateStatus {
-    $result = [ordered]@{
-        ok = $true
-        app_root = $AppRoot
-        remote = $Remote
-        branch = $Branch
-        current_branch = ""
-        current_commit = ""
-        remote_commit = ""
-        update_available = $false
-        working_tree_dirty = $false
-        dirty_files = @()
-        protected_files_changed = @()
-        changed_files = @()
-        commits = @()
-        error = $null
-    }
+function Get-RepoFileText {
+    param(
+        [string]$Ref,
+        [string]$Path
+    )
 
     try {
-        $result.current_branch = (Invoke-Git @("rev-parse", "--abbrev-ref", "HEAD")) -join ""
-        $result.current_commit = (Invoke-Git @("rev-parse", "HEAD")) -join ""
+        $content = Invoke-Git @("show", "$Ref`:$Path")
+        if ($content.Count -eq 0) {
+            return ""
+        }
 
-        Invoke-Git @("fetch", $Remote, $Branch) | Out-Null
+        return ($content -join "`n")
+    }
+    catch {
+        return ""
+    }
+}
 
-        $remoteRef = "$Remote/$Branch"
-        $result.remote_commit = (Invoke-Git @("rev-parse", $remoteRef)) -join ""
+function Get-FriendlyVersion {
+    param([string]$Ref)
 
-        $status = Invoke-Git @("status", "--porcelain")
-        foreach ($line in $status) {
-            if (-not [string]::IsNullOrWhiteSpace($line)) {
-                $result.dirty_files += $line
+    try {
+        $manifestText = Get-RepoFileText -Ref $Ref -Path "release_manifest.json"
+        $versionBase = "1.3"
+
+        if (-not [string]::IsNullOrWhiteSpace($manifestText)) {
+            try {
+                $manifest = $manifestText | ConvertFrom-Json
+                if ($manifest.version_base) {
+                    $versionBase = [string]$manifest.version_base
+                }
+            }
+            catch {
+                $versionBase = "1.3"
             }
         }
 
-        $result.working_tree_dirty = ($result.dirty_files.Count -gt 0)
+        $commitCount = (Invoke-Git @("rev-list", "--count", $Ref)) -join ""
+        $shortHash = (Invoke-Git @("rev-parse", "--short=4", $Ref)) -join ""
 
-        $changed = Invoke-Git @("diff", "--name-status", "HEAD..$remoteRef")
-        foreach ($line in $changed) {
-            if (-not [string]::IsNullOrWhiteSpace($line)) {
-                $result.changed_files += $line
+        $hashNumber = 0
+        foreach ($char in $shortHash.ToCharArray()) {
+            $hashNumber += [int][char]$char
+        }
+
+        return "Version $versionBase.$commitCount.$hashNumber"
+    }
+    catch {
+        return "Version unknown"
+    }
+}
+
+function Get-ReleaseManifest {
+    param([string]$Ref)
+
+    $default = [ordered]@{
+        version_base = "1.3"
+        title = "Launchpad Update"
+        summary = ""
+        release_notes_path = "release_notes/latest.md"
+        requires_restart = $true
+        requires_backup = $true
+        high_risk = $false
+        manual_steps_required = $false
+        manual_steps = @()
+        expected_downtime = "Usually less than one minute while the app service restarts."
+        what_to_expect = @(
+            "A backup is generated automatically before applying the update.",
+            "The Launchpad service may restart during the update.",
+            "Protected hosting files are not overwritten automatically."
+        )
+    }
+
+    $manifestText = Get-RepoFileText -Ref $Ref -Path "release_manifest.json"
+
+    if ([string]::IsNullOrWhiteSpace($manifestText)) {
+        return $default
+    }
+
+    try {
+        $manifest = $manifestText | ConvertFrom-Json
+
+        foreach ($property in $manifest.PSObject.Properties) {
+            $default[$property.Name] = $property.Value
+        }
+
+        return $default
+    }
+    catch {
+        return $default
+    }
+}
+
+function Get-ReleaseNotesUrl {
+    param(
+        [string]$ManifestPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
+        $ManifestPath = "release_notes/latest.md"
+    }
+
+    return "https://github.com/bj-pullman/launchpad-private/blob/$Branch/$ManifestPath"
+}
+
+function Get-UpdateStatus {
+    $result = [ordered]@{
+        ok = $true
+        branch = $Branch
+        remote = $Remote
+
+        current_commit = ""
+        remote_commit = ""
+
+        current_version = ""
+        remote_version = ""
+
+        update_available = $false
+        working_tree_dirty = $false
+
+        release_manifest = $null
+        release_notes_url = ""
+
+        commits = @()
+        changed_files = @()
+        protected_files_changed = @()
+
+        errors = @()
+    }
+
+    try {
+        Invoke-Git @("fetch", $Remote, $Branch, "--prune") | Out-Null
+
+        $remoteRef = "$Remote/$Branch"
+
+        $result.current_commit = (Invoke-Git @("rev-parse", "HEAD")) -join ""
+        $result.remote_commit = (Invoke-Git @("rev-parse", $remoteRef)) -join ""
+
+        $result.current_version = Get-FriendlyVersion "HEAD"
+        $result.remote_version = Get-FriendlyVersion $remoteRef
+
+        $manifest = Get-ReleaseManifest $remoteRef
+        $result.release_manifest = $manifest
+        $result.release_notes_url = Get-ReleaseNotesUrl $manifest.release_notes_path
+
+        $statusOutput = Invoke-Git @("status", "--porcelain")
+        if ($statusOutput.Count -gt 0) {
+            $result.working_tree_dirty = $true
+        }
+
+        if ($result.current_commit -ne $result.remote_commit) {
+            $result.update_available = $true
+
+            $commitLines = Invoke-Git @("log", "--oneline", "HEAD..$remoteRef")
+            foreach ($line in $commitLines) {
+                if (-not [string]::IsNullOrWhiteSpace($line)) {
+                    $result.commits += $line.Trim()
+                }
+            }
+
+            $changedFiles = Invoke-Git @("diff", "--name-status", "HEAD..$remoteRef")
+            foreach ($line in $changedFiles) {
+                if ([string]::IsNullOrWhiteSpace($line)) {
+                    continue
+                }
+
+                $trimmed = $line.Trim()
+                $result.changed_files += $trimmed
+
+                $changedPath = ($trimmed -split "\s+", 2)[-1].Trim()
 
                 foreach ($protected in $ProtectedFiles) {
-                    if ($line -like "*$protected") {
-                        $result.protected_files_changed += $line
+                    if ($changedPath -ieq $protected) {
+                        $result.protected_files_changed += $trimmed
+                    }
+                }
+
+                foreach ($pattern in $ProtectedPatterns) {
+                    if ($changedPath -like $pattern) {
+                        $result.protected_files_changed += $trimmed
                     }
                 }
             }
         }
 
-        $commits = Invoke-Git @("log", "--oneline", "HEAD..$remoteRef")
-        foreach ($commit in $commits) {
-            if (-not [string]::IsNullOrWhiteSpace($commit)) {
-                $result.commits += $commit
-            }
-        }
-
-        $result.update_available = ($result.current_commit -ne $result.remote_commit)
+        $result.commits = @($result.commits | Select-Object -Unique)
+        $result.changed_files = @($result.changed_files | Select-Object -Unique)
+        $result.protected_files_changed = @($result.protected_files_changed | Select-Object -Unique)
     }
     catch {
         $result.ok = $false
-        $result.error = $_.Exception.Message
+        $result.errors += $_.Exception.Message
     }
 
     return $result
@@ -205,7 +346,25 @@ function Invoke-Backup {
 }
 
 function Restore-ProtectedFilesFromHead {
+    $filesToRestore = @()
+
     foreach ($file in $ProtectedFiles) {
+        $filesToRestore += $file
+    }
+
+    $changedFiles = Invoke-Git @("diff", "--name-only", "--cached")
+
+    foreach ($changedFile in $changedFiles) {
+        foreach ($pattern in $ProtectedPatterns) {
+            if ($changedFile -like $pattern) {
+                $filesToRestore += $changedFile
+            }
+        }
+    }
+
+    $filesToRestore = @($filesToRestore | Sort-Object -Unique)
+
+    foreach ($file in $filesToRestore) {
         Push-Location $AppRoot
         try {
             $existsInHead = $true
@@ -279,7 +438,7 @@ function Apply-Update {
         $summary.status_before = $statusBefore
 
         if (-not $statusBefore.ok) {
-            throw $statusBefore.error
+            throw ($statusBefore.errors -join "; ")
         }
 
         if (-not $statusBefore.update_available) {
@@ -342,11 +501,11 @@ function Apply-Update {
 }
 
 if ($CheckOnly) {
-    Get-UpdateStatus | ConvertTo-Json -Depth 8
+    Get-UpdateStatus | ConvertTo-Json -Depth 12
     exit
 }
 
 if ($Apply) {
-    Apply-Update | ConvertTo-Json -Depth 10
+    Apply-Update | ConvertTo-Json -Depth 12
     exit
 }

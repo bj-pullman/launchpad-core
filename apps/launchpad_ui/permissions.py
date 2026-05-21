@@ -12,6 +12,12 @@ SETTINGS_SECTIONS = [
         "permission": "launchpad.settings.general.view",
     },
     {
+        "key": "backups",
+        "label": "Backups & Updates",
+        "endpoint": "launchpad_ui.settings_backups",
+        "permission": "launchpad.settings.backups.view",
+    },
+    {
         "key": "integrations",
         "label": "Integrations",
         "endpoint": "launchpad_ui.settings_integrations",

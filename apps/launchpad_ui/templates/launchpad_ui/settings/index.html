@@ -27,6 +27,8 @@
       <div class="settings-index-card-body">
         {% if section.key == "general" %}
         Organization, support, announcements, and regional preferences.
+        {% elif section.key == "backups" %}
+        Backup history, update checks, release notes, and rollback preparation.
         {% elif section.key == "integrations" %}
         Microsoft, Google, SAML, Snipe-IT, and future third-party platform connections.
         {% elif section.key == "authentication" %}

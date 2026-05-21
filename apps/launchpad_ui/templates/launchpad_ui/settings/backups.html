@@ -1,0 +1,416 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block title %}System Maintenance - Launchpad{% endblock %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
+/>
+{% endblock %}
+
+{% block content %}
+<div class="settings-main-layout">
+  <div class="settings-back-row">
+    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
+      <span class="settings-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Settings</span>
+    </a>
+  </div>
+
+  <div class="settings-page-header">
+    <div>
+      <h1>System Maintenance</h1>
+      <p class="muted">Manage backups, updates, and rollback preparation.</p>
+    </div>
+  </div>
+
+  <form method="get" action="{{ url_for('launchpad_ui.settings_backups') }}" class="settings-form">
+    <div class="settings-tabs">
+      <button
+        type="submit"
+        name="tab"
+        value="backups"
+        class="settings-tab {% if active_tab == 'backups' %}active{% endif %}"
+      >
+        Backups
+      </button>
+
+      <button
+        type="submit"
+        name="tab"
+        value="updates"
+        class="settings-tab {% if active_tab == 'updates' %}active{% endif %}"
+      >
+        Updates
+      </button>
+
+      <button
+        type="submit"
+        name="tab"
+        value="rollback"
+        class="settings-tab {% if active_tab == 'rollback' %}active{% endif %}"
+      >
+        Rollback
+      </button>
+    </div>
+  </form>
+
+  {% if active_tab == "updates" %}
+  <div class="settings-section-stack">
+    <div class="system-maintenance-card {% if update_status and update_status.ok and update_status.update_available %}system-maintenance-card-warning{% elif update_status and update_status.ok %}system-maintenance-card-success{% endif %}">
+      <div class="system-maintenance-card-header">
+        <div>
+          <h2>Updates</h2>
+          <p class="muted">
+            Check for available Launchpad updates. Nothing happens automatically when opening this tab.
+          </p>
+        </div>
+
+        {% if not update_status %}
+        <form method="post" action="{{ url_for('launchpad_ui.settings_backups_check_update') }}">
+          <button type="submit" class="btn btn-primary">Check for Updates</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% if not update_status %}
+      <div class="system-maintenance-alert">
+        No update check has been run yet.
+      </div>
+
+      {% elif update_status.ok %}
+      <div class="form-grid-equal">
+        <div class="form-field">
+          <label>Installed Version</label>
+          <div><strong>{{ update_status.current_version or "Installed build" }}</strong></div>
+        </div>
+
+        <div class="form-field">
+          <label>Available Version</label>
+          <div><strong>{{ update_status.remote_version or "Available build" }}</strong></div>
+        </div>
+
+        <div class="form-field">
+          <label>Status</label>
+          <div>
+            {% if update_status.update_available %}
+            <span class="system-maintenance-pill system-maintenance-pill-warning">Update Available</span>
+            {% else %}
+            <span class="system-maintenance-pill system-maintenance-pill-success">Up to Date</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label>Restart Required</label>
+          <div>
+            {% if update_status.release_manifest and update_status.release_manifest.requires_restart %}
+            Yes
+            {% else %}
+            No
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if update_status.update_available %}
+      <div class="system-maintenance-alert">
+        <strong>Update available.</strong>
+        Review the update summary before applying. A pre-update backup will be generated automatically.
+      </div>
+      {% else %}
+      <div class="system-maintenance-alert">
+        <strong>No update available.</strong>
+        This installation appears to be current.
+      </div>
+      {% endif %}
+
+      {% if update_status.release_manifest %}
+      <div class="system-maintenance-release-card">
+        <h3>{{ update_status.release_manifest.title or "Update Notes" }}</h3>
+
+        {% if update_status.release_manifest.summary %}
+        <p>{{ update_status.release_manifest.summary }}</p>
+        {% endif %}
+
+        {% if update_status.release_manifest.expected_downtime %}
+        <p class="muted">
+          <strong>Expected downtime:</strong>
+          {{ update_status.release_manifest.expected_downtime }}
+        </p>
+        {% endif %}
+
+        {% if update_status.release_manifest.what_to_expect %}
+        <h4>What to Expect</h4>
+        <ul>
+          {% for item in update_status.release_manifest.what_to_expect %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if update_status.release_notes_url %}
+        <p>
+          <a
+            href="{{ update_status.release_notes_url }}"
+            target="_blank"
+            rel="noopener"
+            class="system-maintenance-link-button"
+          >
+            View Patch Notes
+          </a>
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if update_status.working_tree_dirty %}
+      <div class="system-maintenance-alert">
+        <strong>Local changes detected.</strong>
+        The updater will preserve local changes before applying updates.
+      </div>
+      {% endif %}
+
+      {% if update_status.protected_files_changed %}
+      <div class="system-maintenance-alert">
+        <strong>Protected hosting/config files are included in the pending update.</strong>
+        These files will not be overwritten automatically.
+      </div>
+      {% endif %}
+
+      <div class="system-maintenance-actions">
+        <form method="post" action="{{ url_for('launchpad_ui.settings_backups_check_update') }}">
+          <button type="submit" class="btn btn-secondary">Check Again</button>
+        </form>
+
+        {% if can_manage_backups and update_status.update_available %}
+        <form
+          method="post"
+          action="{{ url_for('launchpad_ui.settings_backups_apply_update') }}"
+          onsubmit="return confirm('Apply this update now? A pre-update backup will be generated first. Protected hosting files will not be overwritten automatically.');"
+        >
+          <button type="submit" class="btn btn-primary">Apply Update</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% else %}
+      <div class="system-maintenance-alert">
+        <strong>Unable to check update status.</strong>
+        {{ update_status.error or (update_status.errors|join(" ")) }}
+      </div>
+
+      <div class="system-maintenance-actions">
+        <form method="post" action="{{ url_for('launchpad_ui.settings_backups_check_update') }}">
+          <button type="submit" class="btn btn-secondary">Try Again</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% elif active_tab == "rollback" %}
+  <div class="settings-section-stack">
+    <div class="system-maintenance-card">
+      <div class="system-maintenance-card-header">
+        <div>
+          <h2>Rollback</h2>
+          <p class="muted">
+            Rollback options use recent backup history. Generate a fresh backup before rolling back.
+          </p>
+        </div>
+
+        <form method="post" action="{{ url_for('launchpad_ui.settings_backups_rollback_options') }}">
+          <button type="submit" class="btn btn-secondary">Load Rollback Options</button>
+        </form>
+      </div>
+
+      <div class="system-maintenance-alert">
+        Rollback actions should be used during a maintenance window.
+      </div>
+    </div>
+
+    <div class="system-maintenance-card">
+      <h2>Recent Backups</h2>
+
+      {% if backups is none %}
+      <p class="muted">Click Load Rollback Options to view recent backups.</p>
+      {% elif backups %}
+      <div class="settings-table-wrapper">
+        <table class="settings-table system-maintenance-table">
+          <thead>
+            <tr>
+              <th>Created</th>
+              <th>Status</th>
+              <th>Reason</th>
+              <th>Databases</th>
+              <th>Protected Files</th>
+              <th>Snapshot</th>
+              <th>Location</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for backup in backups %}
+            <tr>
+              <td>{{ backup.created_display }}</td>
+              <td>
+                <div class="system-maintenance-table-status">
+                    {% if backup.ok %}
+                    <span class="system-maintenance-pill system-maintenance-pill-success">OK</span>
+                    {% else %}
+                    <span class="system-maintenance-pill system-maintenance-pill-danger">Issue</span>
+                    {% endif %}
+                </div>
+                </td>
+              <td>{{ backup.reason or "unknown" }}</td>
+              <td class="system-maintenance-table-number">{{ backup.database_count }}</td>
+              <td class="system-maintenance-table-number">{{ backup.protected_file_count }}</td>
+              <td>{{ backup.snapshot_display }}</td>
+              <td><code>{{ backup.display_path }}</code></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted">No backups found.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% else %}
+  <div class="settings-section-stack">
+    <div class="system-maintenance-card">
+      <div class="system-maintenance-card-header">
+        <div>
+          <h2>Generate Backup</h2>
+          <p class="muted">
+            Create a restore point before imports, updates, or high-risk changes.
+          </p>
+        </div>
+      </div>
+
+      <div class="system-maintenance-alert">
+        Backups are stored under <strong>{{ backup_root }}</strong>.
+      </div>
+
+      {% if can_manage_backups %}
+      <form method="post" action="{{ url_for('launchpad_ui.settings_backups_generate') }}" class="settings-form">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="reason">Backup Reason</label>
+            <input
+              type="text"
+              id="reason"
+              name="reason"
+              value="manual"
+              placeholder="manual, pre-import, pre-update"
+            />
+          </div>
+        </div>
+
+        <label class="checkbox-card">
+          <input type="checkbox" name="include_app_snapshot" value="1" />
+          <span>
+            <strong>Include full app snapshot</strong>
+            <small>
+              Adds a larger copy of the application files in addition to the normal database/config backup.
+              Use this before major updates or risky maintenance. Leave unchecked for routine backups.
+            </small>
+          </span>
+        </label>
+
+        <div class="system-maintenance-actions">
+          <button type="submit" class="btn btn-primary">Generate Backup</button>
+        </div>
+      </form>
+      {% else %}
+      <p class="muted">You have view-only access to backups.</p>
+      {% endif %}
+    </div>
+
+    <div class="system-maintenance-card">
+      <div class="system-maintenance-card-header">
+        <div>
+          <h2>Available Backups</h2>
+          <p class="muted">
+            Recent restore points generated by System Maintenance.
+          </p>
+        </div>
+
+        {% if can_manage_backups %}
+        <form method="post" action="{{ url_for('launchpad_ui.settings_backups_import_existing') }}">
+          <button type="submit" class="btn btn-secondary">Refresh Backup Database</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% if backups is none %}
+      <p class="muted">No backup history has been loaded yet.</p>
+      {% elif backups %}
+      <div class="settings-table-wrapper">
+        <table class="settings-table system-maintenance-table">
+          <thead>
+            <tr>
+              <th>Created</th>
+              <th>Status</th>
+              <th>Reason</th>
+              <th>Databases</th>
+              <th>Protected Files</th>
+              <th>Snapshot</th>
+              <th>Location</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for backup in backups %}
+            <tr>
+              <td>{{ backup.created_display }}</td>
+              <td>
+                {% if backup.ok %}
+                <span class="system-maintenance-pill system-maintenance-pill-success">OK</span>
+                {% else %}
+                <span class="system-maintenance-pill system-maintenance-pill-danger">Issue</span>
+                {% endif %}
+              </td>
+              <td>{{ backup.reason or "unknown" }}</td>
+              <td class="system-maintenance-table-number">{{ backup.database_count }}</td>
+              <td class="system-maintenance-table-number">{{ backup.protected_file_count }}</td>
+              <td>{{ backup.snapshot_display }}</td>
+              <td><code>{{ backup.display_path }}</code></td>
+            </tr>
+
+            {% if backup.errors %}
+            <tr>
+              <td colspan="7">
+                <strong>Errors:</strong>
+                {{ backup.errors|join(" ") }}
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted">No backups found in the database yet.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

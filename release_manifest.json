@@ -1,0 +1,17 @@
+{
+  "version_base": "1.3",
+  "title": "System Maintenance Update",
+  "summary": "Adds backup history, safer update checks, protected hosting-file handling, and release-note support.",
+  "release_notes_path": "release_notes/latest.md",
+  "requires_restart": true,
+  "requires_backup": true,
+  "high_risk": false,
+  "manual_steps_required": false,
+  "manual_steps": [],
+  "expected_downtime": "Usually less than one minute while the app service restarts.",
+  "what_to_expect": [
+    "A backup is generated automatically before applying the update.",
+    "The Launchpad service may restart during the update.",
+    "Protected hosting files are not overwritten automatically."
+  ]
+}

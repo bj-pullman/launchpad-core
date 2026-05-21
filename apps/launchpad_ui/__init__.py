@@ -9,3 +9,4 @@ launchpad_ui_bp = Blueprint(
 )
 
 from . import routes  # noqa: E402,F401
+from . import backup_routes  # noqa: E402,F401
