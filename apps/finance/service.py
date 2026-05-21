@@ -12,6 +12,7 @@ from io import TextIOWrapper
 from openpyxl import load_workbook
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FINANCE_UPLOADS_DIR = BASE_DIR / "instance" / "finance" / "uploads"
@@ -1473,12 +1474,14 @@ def list_records_for_department_page(
     q: str | None = None,
     category_id: int | None = None,
     vendor_q: str | None = None,
+    record_type: str | None = None,
     page: int = 1,
     per_page: int = 100,
 ) -> dict:
     department_name = normalize_text(department_name)
     q = normalize_text(q)
     vendor_q = normalize_text(vendor_q)
+    record_type = normalize_text(record_type)
 
     page = max(int(page or 1), 1)
     per_page = max(min(int(per_page or 100), 250), 25)
@@ -1532,6 +1535,10 @@ def list_records_for_department_page(
     if vendor_q:
         where.append("LOWER(COALESCE(v.vendor_name, '')) LIKE LOWER(?)")
         params.append(f"%{vendor_q}%")
+
+    if record_type:
+        where.append("LOWER(COALESCE(r.record_type, '')) = LOWER(?)")
+        params.append(record_type)
 
     where_sql = " AND ".join(f"({item})" for item in where)
 
@@ -1603,6 +1610,25 @@ def list_active_records_for_department(
         q=q,
         category_id=category_id,
         vendor_q=vendor_q,
+        page=page,
+        per_page=per_page,
+    )
+
+def list_renewal_records_for_department(
+    department_name: str,
+    q: str | None = None,
+    category_id: int | None = None,
+    vendor_q: str | None = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict:
+    return list_records_for_department_page(
+        department_name=department_name,
+        status="active",
+        q=q,
+        category_id=category_id,
+        vendor_q=vendor_q,
+        record_type="renewal",
         page=page,
         per_page=per_page,
     )
@@ -2427,6 +2453,106 @@ def mark_transaction_promoted(transaction_id: int, record_id: int):
         )
         conn.commit()
 
+def bulk_promote_transactions_to_records(
+    *,
+    transaction_ids: list[int],
+    department_name: str,
+    created_by_user_id: int | None = None,
+) -> dict:
+    department_name = normalize_text(department_name)
+
+    if not department_name:
+        raise ValueError("department_name is required")
+
+    if not transaction_ids:
+        return {
+            "created": 0,
+            "skipped": 0,
+            "errors": [],
+        }
+
+    created = 0
+    skipped = 0
+    errors = []
+
+    for transaction_id in transaction_ids:
+        try:
+            transaction = get_transaction_by_id(transaction_id)
+
+            if not transaction:
+                skipped += 1
+                errors.append(f"Transaction {transaction_id} was not found.")
+                continue
+
+            if transaction.get("department_name") != department_name:
+                skipped += 1
+                errors.append(f"Transaction {transaction_id} does not belong to this department.")
+                continue
+
+            if (transaction.get("review_status") or "").lower() == "promoted":
+                skipped += 1
+                continue
+
+            title = (
+                normalize_text(transaction.get("title"))
+                or normalize_text(transaction.get("description"))
+                or f"Transaction {transaction_id}"
+            )
+
+            expenditure_amount = normalize_text(transaction.get("expenditure_amount"))
+            encumbrance_amount = normalize_text(transaction.get("encumbrance_amount"))
+
+            cost = expenditure_amount or encumbrance_amount or "0.00"
+
+            transaction_type = (transaction.get("transaction_type") or "").strip().lower()
+
+            if transaction_type in {"purchase", "credit_refund", "tax_fee"}:
+                record_type = "purchase"
+            else:
+                record_type = transaction.get("suggested_record_type") or "renewal"
+
+            record_id = create_record(
+                record_type=record_type,
+                title=title,
+                department_name=department_name,
+                vendor_id=transaction.get("vendor_id"),
+                category_id=None,
+                account_code=transaction.get("account_code"),
+                po_number=transaction.get("po_number"),
+                purchase_date=transaction.get("purchase_date"),
+                service_start_date="",
+                use_purchase_date_as_start=True,
+                term_length=None,
+                term_unit="",
+                expiration_date="",
+                renewal_date="",
+                notify_days_before=30,
+                notification_recipients="",
+                status="active",
+                cost=cost,
+                notes=(
+                    f"Bulk promoted from Finance Transaction #{transaction_id}\n\n"
+                    f"Description: {transaction.get('description') or ''}\n"
+                    f"Transaction Type: {transaction.get('transaction_type') or ''}\n"
+                    f"Encumbrance Amount: {transaction.get('encumbrance_amount') or ''}\n"
+                    f"Cumulative Balance: {transaction.get('cumulative_balance') or ''}"
+                ),
+                created_by_user_id=created_by_user_id,
+            )
+
+            mark_transaction_promoted(transaction_id, record_id)
+            created += 1
+
+        except Exception as exc:
+            skipped += 1
+            errors.append(f"Transaction {transaction_id}: {exc}")
+
+    return {
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
 def create_import_profile(
     *,
     profile_name: str,
@@ -2895,9 +3021,21 @@ def execute_records_import(
             if vendor_was_created:
                 vendors_created += 1
 
-            category = find_category_for_import(mapped.get("category_name"))
-            if mapped.get("category_name") and not category:
-                raise ValueError(f"Category not found: {mapped.get('category_name')}")
+            category_name = normalize_text(mapped.get("category_name"))
+            category = find_category_for_import(category_name)
+
+            if category_name and not category:
+                suggestion = find_category_suggestion_for_import(category_name)
+
+                if suggestion:
+                    confidence_percent = int(round(suggestion["confidence_score"] * 100))
+                    raise ValueError(
+                        f"Category not mapped: {category_name}. "
+                        f"Suggested match: {suggestion['suggested_category_name']} "
+                        f"({confidence_percent}% confidence)."
+                    )
+
+                raise ValueError(f"Category not mapped: {category_name}")
 
             category_id = category["id"] if category else None
 
@@ -3063,6 +3201,7 @@ def validate_records_import(
 
     preview_rows = []
     errors = []
+    category_suggestions = {}
     valid_rows = 0
     skipped_rows = 0
     vendors_to_create = 0
@@ -3089,19 +3228,54 @@ def validate_records_import(
 
         vendor_name = normalize_text(mapped.get("vendor_name"))
         vendor_code = normalize_text(mapped.get("vendor_code"))
+
         if vendor_name or vendor_code:
             existing_vendor = find_vendor_for_import(
                 vendor_name=vendor_name,
                 vendor_code=vendor_code,
             )
+
             if not existing_vendor and vendor_name:
                 vendors_to_create += 1
 
         category_name = normalize_text(mapped.get("category_name"))
+
         if category_name:
             existing_category = find_category_for_import(category_name)
-            if not existing_category:
-                row_errors.append(f"Category not found: {category_name}")
+
+            if existing_category:
+                mapped["_category_match_status"] = "matched"
+                mapped["_category_match_label"] = existing_category["category_name"]
+
+            else:
+                suggestion = find_category_suggestion_for_import(category_name)
+
+                if suggestion:
+                    category_suggestions[suggestion["id"]] = suggestion
+
+                    confidence_percent = int(
+                        round(float(suggestion["confidence_score"] or 0) * 100)
+                    )
+
+                    suggested_category_name = (
+                        suggestion.get("suggested_category_name") or "Unknown"
+                    )
+
+                    mapped["_category_match_status"] = "suggested"
+                    mapped["_category_match_label"] = (
+                        f"{suggested_category_name} ({confidence_percent}% match)"
+                    )
+
+                    row_errors.append(
+                        f"Category not mapped: {category_name}. "
+                        f"Suggested match: {suggested_category_name} "
+                        f"({confidence_percent}% confidence)."
+                    )
+
+                else:
+                    mapped["_category_match_status"] = "unmatched"
+                    mapped["_category_match_label"] = "No suggested match"
+                    row_errors.append(f"Category not mapped: {category_name}")
 
         if mapped.get("term_length"):
             try:
@@ -3141,6 +3315,7 @@ def validate_records_import(
                 source_identifier=source_identifier,
                 error_message=error_message,
             )
+
         else:
             valid_rows += 1
 
@@ -3154,6 +3329,231 @@ def validate_records_import(
         "vendors_to_create": vendors_to_create,
         "preview_rows": preview_rows,
         "errors": errors,
+        "category_suggestions": list(category_suggestions.values()),
+    }
+
+def validate_vendors_import(
+    *,
+    run_id: int,
+    profile_id: int,
+    preview_limit: int = 20,
+) -> dict:
+    run = get_import_run_by_id(run_id)
+    if not run:
+        raise ValueError("Import run not found")
+
+    rows = read_import_rows(run["stored_filename"])
+    mappings = get_import_profile_fields(profile_id)
+
+    clear_import_run_errors(run_id)
+
+    preview_rows = []
+    errors = []
+    valid_rows = 0
+    skipped_rows = 0
+    vendors_to_create = 0
+    vendors_to_update = 0
+
+    for index, row in enumerate(rows, start=2):
+        mapped = apply_import_mapping(row, mappings, index)
+        row_errors = []
+
+        vendor_name = normalize_vendor_name(mapped.get("vendor_name"))
+        vendor_code = normalize_text(mapped.get("vendor_code"))
+
+        if not vendor_name:
+            row_errors.append("Missing required field: vendor_name")
+
+        existing_vendor = None
+        if vendor_name or vendor_code:
+            existing_vendor = find_vendor_for_import(
+                vendor_name=vendor_name,
+                vendor_code=vendor_code,
+            )
+
+        source_identifier = (
+            vendor_name
+            or vendor_code
+            or row.get(next(iter(row.keys()), ""), "")
+            or f"Row {index}"
+        )
+
+        if row_errors:
+            skipped_rows += 1
+            error_message = "; ".join(row_errors)
+
+            errors.append(
+                {
+                    "row_number": index,
+                    "source_identifier": source_identifier,
+                    "error_message": error_message,
+                }
+            )
+
+            log_import_run_error(
+                run_id=run_id,
+                row_number=index,
+                source_identifier=source_identifier,
+                error_message=error_message,
+            )
+        else:
+            valid_rows += 1
+
+            if existing_vendor:
+                vendors_to_update += 1
+            else:
+                vendors_to_create += 1
+
+        if len(preview_rows) < preview_limit:
+            preview_rows.append(
+                {
+                    "vendor_name": vendor_name or "",
+                    "vendor_code": vendor_code or "",
+                    "website": normalize_text(mapped.get("website")) or "",
+                    "main_phone": normalize_text(mapped.get("main_phone")) or "",
+                    "billing_email": normalize_text(mapped.get("billing_email")) or "",
+                    "support_email": normalize_text(mapped.get("support_email")) or "",
+                    "sales_contact_name": normalize_text(mapped.get("sales_contact_name")) or "",
+                    "sales_contact_email": normalize_text(mapped.get("sales_contact_email")) or "",
+                    "notes": normalize_text(mapped.get("notes")) or "",
+                    "_import_action": "Update existing vendor" if existing_vendor else "Create new vendor",
+                }
+            )
+
+    return {
+        "total_rows": len(rows),
+        "valid_rows": valid_rows,
+        "skipped_rows": skipped_rows,
+        "vendors_to_create": vendors_to_create,
+        "vendors_to_update": vendors_to_update,
+        "preview_rows": preview_rows,
+        "errors": errors,
+    }
+
+
+def execute_vendors_import(
+    *,
+    run_id: int,
+    profile_id: int,
+    created_by_user_id: int | None = None,
+) -> dict:
+    run = get_import_run_by_id(run_id)
+    if not run:
+        raise ValueError("Import run not found")
+
+    rows = read_import_rows(run["stored_filename"])
+    mappings = get_import_profile_fields(profile_id)
+
+    total_rows = len(rows)
+    created_rows = 0
+    updated_rows = 0
+    skipped_rows = 0
+    error_rows = 0
+
+    update_import_run_results(
+        run_id,
+        status="running",
+        total_rows=total_rows,
+        created_rows=0,
+        updated_rows=0,
+        skipped_rows=0,
+        error_rows=0,
+        run_notes="Vendor import execution started.",
+        completed=False,
+    )
+
+    for index, row in enumerate(rows, start=2):
+        try:
+            mapped = apply_import_mapping(row, mappings, index)
+
+            vendor_name = normalize_vendor_name(mapped.get("vendor_name"))
+            vendor_code = normalize_text(mapped.get("vendor_code"))
+
+            if not vendor_name:
+                skipped_rows += 1
+                log_import_run_error(
+                    run_id=run_id,
+                    row_number=index,
+                    source_identifier=vendor_code or f"Row {index}",
+                    error_message="Missing required field: vendor_name",
+                )
+                continue
+
+            existing_vendor = find_vendor_for_import(
+                vendor_name=vendor_name,
+                vendor_code=vendor_code,
+            )
+
+            if existing_vendor:
+                update_vendor(
+                    vendor_id=existing_vendor["id"],
+                    vendor_name=vendor_name,
+                    vendor_code=vendor_code,
+                    website=mapped.get("website"),
+                    main_phone=mapped.get("main_phone"),
+                    billing_email=mapped.get("billing_email"),
+                    support_email=mapped.get("support_email"),
+                    sales_contact_name=mapped.get("sales_contact_name"),
+                    sales_contact_email=mapped.get("sales_contact_email"),
+                    status=existing_vendor.get("status") or "active",
+                    notes=mapped.get("notes"),
+                )
+                updated_rows += 1
+            else:
+                create_vendor(
+                    vendor_name=vendor_name,
+                    vendor_code=vendor_code,
+                    website=mapped.get("website"),
+                    main_phone=mapped.get("main_phone"),
+                    billing_email=mapped.get("billing_email"),
+                    support_email=mapped.get("support_email"),
+                    sales_contact_name=mapped.get("sales_contact_name"),
+                    sales_contact_email=mapped.get("sales_contact_email"),
+                    notes=mapped.get("notes"),
+                )
+                created_rows += 1
+
+        except Exception as exc:
+            error_rows += 1
+            log_import_run_error(
+                run_id=run_id,
+                row_number=index,
+                source_identifier=row.get(next(iter(row.keys()), ""), "") if row else None,
+                error_message=str(exc),
+            )
+
+    run_notes = (
+        f"Vendor import completed. Created vendors: {created_rows}, "
+        f"Updated vendors: {updated_rows}, "
+        f"Skipped: {skipped_rows}, Errors: {error_rows}."
+    )
+
+    final_status = "completed"
+    if error_rows and not created_rows and not updated_rows:
+        final_status = "completed_with_errors"
+    elif error_rows:
+        final_status = "completed_with_warnings"
+
+    update_import_run_results(
+        run_id,
+        status=final_status,
+        total_rows=total_rows,
+        created_rows=created_rows,
+        updated_rows=updated_rows,
+        skipped_rows=skipped_rows,
+        error_rows=error_rows,
+        run_notes=run_notes,
+        completed=True,
+    )
+
+    return {
+        "total_rows": total_rows,
+        "created_rows": created_rows,
+        "updated_rows": updated_rows,
+        "skipped_rows": skipped_rows,
+        "error_rows": error_rows,
+        "status": final_status,
+        "run_notes": run_notes,
     }
 
 def find_category_for_import(category_name: str | None) -> dict | None:
@@ -3161,18 +3561,41 @@ def find_category_for_import(category_name: str | None) -> dict | None:
     if not category_name:
         return None
 
+    normalized = normalize_category_lookup(category_name)
+
     with get_connection() as conn:
         row = conn.execute(
             """
             SELECT *
             FROM finance_categories
             WHERE LOWER(TRIM(category_name)) = LOWER(TRIM(?))
+              AND is_active = 1
             LIMIT 1
             """,
             (category_name,),
         ).fetchone()
 
-    return dict(row) if row else None
+        if row:
+            category = dict(row)
+            ensure_category_alias(category["id"], category_name)
+            return category
+
+        row = conn.execute(
+            """
+            SELECT c.*
+            FROM finance_category_aliases a
+            JOIN finance_categories c ON c.id = a.category_id
+            WHERE a.normalized_alias = ?
+              AND c.is_active = 1
+            LIMIT 1
+            """,
+            (normalized,),
+        ).fetchone()
+
+        if row:
+            return dict(row)
+
+    return None
 
 def normalize_import_header(value: str | None) -> str:
     value = normalize_text(value) or ""
@@ -3321,10 +3744,43 @@ def parse_cost_to_decimal(value) -> Decimal:
         return Decimal(cleaned)
     except (InvalidOperation, ValueError):
         return Decimal("0")
-    
+
+def list_active_budget_record_rows_for_department(department_name: str) -> list[dict]:
+    department_name = normalize_text(department_name)
+
+    if not department_name:
+        return []
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                r.*,
+                v.vendor_name,
+                c.category_name
+            FROM finance_records r
+            LEFT JOIN finance_vendors v ON v.id = r.vendor_id
+            LEFT JOIN finance_categories c ON c.id = r.category_id
+            WHERE r.department_name = ?
+              AND r.status NOT IN ('archived', 'deleted')
+            ORDER BY
+                CASE WHEN r.renewal_date IS NULL THEN 1 ELSE 0 END,
+                r.renewal_date ASC,
+                r.title COLLATE NOCASE ASC
+            """,
+            (department_name,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
 def get_budget_anchor_date(record: dict) -> date | None:
+    if not isinstance(record, dict):
+        return None
+
     for key in ("purchase_date", "renewal_date", "created_at"):
         value = record.get(key)
+
         if not value:
             continue
 
@@ -3340,49 +3796,110 @@ def get_budget_anchor_date(record: dict) -> date | None:
 
     return None
 
+
 def list_budget_records_for_department(
     department_name: str,
     year: int | None = None,
     q: str | None = None,
 ) -> list[dict]:
-    rows = list_active_records_for_department(department_name)
+    rows = list_active_budget_record_rows_for_department(department_name)
     q_norm = (q or "").strip().lower()
 
+    selected_fiscal_year = get_budget_fiscal_year_by_year_number(year)
+
     filtered = []
+
     for row in rows:
         anchor_date = get_budget_anchor_date(row)
-        if year and (not anchor_date or anchor_date.year != year):
-            continue
+        record_fiscal_year = get_budget_fiscal_year_for_date(anchor_date)
+
+        if selected_fiscal_year:
+            if not record_fiscal_year:
+                continue
+
+            if int(record_fiscal_year["year_number"]) != int(selected_fiscal_year["year_number"]):
+                continue
 
         if q_norm:
-            haystack = " ".join([
-                str(row.get("title") or ""),
-                str(row.get("vendor_name") or ""),
-                str(row.get("category_name") or ""),
-                str(row.get("account_code") or ""),
-                str(row.get("po_number") or ""),
-                str(row.get("notes") or ""),
-            ]).lower()
+            haystack = " ".join(
+                [
+                    str(row.get("title") or ""),
+                    str(row.get("vendor_name") or ""),
+                    str(row.get("category_name") or ""),
+                    str(row.get("account_code") or ""),
+                    str(row.get("po_number") or ""),
+                    str(row.get("notes") or ""),
+                ]
+            ).lower()
+
             if q_norm not in haystack:
                 continue
 
         row = dict(row)
         row["_budget_anchor_date"] = anchor_date
         row["_budget_cost"] = parse_cost_to_decimal(row.get("cost"))
+        row["_budget_fiscal_year"] = record_fiscal_year
+
         filtered.append(row)
 
     return filtered
 
+
+def get_configured_budget_fiscal_years() -> list[dict]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            ORDER BY year_number DESC
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def get_budget_fiscal_year_by_year_number(year_number: int | None) -> dict | None:
+    if not year_number:
+        return None
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            WHERE year_number = ?
+            LIMIT 1
+            """,
+            (year_number,),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def get_budget_fiscal_year_for_date(anchor_date: date | None) -> dict | None:
+    if not anchor_date:
+        return None
+
+    anchor_value = anchor_date.isoformat()
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            WHERE DATE(?) BETWEEN DATE(start_date) AND DATE(end_date)
+            ORDER BY year_number DESC
+            LIMIT 1
+            """,
+            (anchor_value,),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
 def get_budget_year_options_for_department(department_name: str) -> list[int]:
-    rows = list_active_records_for_department(department_name)
-    years = set()
-
-    for row in rows:
-        anchor_date = get_budget_anchor_date(row)
-        if anchor_date:
-            years.add(anchor_date.year)
-
-    return sorted(years, reverse=True)
+    fiscal_years = get_configured_budget_fiscal_years()
+    return [int(item["year_number"]) for item in fiscal_years]
 
 def get_budget_summary_for_department(
     department_name: str,
@@ -3390,15 +3907,111 @@ def get_budget_summary_for_department(
     q: str | None = None,
 ) -> dict:
     rows = list_budget_records_for_department(department_name, year=year, q=q)
+
     total_spent = sum((row["_budget_cost"] for row in rows), Decimal("0"))
     record_count = len(rows)
     average_spend = (total_spent / record_count) if record_count else Decimal("0")
 
+    renewals_total = sum(
+        (
+            row["_budget_cost"]
+            for row in rows
+            if (row.get("record_type") or "").lower() == "renewal"
+        ),
+        Decimal("0"),
+    )
+
+    purchases_total = sum(
+        (
+            row["_budget_cost"]
+            for row in rows
+            if (row.get("record_type") or "").lower() == "purchase"
+        ),
+        Decimal("0"),
+    )
+
+    active_total = sum(
+        (
+            row["_budget_cost"]
+            for row in rows
+            if (row.get("status") or "").lower() == "active"
+        ),
+        Decimal("0"),
+    )
+
+    encumbrance_total = sum(
+        (
+            row["_budget_cost"]
+            for row in rows
+            if (row.get("status") or "").lower()
+            in {"encumbered", "encumbrance", "pending", "pending_approval"}
+        ),
+        Decimal("0"),
+    )
+
+    budget_target = get_budget_target_for_department(department_name, year)
+    total_budget = budget_target["total_budget"]
+    remaining_budget = total_budget - total_spent
+
+    percent_used = Decimal("0")
+
+    if total_budget > 0:
+        percent_used = (total_spent / total_budget) * Decimal("100")
+    elif total_spent > 0:
+        percent_used = Decimal("100")
+
     return {
+        "total_budget": total_budget,
         "total_spent": total_spent,
+        "remaining_budget": remaining_budget,
+        "percent_used": percent_used.quantize(Decimal("0.1")),
         "record_count": record_count,
         "average_spend": average_spend,
+        "renewals_total": renewals_total,
+        "purchases_total": purchases_total,
+        "active_total": active_total,
+        "encumbrance_total": encumbrance_total,
+        "budget_target": budget_target,
     }
+
+def get_budget_dashboard_for_department(
+    department_name: str,
+    year: int | None = None,
+    q: str | None = None,
+) -> dict:
+    return {
+        "category": get_budget_breakdown_for_department(
+            department_name=department_name,
+            year=year,
+            group_by="category",
+            q=q,
+        ),
+        "vendor": get_budget_breakdown_for_department(
+            department_name=department_name,
+            year=year,
+            group_by="vendor",
+            q=q,
+        ),
+        "month": get_budget_breakdown_for_department(
+            department_name=department_name,
+            year=year,
+            group_by="month",
+            q=q,
+        ),
+        "record_type": get_budget_breakdown_for_department(
+            department_name=department_name,
+            year=year,
+            group_by="record_type",
+            q=q,
+        ),
+        "status": get_budget_breakdown_for_department(
+            department_name=department_name,
+            year=year,
+            group_by="status",
+            q=q,
+        ),
+    }
+
 
 def get_budget_breakdown_for_department(
     department_name: str,
@@ -3407,19 +4020,34 @@ def get_budget_breakdown_for_department(
     q: str | None = None,
 ) -> dict:
     rows = list_budget_records_for_department(department_name, year=year, q=q)
-    buckets = defaultdict(lambda: {
-        "label": "",
-        "total_spent": Decimal("0"),
-        "record_count": 0,
-        "records": [],
-    })
+
+    buckets = defaultdict(
+        lambda: {
+            "label": "",
+            "total_spent": Decimal("0"),
+            "record_count": 0,
+            "records": [],
+        }
+    )
 
     for row in rows:
         if group_by == "vendor":
             label = row.get("vendor_name") or "Unassigned Vendor"
+
         elif group_by == "month":
             anchor = row.get("_budget_anchor_date")
             label = anchor.strftime("%Y-%m") if anchor else "No Date"
+
+        elif group_by == "record_type":
+            label = (
+                row.get("record_type") or "Unassigned Type"
+            ).replace("_", " ").title()
+
+        elif group_by == "status":
+            label = (
+                row.get("status") or "Unassigned Status"
+            ).replace("_", " ").title()
+
         else:
             label = row.get("category_name") or "Unassigned Category"
 
@@ -3429,30 +4057,47 @@ def get_budget_breakdown_for_department(
         bucket["record_count"] += 1
         bucket["records"].append(row)
 
-    total_spent = sum((item["total_spent"] for item in buckets.values()), Decimal("0"))
+    total_spent = sum(
+        (item["total_spent"] for item in buckets.values()),
+        Decimal("0"),
+    )
+
     results = []
 
-    for label, item in sorted(
-        buckets.items(),
-        key=lambda kv: (kv[1]["total_spent"], kv[0]),
-        reverse=True,
-    ):
-        average_spend = (
-            item["total_spent"] / item["record_count"]
-            if item["record_count"] else Decimal("0")
+    if group_by == "month":
+        sorted_bucket_items = sorted(
+            buckets.items(),
+            key=lambda kv: kv[0],
         )
-        percent_of_total = (
-            (item["total_spent"] / total_spent) * Decimal("100")
-            if total_spent else Decimal("0")
+    else:
+        sorted_bucket_items = sorted(
+            buckets.items(),
+            key=lambda kv: (kv[1]["total_spent"], kv[0]),
+            reverse=True,
         )
 
-        results.append({
-            "label": item["label"],
-            "total_spent": item["total_spent"],
-            "record_count": item["record_count"],
-            "average_spend": average_spend,
-            "percent_of_total": percent_of_total,
-        })
+    for label, item in sorted_bucket_items:
+        average_spend = (
+            item["total_spent"] / item["record_count"]
+            if item["record_count"]
+            else Decimal("0")
+        )
+
+        percent_of_total = (
+            (item["total_spent"] / total_spent) * Decimal("100")
+            if total_spent
+            else Decimal("0")
+        )
+
+        results.append(
+            {
+                "label": item["label"],
+                "total_spent": item["total_spent"],
+                "record_count": item["record_count"],
+                "average_spend": average_spend,
+                "percent_of_total": percent_of_total,
+            }
+        )
 
     chart_labels = [item["label"] for item in results]
     chart_values = [float(item["total_spent"]) for item in results]
@@ -3466,6 +4111,92 @@ def get_budget_breakdown_for_department(
         "top_bucket": top_bucket,
         "group_by": group_by,
     }
+
+def get_budget_target_for_department(
+    department_name: str,
+    fiscal_year: int | None,
+) -> dict:
+    department_name = normalize_text(department_name)
+
+    if not department_name or not fiscal_year:
+        return {
+            "department_name": department_name or "",
+            "fiscal_year": fiscal_year,
+            "total_budget": Decimal("0"),
+            "notes": "",
+        }
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM finance_budget_targets
+            WHERE department_name = ?
+              AND fiscal_year = ?
+            """,
+            (department_name, fiscal_year),
+        ).fetchone()
+
+    if not row:
+        return {
+            "department_name": department_name,
+            "fiscal_year": fiscal_year,
+            "total_budget": Decimal("0"),
+            "notes": "",
+        }
+
+    item = dict(row)
+    item["total_budget"] = parse_cost_to_decimal(item.get("total_budget"))
+    return item
+
+
+def save_budget_target_for_department(
+    *,
+    department_name: str,
+    fiscal_year: int,
+    total_budget: str | None,
+    notes: str | None = None,
+    created_by_user_id: int | None = None,
+):
+    department_name = normalize_text(department_name)
+    if not department_name:
+        raise ValueError("department_name is required")
+
+    if not fiscal_year:
+        raise ValueError("fiscal_year is required")
+
+    total_budget_decimal = parse_cost_to_decimal(total_budget)
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO finance_budget_targets (
+                department_name,
+                fiscal_year,
+                total_budget,
+                notes,
+                created_by_user_id,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(department_name, fiscal_year) DO UPDATE SET
+                total_budget = excluded.total_budget,
+                notes = excluded.notes,
+                updated_at = excluded.updated_at
+            """,
+            (
+                department_name,
+                fiscal_year,
+                str(total_budget_decimal.quantize(Decimal("0.01"))),
+                normalize_text(notes),
+                created_by_user_id,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
 
 def validate_transactions_import(
     *,
@@ -3689,3 +4420,202 @@ def bulk_update_transactions_review_status(
         )
         conn.commit()
         return cursor.rowcount
+    
+def normalize_category_lookup(value: str | None) -> str | None:
+    value = normalize_text(value)
+    if not value:
+        return None
+
+    value = value.lower()
+    value = value.replace("&", " and ")
+    value = value.replace("-", " ")
+    value = value.replace("_", " ")
+    value = value.replace("/", " ")
+
+    cleaned = []
+    for char in value:
+        if char.isalnum() or char.isspace():
+            cleaned.append(char)
+
+    words = "".join(cleaned).split()
+    normalized_words = []
+
+    for word in words:
+        if len(word) > 3 and word.endswith("ies"):
+            word = word[:-3] + "y"
+        elif len(word) > 3 and word.endswith("s"):
+            word = word[:-1]
+
+        normalized_words.append(word)
+
+    return " ".join(normalized_words)
+
+
+def ensure_category_alias(category_id: int, alias_name: str):
+    alias_name = normalize_text(alias_name)
+    normalized_alias = normalize_category_lookup(alias_name)
+
+    if not category_id or not alias_name or not normalized_alias:
+        return
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO finance_category_aliases (
+                category_id,
+                alias_name,
+                normalized_alias,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (category_id, alias_name, normalized_alias, now, now),
+        )
+        conn.commit()
+
+
+def find_category_suggestion_for_import(category_name: str | None) -> dict | None:
+    category_name = normalize_text(category_name)
+    normalized = normalize_category_lookup(category_name)
+
+    if not category_name or not normalized:
+        return None
+
+    with get_connection() as conn:
+        categories = conn.execute(
+            """
+            SELECT id, category_name
+            FROM finance_categories
+            WHERE is_active = 1
+            """
+        ).fetchall()
+
+    best_category = None
+    best_score = 0.0
+
+    for category in categories:
+        category_normalized = normalize_category_lookup(category["category_name"])
+        if not category_normalized:
+            continue
+
+        score = SequenceMatcher(None, normalized, category_normalized).ratio()
+
+        imported_words = set(normalized.split())
+        category_words = set(category_normalized.split())
+
+        if imported_words and category_words:
+            overlap_score = len(imported_words & category_words) / len(
+                imported_words | category_words
+            )
+            score = max(score, overlap_score)
+
+        if score > best_score:
+            best_score = score
+            best_category = dict(category)
+
+    if not best_category:
+        return None
+
+    now = utc_now_iso()
+    confidence_score = round(best_score, 4)
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO finance_category_import_suggestions (
+                imported_category_name,
+                normalized_imported_name,
+                suggested_category_id,
+                confidence_score,
+                status,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, 'pending', ?, ?)
+            ON CONFLICT(normalized_imported_name) DO UPDATE SET
+                imported_category_name = excluded.imported_category_name,
+                suggested_category_id = excluded.suggested_category_id,
+                confidence_score = excluded.confidence_score,
+                status = CASE
+                    WHEN finance_category_import_suggestions.status = 'approved'
+                    THEN finance_category_import_suggestions.status
+                    ELSE 'pending'
+                END,
+                updated_at = excluded.updated_at
+            """,
+            (
+                category_name,
+                normalized,
+                best_category["id"],
+                confidence_score,
+                now,
+                now,
+            ),
+        )
+
+        row = conn.execute(
+            """
+            SELECT
+                s.*,
+                c.category_name AS suggested_category_name
+            FROM finance_category_import_suggestions s
+            LEFT JOIN finance_categories c ON c.id = s.suggested_category_id
+            WHERE s.normalized_imported_name = ?
+            """,
+            (normalized,),
+        ).fetchone()
+
+        conn.commit()
+
+    return dict(row) if row else None
+
+def get_category_import_suggestion_by_id(suggestion_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                s.*,
+                c.category_name AS suggested_category_name
+            FROM finance_category_import_suggestions s
+            LEFT JOIN finance_categories c ON c.id = s.suggested_category_id
+            WHERE s.id = ?
+            """,
+            (suggestion_id,),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def approve_category_import_suggestion(suggestion_id: int):
+    suggestion = get_category_import_suggestion_by_id(suggestion_id)
+
+    if not suggestion:
+        raise ValueError("Category suggestion not found.")
+
+    category_id = suggestion.get("suggested_category_id")
+    imported_category_name = suggestion.get("imported_category_name")
+
+    if not category_id:
+        raise ValueError("Suggestion does not have a category match.")
+
+    ensure_category_alias(
+        category_id=category_id,
+        alias_name=imported_category_name,
+    )
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE finance_category_import_suggestions
+            SET status = 'approved',
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (now, suggestion_id),
+        )
+        conn.commit()
