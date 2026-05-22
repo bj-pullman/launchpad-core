@@ -11,6 +11,9 @@
 
 {% block content %}
 {% set update_result = update_status.result if update_status and update_status.result else none %}
+{% set is_check_running = update_job and update_job.type == "check_update" and update_job.status in ["queued", "running"] %}
+{% set is_apply_running = update_job and update_job.type == "apply_update" and update_job.status in ["queued", "running"] %}
+
 <div class="settings-main-layout">
   <div class="settings-back-row">
     <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
@@ -49,7 +52,7 @@
           <p class="muted">Check for available Launchpad updates. Nothing happens automatically when opening this tab.</p>
         </div>
 
-        {% if not update_job or update_job.status not in ["queued", "running"] %}
+        {% if not is_check_running and not is_apply_running %}
         <form method="post" action="{{ url_for('launchpad_ui.settings_backups_check_update') }}">
           <button type="submit" class="btn btn-primary">Check for Updates</button>
         </form>
@@ -58,12 +61,36 @@
 
       {% if update_job %}
       <div class="system-maintenance-alert">
-        <strong>Last update check:</strong>
+        <strong>Latest maintenance job:</strong>
         {{ update_job.status|title }} — {{ update_job.message }}
       </div>
       {% endif %}
 
-      {% if not update_status %}
+      {% if is_apply_running %}
+      <div class="system-maintenance-alert system-maintenance-card-warning">
+        <strong>Update is running.</strong>
+        Launchpad is applying the update now. The app may briefly disconnect or restart.
+      </div>
+
+      <script>
+        window.setTimeout(function () {
+          window.location.reload();
+        }, 5000);
+      </script>
+
+      {% elif is_check_running %}
+      <div class="system-maintenance-alert">
+        <strong>Update check running.</strong>
+        This page will refresh automatically until the check finishes.
+      </div>
+
+      <script>
+        window.setTimeout(function () {
+          window.location.reload();
+        }, 3000);
+      </script>
+
+      {% elif not update_status %}
       <div class="system-maintenance-alert">
         No cached update check is available yet. Click Check for Updates to start one.
       </div>
@@ -172,8 +199,8 @@
         >
           <button type="submit" class="btn btn-primary">Apply Update</button>
         </form>
-        {% endif %}
       </div>
+      {% endif %}
 
       {% else %}
       <div class="system-maintenance-alert">
@@ -189,7 +216,7 @@
 
       <div class="system-maintenance-actions">
         <form method="post" action="{{ url_for('launchpad_ui.settings_backups_check_update') }}">
-          <button type="submit" class="btn btn-secondary">Try Again</button>
+          <button type="submit" class="btn btn-secondary">Check Again</button>
         </form>
       </div>
       {% endif %}
