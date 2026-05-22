@@ -33,8 +33,24 @@
 
         <div class="staff-status-kiosk-header-right">
           <div class="staff-status-kiosk-actions">
-            <button class="kiosk-refresh-btn" onclick="window.location.reload()" title="Refresh">
-              ⟳
+            <button
+              type="button"
+              class="kiosk-refresh-btn"
+              onclick="window.location.reload()"
+              title="Refresh kiosk page"
+              aria-label="Refresh kiosk page"
+            >
+              <svg class="kiosk-refresh-btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  d="M20 12a8 8 0 0 1-13.66 5.66M4 12A8 8 0 0 1 17.66 6.34M17 3v4h-4M7 21v-4h4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span>Refresh</span>
             </button>
           </div>
 

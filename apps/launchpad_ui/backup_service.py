@@ -234,53 +234,15 @@ def import_existing_backups(limit: int = 100):
 
 
 def get_update_status():
-    current_manifest_path = get_app_root() / "release_manifest.json"
-
-    current_manifest = {}
-    if current_manifest_path.exists():
-        try:
-            current_manifest = _load_json_file(current_manifest_path)
-        except Exception:
-            current_manifest = {}
-
-    try:
-        request = Request(
-            PUBLIC_RELEASE_MANIFEST_URL,
-            headers={"User-Agent": "Launchpad-Update-Checker"},
-        )
-
-        with urlopen(request, timeout=20) as response:
-            remote_manifest = json.loads(response.read().decode("utf-8-sig"))
-
-        current_version = str(current_manifest.get("version") or "unknown")
-        remote_version = str(remote_manifest.get("version") or "unknown")
-
-        return {
-            "ok": True,
-            "source": "public_manifest",
-            "current_version": current_version,
-            "remote_version": remote_version,
-            "update_available": current_version != remote_version,
-            "working_tree_dirty": False,
-            "release_manifest": remote_manifest,
-            "release_notes_url": remote_manifest.get("release_notes_url"),
-            "protected_files_changed": [],
-            "errors": [],
-        }
-
-    except Exception as exc:
-        return {
-            "ok": False,
-            "source": "public_manifest",
-            "current_version": str(current_manifest.get("version") or "unknown"),
-            "remote_version": "unknown",
-            "update_available": False,
-            "working_tree_dirty": False,
-            "release_manifest": None,
-            "release_notes_url": None,
-            "protected_files_changed": [],
-            "errors": [str(exc)],
-        }
+    return _run_powershell_script(
+        "production_update.ps1",
+        args=[
+            "-BackupRoot",
+            str(get_backup_root()),
+            "-CheckOnly",
+        ],
+        timeout=900,
+    )
 
 
 def apply_update():

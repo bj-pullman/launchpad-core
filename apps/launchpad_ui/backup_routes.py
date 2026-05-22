@@ -16,6 +16,7 @@ from .maintenance_job_service import (
     get_cached_update_status,
     get_latest_job,
     start_update_check_job,
+    start_apply_update_job,
 )
 
 
@@ -140,21 +141,14 @@ def settings_backups_check_update():
 @login_required
 @require_permission("launchpad.settings.backups.manage")
 def settings_backups_apply_update():
-    result = apply_update()
-
-    if result.get("ok"):
-        if result.get("status_before", {}).get("update_available"):
-            flash("Update applied successfully. A pre-update backup was generated.", "success")
-        else:
-            flash("No update was available. Nothing changed.", "info")
-    else:
-        errors = result.get("errors") or [result.get("error") or "Unknown update error."]
-        flash("Update failed: " + " ".join(str(error) for error in errors if error), "error")
+    job = start_apply_update_job()
+    flash("Update started. The app may restart during the update. Refresh this page after it comes back online.", "info")
 
     return _render_system_maintenance(
         active_tab="updates",
         backups=None,
-        update_status=None,
+        update_status=get_cached_update_status(),
+        update_job=job,
     )
 
 

@@ -1,8 +1,6 @@
 import argparse
-import json
-from pathlib import Path
 
-from .backup_service import get_update_status
+from .backup_service import get_update_status, apply_update
 from .maintenance_job_service import (
     UPDATE_STATUS_PATH,
     _job_path,
@@ -34,12 +32,10 @@ def run_check_update(job_id: str):
         status = "completed" if result.get("ok") else "failed"
         message = "Update check completed." if result.get("ok") else "Update check failed."
 
-        payload = {
+        write_json(UPDATE_STATUS_PATH, {
             "checked_at": _utc_now(),
             "result": result,
-        }
-
-        write_json(UPDATE_STATUS_PATH, payload)
+        })
 
         _update_job(
             job_id,
@@ -61,6 +57,40 @@ def run_check_update(job_id: str):
         )
 
 
+def run_apply_update(job_id: str):
+    _update_job(
+        job_id,
+        status="running",
+        started_at=_utc_now(),
+        message="Applying update.",
+    )
+
+    try:
+        result = apply_update()
+
+        status = "completed" if result.get("ok") else "failed"
+        message = "Update applied." if result.get("ok") else "Update failed."
+
+        _update_job(
+            job_id,
+            status=status,
+            finished_at=_utc_now(),
+            message=message,
+            result=result,
+            errors=result.get("errors") or ([] if result.get("ok") else [result.get("error") or "Unknown error"]),
+        )
+
+    except Exception as exc:
+        _update_job(
+            job_id,
+            status="failed",
+            finished_at=_utc_now(),
+            message="Update failed.",
+            result=None,
+            errors=[str(exc)],
+        )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--job-id", required=True)
@@ -69,6 +99,10 @@ def main():
 
     if args.job_type == "check_update":
         run_check_update(args.job_id)
+        return
+
+    if args.job_type == "apply_update":
+        run_apply_update(args.job_id)
         return
 
     _update_job(

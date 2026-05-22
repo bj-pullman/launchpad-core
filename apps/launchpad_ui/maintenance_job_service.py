@@ -127,3 +127,35 @@ def start_update_check_job():
     subprocess.Popen(command, **kwargs)
 
     return job
+    
+def start_apply_update_job():
+    job = create_job("apply_update")
+
+    command = [
+        sys.executable,
+        "-m",
+        "apps.launchpad_ui.maintenance_worker",
+        "--job-id",
+        job["id"],
+        "--job-type",
+        "apply_update",
+    ]
+
+    kwargs = {
+        "cwd": str(Path(__file__).resolve().parents[2]),
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": False,
+    }
+
+    if os.name == "nt":
+        kwargs["creationflags"] = (
+            subprocess.CREATE_NO_WINDOW
+            | subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NEW_PROCESS_GROUP
+        )
+
+    subprocess.Popen(command, **kwargs)
+
+    return job
