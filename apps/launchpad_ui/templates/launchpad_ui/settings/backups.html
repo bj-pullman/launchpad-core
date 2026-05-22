@@ -118,16 +118,23 @@
           </div>
         </div>
 
+        {% if update_result.update_available %}
         <div class="form-field">
-          <label>Restart Required</label>
+          <label>Update Behavior</label>
+
           <div>
             {% if update_result.release_manifest and update_result.release_manifest.requires_restart %}
-            Yes
+            <span class="system-maintenance-pill system-maintenance-pill-warning">
+              Service Restart Required
+            </span>
             {% else %}
-            No
+            <span class="system-maintenance-pill system-maintenance-pill-success">
+              Hot Update Supported
+            </span>
             {% endif %}
           </div>
         </div>
+        {% endif %}
       </div>
 
       {% if update_result.update_available %}
