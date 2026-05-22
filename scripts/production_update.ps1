@@ -272,7 +272,7 @@ function Get-UpdateStatus {
         $result.release_manifest = $manifest
         $result.release_notes_url = Get-ReleaseNotesUrl $manifest.release_notes_path
 
-        $statusOutput = Invoke-Git @("status", "--porcelain")
+        $statusOutput = @(Invoke-Git @("status", "--porcelain"))
         if ($statusOutput.Count -gt 0) {
             $result.working_tree_dirty = $true
         }
@@ -280,7 +280,7 @@ function Get-UpdateStatus {
         if ($result.current_commit -ne $result.remote_commit) {
             $result.update_available = $true
 
-            $commitLines = Invoke-Git @("log", "--oneline", "HEAD..$remoteRef")
+            $commitLines = @(Invoke-Git @("log", "--oneline", "HEAD..$remoteRef"))
             foreach ($line in $commitLines) {
                 if (-not [string]::IsNullOrWhiteSpace($line)) {
                     $result.commits += $line.Trim()
@@ -356,7 +356,7 @@ function Restore-ProtectedFilesFromHead {
         $filesToRestore += $file
     }
 
-    $changedFiles = Invoke-Git @("diff", "--name-only", "--cached")
+    $changedFiles = @(Invoke-Git @("diff", "--name-only", "--cached"))
 
     foreach ($changedFile in $changedFiles) {
         foreach ($pattern in $ProtectedPatterns) {
@@ -475,10 +475,10 @@ function Apply-Update {
 
         Restore-ProtectedFilesFromHead
 
-        $mergeStatus = Invoke-Git @("status", "--porcelain")
-        $conflicts = $mergeStatus | Where-Object {
+        $mergeStatus = @(Invoke-Git @("status", "--porcelain"))
+        $conflicts = @($mergeStatus | Where-Object {
             $_ -match "^(UU|AA|DD|DU|UD|AU|UA)"
-        }
+        })
 
         if ($conflicts.Count -gt 0) {
             throw "Merge conflicts detected: $($conflicts -join '; ')"
