@@ -163,12 +163,8 @@
       </div>
       {% endif %}
 
+      {% if can_manage_backups and update_result.update_available %}
       <div class="system-maintenance-actions">
-        <form method="post" action="{{ url_for('launchpad_ui.settings_backups_check_update') }}">
-          <button type="submit" class="btn btn-secondary">Check Again</button>
-        </form>
-
-        {% if can_manage_backups and update_result.update_available %}
         <form
           method="post"
           action="{{ url_for('launchpad_ui.settings_backups_apply_update') }}"
