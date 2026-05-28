@@ -82,6 +82,28 @@ def init_db() -> None:
             updated_at TEXT
         )
         """)
+
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS catalog_assets (
+            id INTEGER PRIMARY KEY,
+            asset_tag TEXT,
+            serial TEXT,
+            name TEXT,
+            model_name TEXT,
+            category_name TEXT,
+            status_name TEXT,
+            location_name TEXT,
+            assigned_type TEXT,
+            assigned_id INTEGER,
+            assigned_name TEXT,
+            raw_json TEXT,
+            updated_at TEXT
+        )
+        """)
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_asset_tag ON catalog_assets(asset_tag)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_serial ON catalog_assets(serial)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_name ON catalog_assets(name)")
         conn.commit()
 
 
@@ -201,3 +223,124 @@ def upsert_categories(rows: list[dict]) -> int:
 
 def upsert_manufacturers(rows: list[dict]) -> int:
     return _upsert_simple("catalog_manufacturers", rows)
+
+def _nested_name(row: dict, key: str) -> str | None:
+    value = row.get(key)
+    if isinstance(value, dict):
+        return value.get("name")
+    return None
+
+
+def upsert_assets(rows: list[dict]) -> int:
+    now = _now_iso()
+    ids = [int(r["id"]) for r in rows if r.get("id") is not None]
+
+    with _connect() as conn:
+        for r in rows:
+            asset_id = r.get("id")
+            if asset_id is None:
+                continue
+
+            assigned = r.get("assigned_to") if isinstance(r.get("assigned_to"), dict) else {}
+
+            conn.execute(
+                """
+                INSERT INTO catalog_assets(
+                    id,
+                    asset_tag,
+                    serial,
+                    name,
+                    model_name,
+                    category_name,
+                    status_name,
+                    location_name,
+                    assigned_type,
+                    assigned_id,
+                    assigned_name,
+                    raw_json,
+                    updated_at
+                )
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET
+                    asset_tag=excluded.asset_tag,
+                    serial=excluded.serial,
+                    name=excluded.name,
+                    model_name=excluded.model_name,
+                    category_name=excluded.category_name,
+                    status_name=excluded.status_name,
+                    location_name=excluded.location_name,
+                    assigned_type=excluded.assigned_type,
+                    assigned_id=excluded.assigned_id,
+                    assigned_name=excluded.assigned_name,
+                    raw_json=excluded.raw_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    int(asset_id),
+                    str(r.get("asset_tag") or "").strip(),
+                    str(r.get("serial") or "").strip(),
+                    str(r.get("name") or "").strip(),
+                    _nested_name(r, "model"),
+                    _nested_name(r, "category"),
+                    _nested_name(r, "status_label"),
+                    _nested_name(r, "location") or _nested_name(r, "rtd_location"),
+                    assigned.get("type"),
+                    assigned.get("id"),
+                    assigned.get("name"),
+                    json.dumps(r),
+                    now,
+                ),
+            )
+
+        if ids:
+            qmarks = ",".join(["?"] * len(ids))
+            conn.execute(f"DELETE FROM catalog_assets WHERE id NOT IN ({qmarks})", ids)
+        else:
+            conn.execute("DELETE FROM catalog_assets")
+
+        conn.commit()
+
+    return len(ids)
+
+
+def search_assets(query: str, limit: int = 25) -> list[dict]:
+    q = str(query or "").strip()
+    if not q:
+        return []
+
+    like = f"%{q}%"
+
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM catalog_assets
+            WHERE asset_tag LIKE ?
+               OR serial LIKE ?
+               OR name LIKE ?
+               OR model_name LIKE ?
+            ORDER BY
+                CASE
+                    WHEN asset_tag = ? THEN 0
+                    WHEN serial = ? THEN 1
+                    WHEN name = ? THEN 2
+                    ELSE 3
+                END,
+                asset_tag,
+                name
+            LIMIT ?
+            """,
+            (like, like, like, like, q, q, q, int(limit)),
+        ).fetchall()
+
+        return [dict(r) for r in rows]
+
+
+def get_asset(asset_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM catalog_assets WHERE id = ?",
+            (int(asset_id),),
+        ).fetchone()
+
+        return dict(row) if row else None

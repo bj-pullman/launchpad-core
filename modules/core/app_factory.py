@@ -8,13 +8,18 @@ from dotenv import load_dotenv
 from flask import Flask, flash, redirect, request, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from apps.launchpad_ui import launchpad_ui_bp
+
 from apps.snipeops.import_by_scan.blueprint import bp as import_by_scan_bp
 from apps.snipeops.import_by_scan.import_by_scan_db import init_db as import_by_scan_init_db
 from apps.snipeops.snipe_catalog.blueprint import bp as snipe_catalog_bp
-from apps.launchpad_ui import launchpad_ui_bp
 from apps.snipeops.blueprint import bp as snipeops_bp
 from apps.snipeops.mapping_db import init_mapping_db
 from apps.snipeops.mapping_service import seed_default_mappings
+from apps.snipeops.checkout_assets.blueprint import bp as checkout_assets_bp
+from apps.snipeops.checkout_assets.checkout_assets_db import init_db as checkout_assets_init_db
+from apps.snipeops.snipe_catalog.catalog_db import init_db as snipe_catalog_init_db
+
 from apps.staff_status.blueprint import bp as staff_status_bp
 from apps.staff_status.db import init_staff_status_db
 from apps.finance.blueprint import bp as finance_bp
@@ -146,6 +151,8 @@ def create_app() -> Flask:
     init_rbac_db()
     init_staff_status_db()
     init_finance_db()
+    snipe_catalog_init_db()
+    checkout_assets_init_db()
 
     # Seed Finance defaults (safe/idempotent)
     ensure_efinance_daily_import_profile()
@@ -318,6 +325,7 @@ def create_app() -> Flask:
     app.register_blueprint(staff_status_bp)
     app.register_blueprint(finance_bp)
     app.register_blueprint(finance_api_bp)
+    app.register_blueprint(checkout_assets_bp)
 
     should_start_scheduler = True
 

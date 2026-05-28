@@ -74,6 +74,8 @@ def seed_permissions():
         ("snipeops.import_by_scan.manage", "Manage Import by Scan"),
         ("snipeops.snipe_catalog.view", "Snipe Catalog"),
         ("snipeops.snipe_catalog.manage", "Manage Snipe Catalog"),
+        ("snipeops.checkout_assets.view", "Checkout Assets"),
+        ("snipeops.checkout_assets.manage", "Manage Checkout Assets"),
 
         # Staff Status app access
         ("staff_status.app.view", "Staff Status App View"),
@@ -179,6 +181,8 @@ def seed_permissions():
         "snipeops.home.view",
         "snipeops.import_by_scan.view",
         "snipeops.snipe_catalog.view",
+        "snipeops.checkout_assets.view",
+        "snipeops.checkout_assets.manage",
     ]
 
     for key in snipeops_user_permissions:

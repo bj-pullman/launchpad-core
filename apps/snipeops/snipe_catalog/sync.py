@@ -9,6 +9,7 @@ from apps.snipeops.snipe_catalog.snipe_api import (
     fetch_depreciations,
     fetch_categories,
     fetch_manufacturers,
+    fetch_assets,
 )
 
 from apps.snipeops.snipe_catalog.catalog_db import (
@@ -20,6 +21,7 @@ from apps.snipeops.snipe_catalog.catalog_db import (
     upsert_depreciations,
     upsert_categories,
     upsert_manufacturers,
+    upsert_assets,
 )
 
 def run_full_sync() -> dict:
@@ -35,6 +37,7 @@ def run_full_sync() -> dict:
         depreciations = fetch_depreciations()
         categories = fetch_categories()
         manufacturers = fetch_manufacturers()
+        assets = fetch_assets()
 
         c_models = upsert_models(models)
         c_locations = upsert_locations(locations)
@@ -44,6 +47,7 @@ def run_full_sync() -> dict:
 
         c_categories = upsert_categories(categories)
         c_manufacturers = upsert_manufacturers(manufacturers)
+        c_assets = upsert_assets(assets)
 
         set_meta("last_sync_utc", datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
 
@@ -57,6 +61,7 @@ def run_full_sync() -> dict:
                 "depreciations": c_depr,
                 "categories": c_categories,
                 "manufacturers": c_manufacturers,
+                "assets": c_assets,
             }
         }
 

@@ -200,3 +200,6 @@ def create_model(name, category_id, manufacturer_id=None, model_number=None):
         raise ValueError("Model name is required.")
 
     return post_json("/api/v1/models", payload)
+
+def fetch_assets():
+    return get_paginated("/api/v1/hardware", limit=500)
