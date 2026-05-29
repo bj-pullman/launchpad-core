@@ -109,6 +109,31 @@ def checkout_asset_to_asset(
 
     return data
 
+def checkin_asset(
+    *,
+    asset_id: int,
+    note: str = "Checked in by SnipeOps checkout helper.",
+    delay_seconds: float = 0.35,
+) -> dict:
+    if delay_seconds > 0:
+        time.sleep(float(delay_seconds))
+
+    response = _request(
+        "POST",
+        f"/api/v1/hardware/{int(asset_id)}/checkin",
+        json={
+            "note": note,
+        },
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    if isinstance(data, dict) and data.get("status") == "error":
+        raise ValueError(f"Snipe-IT checkin failed: {_format_snipe_messages(data)}")
+
+    return data
 
 def build_asset_url(asset_id: int | str | None) -> str | None:
     cfg = _get_snipeops_settings()

@@ -197,7 +197,9 @@ def local_login():
     if is_initial_setup_required():
         return redirect(url_for("setup.initial_setup"))
 
-    if not current_app.config.get("AUTH_LOCAL_ENABLED", True):
+    settings = get_auth_settings()
+
+    if not settings.get("local_enabled", True):
         flash("Local sign-in is disabled.", "error")
         return redirect(url_for("auth.login", next=request.form.get("next") or "/"))
 
@@ -218,7 +220,8 @@ def local_login():
     auth_account = result["auth_account"]
     local_user = result["user"]
 
-    local_mode = current_app.config.get("AUTH_LOCAL_MODE", "breakglass_only")
+    settings = get_auth_settings()
+    local_mode = settings.get("local_mode", "breakglass_only")
     if local_mode == "disabled":
         flash("Local sign-in is disabled.", "error")
         return redirect(url_for("auth.login", next=next_url))

@@ -3,6 +3,8 @@
 
 {% block content %}
 
+  {% set perms = session.get("user_permissions", []) %}
+
   {% if snipeops_admin_bypass_active %}
   <div class="snipeops-warning-banner">
     <div class="snipeops-warning-banner-copy">
@@ -30,6 +32,8 @@
   </div>
 
   <div class="grid">
+
+    {% if "snipeops.import_by_scan.view" in perms %}
     <a class="card" href="{{ url_for('import_by_scan.index') }}">
       <div class="card-title">Import by Scan</div>
       <div class="card-body muted">
@@ -37,7 +41,9 @@
       </div>
       <div class="card-cta">Open →</div>
     </a>
+    {% endif %}
 
+    {% if "snipeops.snipe_catalog.view" in perms %}
     <a class="card" href="{{ url_for('snipe_catalog.index') }}">
       <div class="card-title">Snipe Catalog</div>
       <div class="card-body muted">
@@ -45,7 +51,9 @@
       </div>
       <div class="card-cta">Open →</div>
     </a>
+    {% endif %}
 
+    {% if "snipeops.checkout_assets.view" in perms %}
     <a class="card" href="{{ url_for('checkout_assets.index') }}">
       <div class="card-title">Checkout Assets</div>
       <div class="card-body muted">
@@ -53,7 +61,9 @@
       </div>
       <div class="card-cta">Open →</div>
     </a>
+    {% endif %}
 
+    {% if "snipeops.media_catalog.view" in perms %}
     <a class="card" href="{{ url_for('media_catalog.index') }}">
       <div class="card-title">Media Catalog</div>
       <div class="card-body muted">
@@ -61,7 +71,9 @@
       </div>
       <div class="card-cta">Open →</div>
     </a>
+    {% endif %}
 
+    {% if "snipeops.device_audit.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
     <div class="card card-disabled">
       <div class="card-title">Device Audit</div>
       <div class="card-body muted">
@@ -69,7 +81,9 @@
       </div>
       <div class="card-cta muted">Coming soon</div>
     </div>
+    {% endif %}
 
+    {% if "snipeops.intune_sync.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
     <a class="card" href="{{ url_for('snipeops.intune_sync') }}">
       <div class="card-title">Intune Sync</div>
       <div class="card-body">
@@ -77,7 +91,9 @@
       </div>
       <div class="card-cta">Open →</div>
     </a>
+    {% endif %}
 
+    {% if "snipeops.mosyle_sync.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
     <a class="card" href="{{ url_for('snipeops.mosyle_sync') }}">
       <div class="card-title">Mosyle Sync</div>
       <div class="card-body">
@@ -85,7 +101,9 @@
       </div>
       <div class="card-cta">Open →</div>
     </a>
+    {% endif %}
 
+    {% if "snipeops.snipe_catalog.manage" in perms %}
     <div class="card card-disabled">
       <div class="card-title">Secure User Rostering</div>
       <div class="card-body muted">
@@ -109,5 +127,7 @@
       </div>
       <div class="card-cta muted">Coming soon</div>
     </div>
+    {% endif %}
+
   </div>
 {% endblock %}

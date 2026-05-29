@@ -217,7 +217,9 @@ function renderCartList(containerId, carts, options = {}) {
 
     el.innerHTML = carts.map(cart => {
         const ownership = cart.ownership || null;
-        const ownerName = ownership?.owner_display_name || ownership?.owner_email || "";
+        const ownerDisplay = ownership?.owner_display_name || "Unknown user";
+        const ownerEmail = ownership?.owner_email || "";
+        const ownerName = ownerEmail ? `${ownerDisplay} (${ownerEmail})` : ownerDisplay;
         const ownedByCurrentUser = currentUser && ownership && Number(ownership.owner_user_id) === Number(currentUser.id);
 
         let ownershipText = "Unassigned";
@@ -325,21 +327,74 @@ async function selectCart(cart) {
 
 function requestTakeOwnership(cart) {
     const ownership = cart.ownership || null;
-    const ownerName = ownership?.owner_display_name || ownership?.owner_email || "";
 
-    if (ownerName && (!currentUser || Number(ownership.owner_user_id) !== Number(currentUser.id))) {
+    const ownerDisplay = ownership?.owner_display_name || "Unknown";
+    const ownerEmail = ownership?.owner_email || "Not recorded";
+    const cartLabel = `${cart.asset_tag ? "#" + cart.asset_tag : "No tag"} • ${cart.name || "Unnamed cart"}`;
+
+    if (
+        ownership &&
+        currentUser &&
+        Number(ownership.owner_user_id) !== Number(currentUser.id)
+    ) {
         openConfirmModal({
             title: "Take Ownership?",
-            message: `This cart is currently owned by ${ownerName}. Taking ownership will move this cart into your Media Catalog.`,
+            messageHtml: `
+                <p class="confirm-copy">
+                    This cart is currently assigned to another Media Specialist.
+                </p>
+
+                <div class="ownership-detail-card">
+                    <div class="ownership-detail-heading">Current Owner</div>
+
+                    <div class="ownership-detail-row">
+                        <div class="ownership-detail-label">Display Name</div>
+                        <div class="ownership-detail-value">${escapeHtml(ownerDisplay)}</div>
+                    </div>
+
+                    <div class="ownership-detail-row">
+                        <div class="ownership-detail-label">Username</div>
+                        <div class="ownership-detail-value">${escapeHtml(ownerEmail)}</div>
+                    </div>
+
+                    <div class="ownership-detail-row">
+                        <div class="ownership-detail-label">Cart</div>
+                        <div class="ownership-detail-value">${escapeHtml(cartLabel)}</div>
+                    </div>
+                </div>
+
+                <p class="confirm-copy confirm-warning">
+                    Taking ownership will transfer this cart to your Media Catalog.
+                    The previous owner will lose ownership of this cart.
+                </p>
+            `,
             buttonText: "Take Ownership",
             action: async () => claimCart(cart)
         });
+
         return;
     }
 
     openConfirmModal({
         title: "Take Ownership?",
-        message: "Take ownership of this cart and add it to your Media Catalog?",
+        messageHtml: `
+            <p class="confirm-copy">
+                This cart currently has no assigned Media Specialist.
+            </p>
+
+            <div class="ownership-detail-card">
+                <div class="ownership-detail-heading">Cart</div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">Asset</div>
+                    <div class="ownership-detail-value">${escapeHtml(cartLabel)}</div>
+                </div>
+            </div>
+
+            <p class="confirm-copy confirm-warning">
+                Do you want to take ownership of this cart?
+            </p>
+        `,
         buttonText: "Take Ownership",
         action: async () => claimCart(cart)
     });
@@ -350,6 +405,14 @@ async function claimCart(cart) {
 
     try {
         const data = await apiPost(`/api/carts/${cart.id}/claim`, {}, "Unable to claim cart.");
+
+        prependRecent(
+            "claimed_cart",
+            null,
+            data.cart || cart,
+            true,
+            data.message || "Cart ownership updated."
+        );
 
         await loadMyCarts();
 
@@ -363,7 +426,7 @@ async function claimCart(cart) {
             cartSearch.value = "";
         }
 
-        setStatus("Cart ownership updated.", true);
+        setStatus(data.message || "Cart ownership updated.", true);
 
         if (data.cart) {
             await selectCart(data.cart);
@@ -607,13 +670,16 @@ function bindSyncButton() {
             btn.disabled = true;
             btn.classList.add("is-syncing");
             btn.innerHTML = `
-        <span class="btn-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="18" height="18">
-            <path fill="currentColor" d="M12 4a8 8 0 0 1 7.75 6h-2.08A6 6 0 1 0 12 18v-3l4 4-4 4v-3A8 8 0 1 1 12 4Z"/>
-          </svg>
-        </span>
-        <span>Syncing...</span>
-      `;
+                <span class="btn-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
+                    <path d="M3 3v5h5" />
+                    <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
+                    <path d="M21 21v-5h-5" />
+                    </svg>
+                </span>
+                <span>Syncing...</span>
+            `;
         }
 
         setStatus("Syncing Snipe-IT catalog...", true);
@@ -634,13 +700,16 @@ function bindSyncButton() {
                 btn.disabled = false;
                 btn.classList.remove("is-syncing");
                 btn.innerHTML = `
-          <span class="btn-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="18" height="18">
-              <path fill="currentColor" d="M12 4a8 8 0 0 1 7.75 6h-2.08A6 6 0 1 0 12 18v-3l4 4-4 4v-3A8 8 0 1 1 12 4Zm8 0v6h-6l2.32-2.32A7.97 7.97 0 0 0 12 6V4a9.96 9.96 0 0 1 5.74 1.83L20 3.56V4Z"/>
-            </svg>
-          </span>
-          <span>Sync Snipe-IT</span>
-        `;
+                    <span class="btn-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
+                        <path d="M3 3v5h5" />
+                        <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
+                        <path d="M21 21v-5h-5" />
+                        </svg>
+                    </span>
+                    <span>Sync Snipe-IT</span>
+                `;
             }
         }
     });
@@ -664,7 +733,7 @@ function bindConfirmModal() {
     });
 }
 
-function openConfirmModal({ title, message, buttonText, action }) {
+function openConfirmModal({ title, message, messageHtml, buttonText, action }) {
     pendingAction = { action };
 
     const titleEl = $("confirmTitle");
@@ -673,7 +742,15 @@ function openConfirmModal({ title, message, buttonText, action }) {
     const modalEl = $("confirmModal");
 
     if (titleEl) titleEl.textContent = title || "Confirm";
-    if (messageEl) messageEl.textContent = message || "Continue?";
+
+    if (messageEl) {
+        if (messageHtml) {
+            messageEl.innerHTML = messageHtml;
+        } else {
+            messageEl.textContent = message || "Continue?";
+        }
+    }
+
     if (buttonEl) buttonEl.textContent = buttonText || "Continue";
     if (modalEl) modalEl.classList.remove("hidden");
 }
@@ -759,9 +836,9 @@ function prependRecent(action, device, cart, ok, message) {
     <td class="mono">${escapeHtml(new Date().toISOString())}</td>
     <td>${escapeHtml(friendlyAction(action))}</td>
     <td>${escapeHtml(currentUser?.display_name || currentUser?.email || "—")}</td>
-    <td class="mono">${escapeHtml(device.asset_tag || device.name || device.id || "")}</td>
-    <td class="mono">${escapeHtml(device.serial || "")}</td>
-    <td class="mono">${escapeHtml(cart?.asset_tag || cart?.name || cart?.id || "")}</td>
+    <td class="mono">${escapeHtml(device?.asset_tag || device?.name || device?.id || "—")}</td>
+    <td class="mono">${escapeHtml(device?.serial || "—")}</td>
+    <td class="mono">${escapeHtml(cart?.asset_tag || cart?.name || cart?.id || "—")}</td>
     <td>${ok ? "Success" : "Error"}</td>
     <td class="muted">${escapeHtml(message || "")}</td>
     `;
@@ -962,7 +1039,10 @@ function friendlyAction(action) {
     added_to_cart: "Added to Cart",
     remove_from_cart: "Removed from Cart",
     removed_from_cart: "Removed from Cart",
-    moved_to_cart: "Moved to Cart"
+    moved_to_cart: "Moved to Cart",
+    claimed_cart: "Claimed Cart",
+    move_failed: "Move Failed",
+    add_failed: "Add Failed"
   };
 
   return labels[action] || String(action || "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());

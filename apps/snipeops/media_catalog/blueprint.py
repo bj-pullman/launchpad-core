@@ -192,11 +192,36 @@ def api_claim_cart(cart_id: int):
     if not cart:
         return jsonify({"ok": False, "error": "Cart not found."}), 404
 
+    previous_ownership = get_cart_ownership(cart_id)
     ownership = claim_cart(cart_asset=cart, user=user)
+
+    previous_owner = ""
+    if previous_ownership:
+        previous_owner = (
+            previous_ownership.get("owner_display_name")
+            or previous_ownership.get("owner_email")
+            or ""
+        )
+
+    new_owner = user.get("display_name") or user.get("email") or ""
+
+    if previous_owner and previous_owner != new_owner:
+        message = f"Cart ownership moved from {previous_owner} to {new_owner}."
+    else:
+        message = f"Cart ownership claimed by {new_owner}."
+
+    log_media_action(
+        action="claimed_cart",
+        cart_asset=cart,
+        device_asset=None,
+        ok=True,
+        message=message,
+        actor_user=user,
+    )
 
     return jsonify({
         "ok": True,
-        "message": "Cart ownership updated.",
+        "message": message,
         "cart": _asset_payload(cart),
         "ownership": ownership,
     })

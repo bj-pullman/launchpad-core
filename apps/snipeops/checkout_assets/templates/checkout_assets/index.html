@@ -135,6 +135,18 @@
     </table>
   </div>
 </section>
+
+<div id="confirmModal" class="checkout-modal hidden" role="dialog" aria-modal="true">
+  <div class="checkout-modal-card">
+    <h2 id="confirmTitle">Confirm</h2>
+    <div id="confirmMessage" class="confirm-message"></div>
+
+    <div class="checkout-modal-actions">
+      <button id="cancelConfirmBtn" class="btn btn-ghost" type="button">Cancel</button>
+      <button id="confirmActionBtn" class="btn btn-danger" type="button">Continue</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

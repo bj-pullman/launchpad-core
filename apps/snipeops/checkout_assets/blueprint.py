@@ -7,14 +7,18 @@ from modules.core.auth.decorators import login_required, require_permission
 from apps.snipeops.snipe_catalog.catalog_db import (
     get_asset,
     search_assets,
+    get_assets_assigned_to_asset,
 )
+
 from apps.snipeops.checkout_assets.checkout_assets_db import (
     get_recent,
     log_checkout,
 )
+
 from apps.snipeops.checkout_assets.snipe import (
     build_asset_url,
     checkout_asset_to_asset,
+    checkin_asset,
 )
 
 
@@ -202,4 +206,103 @@ def api_checkout():
         "ok": True,
         "parent_asset": _asset_payload(parent_asset),
         "results": results,
+    })
+
+@bp.post("/api/checkin-parent-children")
+@login_required
+@require_permission("snipeops.checkout_assets.manage")
+def api_checkin_parent_children():
+    body = _get_body()
+
+    try:
+        parent_asset_id = int(body.get("parent_asset_id") or 0)
+        delay_ms = int(body.get("delay_ms") or 350)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid parent asset id."}), 400
+
+    delay_ms = min(max(delay_ms, 0), 5000)
+    delay_seconds = delay_ms / 1000
+
+    parent_asset = get_asset(parent_asset_id)
+
+    if not parent_asset:
+        return jsonify({"ok": False, "error": "Parent asset not found in SnipeOps Catalog."}), 404
+
+    child_assets = get_assets_assigned_to_asset(parent_asset_id)
+
+    if not child_assets:
+        return jsonify({
+            "ok": True,
+            "parent_asset": _asset_payload(parent_asset),
+            "results": [],
+            "message": "No child assets are currently assigned to this parent in the local catalog.",
+        })
+
+    results = []
+
+    for child_asset in child_assets:
+        try:
+            checkin_asset(
+                asset_id=int(child_asset["id"]),
+                note=f"Bulk checked in from parent asset {parent_asset.get('asset_tag') or parent_asset.get('name')} by SnipeOps Checkout Assets.",
+                delay_seconds=delay_seconds,
+            )
+
+            message = "Checked in from parent asset."
+            meta = log_checkout(
+                parent_asset=parent_asset,
+                child_asset=child_asset,
+                ok=True,
+                message=message,
+            )
+
+            results.append({
+                "ok": True,
+                "parent_asset": _asset_payload(parent_asset),
+                "child_asset": _asset_payload(child_asset),
+                "message": message,
+                "created_at": meta["created_at"],
+            })
+
+        except Exception as exc:
+            message = str(exc)
+            meta = log_checkout(
+                parent_asset=parent_asset,
+                child_asset=child_asset,
+                ok=False,
+                message=message,
+            )
+
+            results.append({
+                "ok": False,
+                "parent_asset": _asset_payload(parent_asset),
+                "child_asset": _asset_payload(child_asset),
+                "message": message,
+                "created_at": meta["created_at"],
+            })
+
+    return jsonify({
+        "ok": True,
+        "parent_asset": _asset_payload(parent_asset),
+        "results": results,
+    })
+
+@bp.get("/api/parent-children-count")
+@login_required
+@require_permission("snipeops.checkout_assets.view")
+def api_parent_children_count():
+    try:
+        parent_asset_id = int(request.args.get("parent_asset_id") or 0)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid parent asset id."}), 400
+
+    parent_asset = get_asset(parent_asset_id)
+    if not parent_asset:
+        return jsonify({"ok": False, "error": "Parent asset not found in SnipeOps Catalog."}), 404
+
+    child_assets = get_assets_assigned_to_asset(parent_asset_id)
+
+    return jsonify({
+        "ok": True,
+        "count": len(child_assets),
     })

@@ -2,6 +2,7 @@
 
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -14,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <script>
-    window.APP_CONFIG = {timezone: "{{ SYSTEM_TIMEZONE }}"};
+    window.APP_CONFIG = { timezone: "{{ SYSTEM_TIMEZONE }}" };
   </script>
 
   {% block head %}{% endblock %}
@@ -47,6 +48,16 @@
         </div>
         {% endif %}
 
+        {% set perms = session.get("user_permissions", []) %}
+
+        {% if
+        "snipeops.import_by_scan.view" in perms
+        or "snipeops.snipe_catalog.view" in perms
+        or "snipeops.intune_sync.view" in perms
+        or "snipeops.mosyle_sync.view" in perms
+        or "snipeops.checkout_assets.view" in perms
+        or "snipeops.media_catalog.view" in perms
+        %}
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">
             Tools
@@ -54,28 +65,44 @@
           </button>
 
           <div class="nav-dropdown-menu">
+            {% if "snipeops.import_by_scan.view" in perms %}
             <a href="{{ url_for('import_by_scan.index') }}" class="nav-dropdown-item">
               Import by Scan
             </a>
+            {% endif %}
+
+            {% if "snipeops.snipe_catalog.view" in perms %}
             <a href="{{ url_for('snipe_catalog.index') }}" class="nav-dropdown-item">
               Catalog
             </a>
+            {% endif %}
+
+            {% if "snipeops.intune_sync.view" in perms %}
             <a href="{{ url_for('snipeops.intune_sync') }}" class="nav-dropdown-item">
               Intune Sync
             </a>
+            {% endif %}
 
+            {% if "snipeops.mosyle_sync.view" in perms %}
             <a href="{{ url_for('snipeops.mosyle_sync') }}" class="nav-dropdown-item">
               Mosyle Sync
             </a>
+            {% endif %}
 
+            {% if "snipeops.checkout_assets.view" in perms %}
             <a href="{{ url_for('checkout_assets.index') }}" class="nav-dropdown-item">
               Checkout Assets
             </a>
+            {% endif %}
+
+            {% if "snipeops.media_catalog.view" in perms %}
             <a href="{{ url_for('media_catalog.index') }}" class="nav-dropdown-item">
               Media Catalog
             </a>
+            {% endif %}
           </div>
         </div>
+        {% endif %}
 
         {% if settings_sections %}
         <a href="{{ url_for('launchpad_ui.settings_index') }}" class="topbar-link">Settings</a>
@@ -92,19 +119,13 @@
             <div class="theme-menu">
               <div class="theme-menu-label">Theme</div>
 
-              <button
-                type="button"
-                class="theme-option {% if current_user_theme != 'dark' %}active{% endif %}"
-                data-theme-choice="light"
-              >
+              <button type="button" class="theme-option {% if current_user_theme != 'dark' %}active{% endif %}"
+                data-theme-choice="light">
                 Light
               </button>
 
-              <button
-                type="button"
-                class="theme-option {% if current_user_theme == 'dark' %}active{% endif %}"
-                data-theme-choice="dark"
-              >
+              <button type="button" class="theme-option {% if current_user_theme == 'dark' %}active{% endif %}"
+                data-theme-choice="dark">
                 Dark
               </button>
             </div>
@@ -123,15 +144,15 @@
 
   <main class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div style="margin: 1rem 0;">
-          {% for category, message in messages %}
-            <div style="padding: .75rem 1rem; border: 1px solid #cbd5e1; border-radius: .75rem; margin-bottom: .5rem;">
-              <strong>{{ category|title }}:</strong> {{ message }}
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
+    {% if messages %}
+    <div style="margin: 1rem 0;">
+      {% for category, message in messages %}
+      <div style="padding: .75rem 1rem; border: 1px solid #cbd5e1; border-radius: .75rem; margin-bottom: .5rem;">
+        <strong>{{ category|title }}:</strong> {{ message }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
@@ -171,4 +192,5 @@
 
   {% block scripts %}{% endblock %}
 </body>
+
 </html>
