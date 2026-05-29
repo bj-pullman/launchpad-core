@@ -19,6 +19,8 @@ from apps.snipeops.mapping_service import seed_default_mappings
 from apps.snipeops.checkout_assets.blueprint import bp as checkout_assets_bp
 from apps.snipeops.checkout_assets.checkout_assets_db import init_db as checkout_assets_init_db
 from apps.snipeops.snipe_catalog.catalog_db import init_db as snipe_catalog_init_db
+from apps.snipeops.media_catalog.blueprint import bp as media_catalog_bp
+from apps.snipeops.media_catalog.media_catalog_db import init_db as media_catalog_init_db
 
 from apps.staff_status.blueprint import bp as staff_status_bp
 from apps.staff_status.db import init_staff_status_db
@@ -153,6 +155,7 @@ def create_app() -> Flask:
     init_finance_db()
     snipe_catalog_init_db()
     checkout_assets_init_db()
+    media_catalog_init_db()
 
     # Seed Finance defaults (safe/idempotent)
     ensure_efinance_daily_import_profile()
@@ -326,6 +329,7 @@ def create_app() -> Flask:
     app.register_blueprint(finance_bp)
     app.register_blueprint(finance_api_bp)
     app.register_blueprint(checkout_assets_bp)
+    app.register_blueprint(media_catalog_bp)
 
     should_start_scheduler = True
 

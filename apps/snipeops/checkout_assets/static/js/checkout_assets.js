@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", initCheckoutAssetsPage);
 
 const selectedChildren = new Map();
 let selectedParent = null;
+let moveModalDevice = null;
 
 function initCheckoutAssetsPage() {
   bindParentSearch();

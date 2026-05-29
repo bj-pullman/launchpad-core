@@ -19,6 +19,8 @@ def seed_permissions():
     create_role("finance_budget_viewer", "Finance Budget Viewer", "Finance budget read-only access", is_system=1)
     create_role("finance_budget_operator", "Finance Budget Operator", "Finance budget operations access", is_system=1)
     create_role("finance_budget_admin", "Finance Budget Admin", "Finance full budget administration", is_system=1)
+    create_role("media_specialist", "Media Specialist", "Media Catalog access", is_system=1)
+    create_role("tech", "Tech", "Technology staff application access", is_system=1)
 
     # Permissions
     permission_keys = [
@@ -76,6 +78,8 @@ def seed_permissions():
         ("snipeops.snipe_catalog.manage", "Manage Snipe Catalog"),
         ("snipeops.checkout_assets.view", "Checkout Assets"),
         ("snipeops.checkout_assets.manage", "Manage Checkout Assets"),
+        ("snipeops.media_catalog.view", "Media Catalog"),
+        ("snipeops.media_catalog.manage", "Manage Media Catalog"),
 
         # Staff Status app access
         ("staff_status.app.view", "Staff Status App View"),
@@ -293,3 +297,31 @@ def seed_permissions():
 
     for key in finance_budget_admin_permissions:
         assign_permission_to_role("finance_budget_admin", key)
+
+
+    # Media Specialist/Catalog Mangager
+    media_specialist_permissions = [
+        "launchpad.home.view",
+        "snipeops.home.view",
+        "snipeops.media_catalog.view",
+        "snipeops.media_catalog.manage",
+    ]
+
+    for key in media_specialist_permissions:
+        assign_permission_to_role("media_specialist", key)
+
+    tech_permissions = [
+        "launchpad.home.view",
+        "snipeops.home.view",
+        "snipeops.import_by_scan.view",
+        "snipeops.import_by_scan.manage",
+        "snipeops.snipe_catalog.view",
+        "snipeops.snipe_catalog.manage",
+        "snipeops.checkout_assets.view",
+        "snipeops.checkout_assets.manage",
+        "snipeops.media_catalog.view",
+        "snipeops.media_catalog.manage",
+    ]
+
+    for key in tech_permissions:
+        assign_permission_to_role("tech", key)

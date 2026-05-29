@@ -344,3 +344,48 @@ def get_asset(asset_id: int) -> dict | None:
         ).fetchone()
 
         return dict(row) if row else None
+    
+def get_assets_assigned_to_asset(parent_asset_id: int) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM catalog_assets
+            WHERE assigned_id = ?
+            ORDER BY asset_tag, name, serial
+            """,
+            (int(parent_asset_id),),
+        ).fetchall()
+
+        return [dict(r) for r in rows]
+
+
+def list_cart_assets(location_name: str | None = None, limit: int = 500) -> list[dict]:
+    params = []
+    where = """
+        (
+            name LIKE '%CART%'
+            OR asset_tag LIKE '%CART%'
+            OR category_name LIKE '%CART%'
+        )
+    """
+
+    if location_name:
+        where += " AND location_name = ?"
+        params.append(location_name)
+
+    params.append(int(limit))
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM catalog_assets
+            WHERE {where}
+            ORDER BY location_name, asset_tag, name
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+        return [dict(r) for r in rows]

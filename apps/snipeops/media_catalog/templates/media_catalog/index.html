@@ -1,0 +1,220 @@
+{% extends "snipeops/base.html" %}
+{% block title %}SnipeOps • Media Catalog{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('media_catalog.static', filename='css/media_catalog.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="media-page">
+    <div class="media-header">
+        <div>
+            <p class="media-eyebrow">SnipeOps</p>
+            <h1>Media Catalog</h1>
+            <p class="muted">
+                Manage carts and devices in a friendly spreadsheet-style view. Warnings help with dirty data, but do not
+                block corrections.
+            </p>
+        </div>
+
+        <button id="syncSnipeBtn" class="media-btn sync-btn" type="button">
+            <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                    <path fill="currentColor"
+                        d="M12 4a8 8 0 0 1 7.75 6h-2.08A6 6 0 1 0 12 18v-3l4 4-4 4v-3A8 8 0 1 1 12 4Zm8 0v6h-6l2.32-2.32A7.97 7.97 0 0 0 12 6V4a9.96 9.96 0 0 1 5.74 1.83L20 3.56V4Z" />
+                </svg>
+            </span>
+            <span>Sync Snipe-IT</span>
+        </button>
+    </div>
+
+    <section class="media-panel">
+        <div class="media-section-head">
+            <div>
+                <h2>My Carts</h2>
+                <p class="muted">Carts you have taken ownership of.</p>
+            </div>
+
+            <div class="media-section-actions">
+                <button id="refreshMyCartsBtn" class="media-btn ghost" type="button">Refresh</button>
+                <button id="toggleFindCartBtn" class="media-btn ghost" type="button">Find / Claim Cart</button>
+            </div>
+        </div>
+
+        <div id="myCarts" class="cart-pill-grid"></div>
+    </section>
+
+    <section id="findCartPanel" class="media-panel find-cart-panel hidden">
+        <div class="media-section-head">
+            <div>
+                <h2>Find Cart</h2>
+                <p class="muted">Search any cart district-wide and take ownership if needed.</p>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <label class="media-label" for="cartSearch">Cart Search</label>
+            <div class="media-row">
+                <input id="cartSearch" class="media-input" autocomplete="off"
+                    placeholder="Search cart by asset tag or name...">
+                <button id="cartSearchBtn" class="media-btn" type="button">Search</button>
+            </div>
+        </div>
+
+        <div id="cartResults" class="cart-pill-grid search-grid"></div>
+    </section>
+
+    <section id="selectedCartPanel" class="media-panel media-wide hidden">
+        <div class="cart-detail-header">
+            <div>
+                <p class="media-eyebrow">Selected Cart</p>
+                <h2 id="cartTitle">Select a Cart</h2>
+                <p id="cartSubtitle" class="muted">Choose a cart from My Carts or Find Cart to load assigned devices.
+                </p>
+            </div>
+
+            <div class="cart-metrics">
+                <div class="metric-card">
+                    <span class="metric-value" id="deviceCount">—</span>
+                    <span class="metric-label">Devices in Cart</span>
+                </div>
+                <div id="status" class="media-status">Ready.</div>
+            </div>
+        </div>
+
+        <div class="add-device-box">
+            <div>
+                <h3>Add Device</h3>
+                <p class="muted">Scan or manually type an asset tag or serial number in the same field.</p>
+            </div>
+
+            <div class="media-row add-device-row">
+                <input id="deviceInput" class="media-input" autocomplete="off"
+                    placeholder="Scan / Type Asset Tag or Serial Number">
+                <button id="deviceAddBtn" class="media-btn" type="button">Add Device</button>
+            </div>
+        </div>
+
+        <div class="sheet-toolbar">
+            <div class="sheet-title">
+                <strong>Cart Device Sheet</strong>
+                <span class="muted">Click a row to view more device details.</span>
+            </div>
+        </div>
+
+        <div class="sheet-wrap">
+            <table class="media-sheet">
+                <thead>
+                    <tr>
+                        <th class="row-index-col">#</th>
+                        <th>Action</th>
+                        <th>Asset Tag</th>
+                        <th>Serial</th>
+                        <th>Model</th>
+                        <th>Location</th>
+                        <th>Snipe-IT</th>
+                    </tr>
+                </thead>
+                <tbody id="sheetBody">
+                    <tr>
+                        <td colspan="7" class="muted">Select a cart to load assigned devices.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="media-panel media-wide">
+        <div class="media-section-head">
+            <div>
+                <h2>Recent Media Catalog Activity</h2>
+                <p class="muted">Recent cart and device actions recorded locally in SnipeOps.</p>
+            </div>
+        </div>
+
+        <div class="sheet-wrap compact">
+            <table class="media-sheet">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Action</th>
+                        <th>User</th>
+                        <th>Device</th>
+                        <th>Serial</th>
+                        <th>Cart</th>
+                        <th>Result</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody id="recentBody">
+                    {% for r in recent %}
+                    <tr class="{{ 'ok' if r.ok else 'bad' }}">
+                        <td class="mono">{{ r.created_at|localtime }}</td>
+                        <td>{{ r.action.replace('_', ' ')|title }}</td>
+                        <td>{{ r.actor_display_name or r.actor_email or '—' }}</td>
+                        <td class="mono">{{ r.device_asset_tag or r.device_name or r.device_asset_id or '' }}</td>
+                        <td class="mono">{{ r.device_serial or '' }}</td>
+                        <td class="mono">{{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '' }}</td>
+                        <td>{{ 'Success' if r.ok else 'Error' }}</td>
+                        <td class="muted">{{ r.message or '' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div id="confirmModal" class="media-modal hidden" role="dialog" aria-modal="true">
+    <div class="media-modal-card">
+        <h2 id="confirmTitle">Confirm</h2>
+        <p id="confirmMessage"></p>
+
+        <div class="media-modal-actions">
+            <button id="cancelConfirmBtn" class="media-btn ghost" type="button">Cancel</button>
+            <button id="confirmActionBtn" class="media-btn danger" type="button">Continue</button>
+        </div>
+    </div>
+</div>
+
+<div id="deviceDetailModal" class="media-modal hidden" role="dialog" aria-modal="true">
+    <div class="media-modal-card device-detail-card">
+        <div class="modal-head">
+            <div>
+                <p class="media-eyebrow">Device Details</p>
+                <h2 id="deviceDetailTitle">Device</h2>
+            </div>
+            <button id="closeDeviceDetailBtn" class="mini-btn" type="button">Close</button>
+        </div>
+
+        <div id="deviceDetailBody" class="device-detail-body"></div>
+    </div>
+</div>
+
+<div id="moveDeviceModal" class="media-modal hidden" role="dialog" aria-modal="true">
+  <div class="media-modal-card device-detail-card">
+    <div class="modal-head">
+      <div>
+        <p class="media-eyebrow">Move Device</p>
+        <h2 id="moveDeviceTitle">Move Device</h2>
+        <p id="moveDeviceSubtitle" class="muted">Search for the destination cart.</p>
+      </div>
+      <button id="closeMoveDeviceBtn" class="mini-btn" type="button">Close</button>
+    </div>
+
+    <div class="form-card">
+      <label class="media-label" for="moveCartSearch">Destination Cart</label>
+      <div class="media-row">
+        <input id="moveCartSearch" class="media-input" autocomplete="off" placeholder="Search cart by asset tag or name...">
+        <button id="moveCartSearchBtn" class="media-btn" type="button">Search</button>
+      </div>
+    </div>
+
+    <div id="moveCartResults" class="cart-pill-grid search-grid"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script defer src="{{ url_for('media_catalog.static', filename='js/media_catalog.js') }}"></script>
+{% endblock %}
