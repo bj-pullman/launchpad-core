@@ -7,6 +7,7 @@ let selectedCart = null;
 let pendingAction = null;
 let pendingMoveDevice = null;
 let moveModalDevice = null;
+let assignOwnerCart = null;
 
 const sheetDevices = new Map();
 
@@ -109,6 +110,7 @@ async function initMediaCatalog() {
     bindConfirmModal();
     bindDeviceDetailModal();
     bindMoveDeviceModal();
+    bindAssignOwnerModal();
 
     renderSheetEmpty("Select a cart to load assigned devices.");
     setDeviceCount("—");
@@ -209,6 +211,7 @@ function renderCartList(containerId, carts, options = {}) {
     if (!el) return;
 
     const showOwnershipButton = options.showOwnershipButton !== false;
+    const canManageOwnership = Boolean(window.MEDIA_CATALOG_CAN_MANAGE_OWNERSHIP);
 
     if (!carts.length) {
         el.innerHTML = `<div class="muted">No carts found.</div>`;
@@ -220,17 +223,24 @@ function renderCartList(containerId, carts, options = {}) {
         const ownerDisplay = ownership?.owner_display_name || "Unknown user";
         const ownerEmail = ownership?.owner_email || "";
         const ownerName = ownerEmail ? `${ownerDisplay} (${ownerEmail})` : ownerDisplay;
-        const ownedByCurrentUser = currentUser && ownership && Number(ownership.owner_user_id) === Number(currentUser.id);
+        const ownedByCurrentUser =
+            currentUser &&
+            ownership &&
+            Number(ownership.owner_user_id) === Number(currentUser.id);
 
         let ownershipText = "Unassigned";
         if (ownedByCurrentUser) {
             ownershipText = "Owned by: You";
-        } else if (ownerName) {
+        } else if (ownership && ownerName) {
             ownershipText = `Owned by: ${ownerName}`;
         }
 
         const ownershipButton = showOwnershipButton
             ? `<button class="mini-btn take-ownership" type="button" data-cart-id="${escapeHtml(cart.id)}">${ownedByCurrentUser ? "Refresh Ownership" : "Take Ownership"}</button>`
+            : "";
+
+        const assignOwnerButton = canManageOwnership
+            ? `<button class="mini-btn assign-owner" type="button" data-cart-id="${escapeHtml(cart.id)}">Assign Owner</button>`
             : "";
 
         return `
@@ -245,7 +255,10 @@ function renderCartList(containerId, carts, options = {}) {
         </button>
 
         <div class="cart-actions">
-          ${ownershipButton}
+          <div class="cart-action-group">
+            ${ownershipButton}
+            ${assignOwnerButton}
+          </div>
           ${cart.asset_url ? `<a class="snipe-link" href="${escapeHtml(cart.asset_url)}" target="_blank" rel="noopener">Snipe-IT</a>` : ""}
         </div>
       </div>
@@ -273,9 +286,18 @@ function renderCartList(containerId, carts, options = {}) {
     });
 
     el.querySelectorAll(".take-ownership").forEach(btn => {
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", event => {
+            event.stopPropagation();
             const cart = carts.find(c => String(c.id) === String(btn.dataset.cartId));
             if (cart) requestTakeOwnership(cart);
+        });
+    });
+
+    el.querySelectorAll(".assign-owner").forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.stopPropagation();
+            const cart = carts.find(c => String(c.id) === String(btn.dataset.cartId));
+            if (cart) openAssignOwnerModal(cart);
         });
     });
 }
@@ -1042,8 +1064,170 @@ function friendlyAction(action) {
     moved_to_cart: "Moved to Cart",
     claimed_cart: "Claimed Cart",
     move_failed: "Move Failed",
-    add_failed: "Add Failed"
+    add_failed: "Add Failed",
+    assigned_cart_owner: "Assigned Cart Owner",
   };
 
   return labels[action] || String(action || "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function bindAssignOwnerModal() {
+    $("closeAssignOwnerBtn")?.addEventListener("click", closeAssignOwnerModal);
+    $("ownerSearchBtn")?.addEventListener("click", searchOwnerUsers);
+
+    $("ownerSearch")?.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            searchOwnerUsers();
+        }
+    });
+
+    $("assignOwnerModal")?.addEventListener("click", event => {
+        if (event.target.id === "assignOwnerModal") {
+            closeAssignOwnerModal();
+        }
+    });
+}
+
+function openAssignOwnerModal(cart) {
+    assignOwnerCart = cart;
+
+    $("assignOwnerTitle").textContent = `Assign Owner`;
+    $("assignOwnerSubtitle").textContent = `${cart.asset_tag ? "#" + cart.asset_tag : "No tag"} • ${cart.name || "Unnamed cart"}`;
+
+    if ($("ownerSearch")) {
+        $("ownerSearch").value = "";
+    }
+
+    if ($("ownerResults")) {
+        $("ownerResults").innerHTML = "";
+    }
+
+    $("assignOwnerModal")?.classList.remove("hidden");
+    setTimeout(() => $("ownerSearch")?.focus(), 50);
+}
+
+function closeAssignOwnerModal() {
+    assignOwnerCart = null;
+    $("assignOwnerModal")?.classList.add("hidden");
+}
+
+async function searchOwnerUsers() {
+    const query = ($("ownerSearch")?.value || "").trim();
+    const resultsEl = $("ownerResults");
+
+    if (!resultsEl) return;
+
+    if (query.length < 2) {
+        resultsEl.innerHTML = `<div class="muted">Type at least 2 characters.</div>`;
+        return;
+    }
+
+    resultsEl.innerHTML = `<div class="muted">Searching users...</div>`;
+
+    try {
+        const data = await apiGet(`/api/users/search?q=${encodeURIComponent(query)}`, "User search failed.");
+        renderOwnerUserResults(data.users || []);
+    } catch (err) {
+        resultsEl.innerHTML = `<div class="muted">${escapeHtml(err.message || "User search failed.")}</div>`;
+    }
+}
+
+function renderOwnerUserResults(users) {
+    const el = $("ownerResults");
+    if (!el) return;
+
+    if (!users.length) {
+        el.innerHTML = `<div class="muted">No active users found.</div>`;
+        return;
+    }
+
+    el.innerHTML = users.map(user => `
+        <button class="owner-result-card" type="button" data-user-id="${escapeHtml(user.id)}">
+            <strong>${escapeHtml(user.display_name || user.email || "Unnamed User")}</strong>
+            <span>${escapeHtml(user.email || "")}</span>
+            <span class="muted">
+                ${escapeHtml(user.department || "")}
+                ${user.office_location ? " • " + escapeHtml(user.office_location) : ""}
+            </span>
+        </button>
+    `).join("");
+
+    el.querySelectorAll(".owner-result-card").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const user = users.find(u => String(u.id) === String(btn.dataset.userId));
+            if (!user || !assignOwnerCart) return;
+
+            const cart = assignOwnerCart;
+
+            closeAssignOwnerModal();
+
+            window.setTimeout(() => {
+                openConfirmModal({
+                    title: "Assign Cart Owner?",
+                    messageHtml: `
+                        <p class="confirm-copy">
+                            Assign this cart to the selected user.
+                        </p>
+
+                        <div class="ownership-detail-card">
+                            <div class="ownership-detail-heading">Assignment Details</div>
+
+                            <div class="ownership-detail-row">
+                                <div class="ownership-detail-label">Cart</div>
+                                <div class="ownership-detail-value">${escapeHtml(cart.asset_tag ? "#" + cart.asset_tag + " • " + (cart.name || "") : cart.name || "Unnamed cart")}</div>
+                            </div>
+
+                            <div class="ownership-detail-row">
+                                <div class="ownership-detail-label">Owner</div>
+                                <div class="ownership-detail-value">${escapeHtml(user.display_name || user.email || "Unnamed User")}</div>
+                            </div>
+
+                            <div class="ownership-detail-row">
+                                <div class="ownership-detail-label">Username</div>
+                                <div class="ownership-detail-value">${escapeHtml(user.email || "Not recorded")}</div>
+                            </div>
+                        </div>
+                    `,
+                    buttonText: "Assign Owner",
+                    action: async () => assignCartOwner(cart, user)
+                });
+            }, 75);
+        });
+    });
+}
+
+async function assignCartOwner(cart, user) {
+    setStatus("Assigning cart owner...", true);
+
+    try {
+        const data = await apiPost(
+            `/api/carts/${cart.id}/assign-owner`,
+            { owner_user_id: user.id },
+            "Unable to assign owner."
+        );
+
+        prependRecent(
+            "assigned_cart_owner",
+            null,
+            data.cart || cart,
+            true,
+            data.message || "Cart owner assigned."
+        );
+
+        await loadMyCarts();
+
+        const cartResults = $("cartResults");
+        if (cartResults) {
+            cartResults.innerHTML = "";
+        }
+
+        setStatus(data.message || "Cart owner assigned.", true);
+
+        if (selectedCart && String(selectedCart.id) === String(cart.id) && data.cart) {
+            await selectCart(data.cart);
+        }
+    } catch (err) {
+        setStatus(err.message || "Unable to assign owner.", false);
+    }
 }

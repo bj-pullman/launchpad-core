@@ -240,8 +240,35 @@
         <div id="moveCartResults" class="cart-pill-grid search-grid"></div>
     </div>
 </div>
+
+<div id="assignOwnerModal" class="media-modal hidden" role="dialog" aria-modal="true">
+  <div class="media-modal-card device-detail-card">
+    <div class="modal-head">
+      <div>
+        <p class="media-eyebrow">Assign Owner</p>
+        <h2 id="assignOwnerTitle">Assign Cart Owner</h2>
+        <p id="assignOwnerSubtitle" class="muted">Search for a Launchpad user to assign this cart to.</p>
+      </div>
+      <button id="closeAssignOwnerBtn" class="mini-btn" type="button">Close</button>
+    </div>
+
+    <div class="form-card">
+      <label class="media-label" for="ownerSearch">User Search</label>
+      <div class="media-row">
+        <input id="ownerSearch" class="media-input" autocomplete="off" placeholder="Search by name or email...">
+        <button id="ownerSearchBtn" class="media-btn" type="button">Search</button>
+      </div>
+    </div>
+
+    <div id="ownerResults" class="owner-result-grid"></div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<script>
+  window.MEDIA_CATALOG_CAN_MANAGE_OWNERSHIP =
+    {{ 'true' if 'snipeops.media_catalog.ownership.manage' in session.get('user_permissions', []) else 'false' }};
+</script>
 <script defer src="{{ url_for('media_catalog.static', filename='js/media_catalog.js') }}"></script>
 {% endblock %}

@@ -80,7 +80,9 @@ def seed_permissions():
         ("snipeops.checkout_assets.manage", "Manage Checkout Assets"),
         ("snipeops.media_catalog.view", "Media Catalog"),
         ("snipeops.media_catalog.manage", "Manage Media Catalog"),
-
+        ("snipeops.media_catalog.ownership.view", "View Media Catalog Ownership"),
+        ("snipeops.media_catalog.ownership.manage", "Manage Media Catalog Ownership"),
+        
         # Staff Status app access
         ("staff_status.app.view", "Staff Status App View"),
         ("staff_status.view", "Staff Status View"),
@@ -321,6 +323,8 @@ def seed_permissions():
         "snipeops.checkout_assets.manage",
         "snipeops.media_catalog.view",
         "snipeops.media_catalog.manage",
+        "snipeops.media_catalog.ownership.view",
+        "snipeops.media_catalog.ownership.manage",
     ]
 
     for key in tech_permissions:

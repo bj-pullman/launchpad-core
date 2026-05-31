@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.identity.user_service import get_user_by_id
+from modules.core.identity.identity_db import get_connection
 
 from apps.snipeops.snipe_catalog.catalog_db import (
     get_asset,
@@ -39,6 +40,36 @@ bp = Blueprint(
 def _body() -> dict:
     return request.get_json(silent=True) or request.form.to_dict(flat=True)
 
+def _search_users(query: str, limit: int = 25) -> list[dict]:
+    query = (query or "").strip()
+
+    if len(query) < 2:
+        return []
+
+    like = f"%{query.lower()}%"
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM users
+            WHERE is_active = 1
+              AND (
+                lower(coalesce(email, '')) LIKE ?
+                OR lower(coalesce(username, '')) LIKE ?
+                OR lower(coalesce(display_name, '')) LIKE ?
+                OR lower(coalesce(first_name, '')) LIKE ?
+                OR lower(coalesce(last_name, '')) LIKE ?
+                OR lower(coalesce(department, '')) LIKE ?
+                OR lower(coalesce(office_location, '')) LIKE ?
+              )
+            ORDER BY display_name, email
+            LIMIT ?
+            """,
+            (like, like, like, like, like, like, like, int(limit)),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
 
 def _current_user_profile() -> dict | None:
     user_id = session.get("user_id")
@@ -371,4 +402,89 @@ def api_search():
     return jsonify({
         "ok": True,
         "results": [_asset_payload(row) for row in rows],
+    })
+
+@bp.get("/api/users/search")
+@login_required
+@require_permission("snipeops.media_catalog.ownership.view")
+def api_user_search():
+    query = (request.args.get("q") or "").strip()
+
+    if len(query) < 2:
+        return jsonify({"ok": True, "users": []})
+
+    users = _search_users(query, limit=25)
+
+    return jsonify({
+        "ok": True,
+        "users": [
+            {
+                "id": user.get("id"),
+                "email": user.get("email") or "",
+                "display_name": user.get("display_name") or user.get("email") or "",
+                "department": user.get("department") or "",
+                "office_location": user.get("office_location") or "",
+                "is_active": user.get("is_active", 0),
+            }
+            for user in users
+            if user.get("is_active", 0)
+        ],
+    })
+
+@bp.post("/api/carts/<int:cart_id>/assign-owner")
+@login_required
+@require_permission("snipeops.media_catalog.ownership.manage")
+def api_assign_cart_owner(cart_id: int):
+    body = _body()
+
+    try:
+        owner_user_id = int(body.get("owner_user_id") or 0)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid owner user id."}), 400
+
+    actor_user = _current_user_profile()
+    cart = get_asset(cart_id)
+    owner_user = get_user_by_id(owner_user_id)
+
+    if not actor_user:
+        return jsonify({"ok": False, "error": "Current user profile not found."}), 404
+
+    if not cart:
+        return jsonify({"ok": False, "error": "Cart not found."}), 404
+
+    if not owner_user or not owner_user.get("is_active", 0):
+        return jsonify({"ok": False, "error": "Selected user was not found or is inactive."}), 404
+
+    previous_ownership = get_cart_ownership(cart_id)
+    ownership = claim_cart(cart_asset=cart, user=owner_user)
+
+    previous_owner = ""
+    if previous_ownership:
+        previous_owner = (
+            previous_ownership.get("owner_display_name")
+            or previous_ownership.get("owner_email")
+            or ""
+        )
+
+    new_owner = owner_user.get("display_name") or owner_user.get("email") or ""
+
+    if previous_owner and previous_owner != new_owner:
+        message = f"Cart ownership assigned from {previous_owner} to {new_owner}."
+    else:
+        message = f"Cart ownership assigned to {new_owner}."
+
+    log_media_action(
+        action="assigned_cart_owner",
+        cart_asset=cart,
+        device_asset=None,
+        ok=True,
+        message=message,
+        actor_user=actor_user,
+    )
+
+    return jsonify({
+        "ok": True,
+        "message": message,
+        "cart": _asset_payload(cart),
+        "ownership": ownership,
     })
