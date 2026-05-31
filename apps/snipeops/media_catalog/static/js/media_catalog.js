@@ -8,6 +8,10 @@ let pendingAction = null;
 let pendingMoveDevice = null;
 let moveModalDevice = null;
 let assignOwnerCart = null;
+let myCartsCache = [];
+let myCartsPage = 1;
+let myCartsPageSize = 25;
+let myCartsSearchQuery = "";
 
 const sheetDevices = new Map();
 
@@ -49,12 +53,6 @@ function debounce(fn, wait = 250) {
         window.clearTimeout(timeout);
         timeout = window.setTimeout(() => fn(...args), wait);
     };
-}
-
-function assetLabel(asset) {
-    const tag = asset.asset_tag ? `#${asset.asset_tag}` : "No tag";
-    const name = asset.name || asset.model_name || "Unnamed asset";
-    return `${tag} • ${name}`;
 }
 
 function cartDisplayName(cart) {
@@ -111,10 +109,11 @@ async function initMediaCatalog() {
     bindDeviceDetailModal();
     bindMoveDeviceModal();
     bindAssignOwnerModal();
+    bindMediaTabs();
 
     renderSheetEmpty("Select a cart to load assigned devices.");
     setDeviceCount("—");
-    hideSelectedCartPanel();
+    hideSelectedCartPanel(false);
 
     try {
         await loadCurrentUser();
@@ -151,11 +150,19 @@ async function loadMyCarts() {
     const el = $("myCarts");
     if (!el) return;
 
-    el.innerHTML = `<div class="muted">Loading your carts...</div>`;
+    if (!selectedCart) {
+        el.innerHTML = `<div class="muted">Loading your carts...</div>`;
+    }
 
     try {
         const data = await apiGet("/api/my-carts", "Unable to load your carts.");
-        renderCartList("myCarts", data.carts || [], { showOwnershipButton: false });
+        myCartsCache = data.carts || [];
+
+        renderMyCartsTable(myCartsCache);
+
+        if (selectedCart) {
+            collapseMyCartsTable();
+        }
     } catch (err) {
         el.innerHTML = `<div class="muted">${escapeHtml(err.message || "Unable to load your carts.")}</div>`;
     }
@@ -198,7 +205,7 @@ async function searchCarts() {
 
     try {
         const data = await apiGet(`/api/carts?q=${encodeURIComponent(query)}`, "Cart search failed.");
-        renderCartList("cartResults", data.carts || [], { showOwnershipButton: true });
+        renderCartCards("cartResults", data.carts || [], { showOwnershipButton: true });
         setStatus(`Found ${(data.carts || []).length} cart(s).`, true);
     } catch (err) {
         resultsEl.innerHTML = `<div class="muted">${escapeHtml(err.message || "Cart search failed.")}</div>`;
@@ -206,7 +213,280 @@ async function searchCarts() {
     }
 }
 
-function renderCartList(containerId, carts, options = {}) {
+function renderMyCartsTable(carts) {
+    const el = $("myCarts");
+    if (!el) return;
+
+    myCartsCache = carts || [];
+
+    if (!myCartsCache.length) {
+        el.innerHTML = `<div class="muted">No carts found.</div>`;
+        return;
+    }
+
+    el.innerHTML = `
+        <div id="myCartsExpandedView">
+            <div class="media-table-tools">
+                <input
+                    id="myCartsFilter"
+                    class="media-input"
+                    placeholder="Search carts, teacher, room, or owner..."
+                    value="${escapeHtml(myCartsSearchQuery)}"
+                >
+
+                <div class="media-pagination">
+                    <label>
+                        Rows
+                        <select id="myCartsPageSize" class="media-select">
+                            <option value="25" ${myCartsPageSize === 25 ? "selected" : ""}>25</option>
+                            <option value="50" ${myCartsPageSize === 50 ? "selected" : ""}>50</option>
+                            <option value="100" ${myCartsPageSize === 100 ? "selected" : ""}>100</option>
+                        </select>
+                    </label>
+
+                    <button id="myCartsPrevPage" class="mini-btn" type="button">Prev</button>
+                    <span id="myCartsPageLabel" class="muted">Page 1 of 1</span>
+                    <button id="myCartsNextPage" class="mini-btn" type="button">Next</button>
+                </div>
+            </div>
+
+            <div class="sheet-wrap my-carts-sheet-wrap">
+                <table class="media-sheet my-carts-table">
+                    <thead>
+                        <tr>
+                            <th>Move</th>
+                            <th>Index</th>
+                            <th>Cart</th>
+                            <th>Media Specialist Owner</th>
+                            <th>Teacher Name</th>
+                            <th>Room Number</th>
+                            <th>Devices</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="myCartsBody"></tbody>
+                </table>
+            </div>
+
+            <div id="myCartsEmptyState" class="media-empty-state hidden">
+                No carts match your search.
+            </div>
+        </div>
+
+        <div id="myCartsCollapsedView" class="active-cart-summary hidden">
+            <div>
+                <p class="media-eyebrow">Active Cart</p>
+                <strong id="activeCartSummaryTitle">No cart selected</strong>
+                <p id="activeCartSummarySubtitle" class="muted">The cart list is collapsed while you are adding devices.</p>
+            </div>
+
+            <div class="media-section-actions">
+                <button id="expandMyCartsBtn" class="media-btn ghost" type="button">Expand My Carts</button>
+                <button id="deselectCartBtn" class="media-btn ghost" type="button">Deselect Cart</button>
+            </div>
+        </div>
+    `;
+
+    $("myCartsFilter")?.addEventListener("input", event => {
+        myCartsSearchQuery = event.target.value.toLowerCase().trim();
+        myCartsPage = 1;
+        drawCurrentMyCartsPage();
+    });
+
+    $("myCartsPageSize")?.addEventListener("change", event => {
+        myCartsPageSize = Number.parseInt(event.target.value, 10) || 25;
+        myCartsPage = 1;
+        drawCurrentMyCartsPage();
+    });
+
+    $("myCartsPrevPage")?.addEventListener("click", () => {
+        myCartsPage = Math.max(1, myCartsPage - 1);
+        drawCurrentMyCartsPage();
+    });
+
+    $("myCartsNextPage")?.addEventListener("click", () => {
+        const filtered = getFilteredMyCarts();
+        const totalPages = Math.max(1, Math.ceil(filtered.length / myCartsPageSize));
+        myCartsPage = Math.min(totalPages, myCartsPage + 1);
+        drawCurrentMyCartsPage();
+    });
+
+    $("expandMyCartsBtn")?.addEventListener("click", expandMyCartsTable);
+    $("deselectCartBtn")?.addEventListener("click", () => hideSelectedCartPanel(true));
+
+    drawCurrentMyCartsPage();
+
+    if (selectedCart) {
+        collapseMyCartsTable();
+    }
+}
+
+function bindMyCartTableEvents(carts) {
+    document.querySelectorAll("#myCartsBody .my-cart-row").forEach(row => {
+        row.addEventListener("click", event => {
+            if (
+                event.target.closest("button") ||
+                event.target.closest("a") ||
+                event.target.closest("input") ||
+                event.target.closest(".inline-edit-control") ||
+                event.target.closest(".drag-handle")
+            ) {
+                return;
+            }
+
+            const cart = carts.find(c => String(c.id) === String(row.dataset.cartId));
+            if (cart) selectCart(cart);
+        });
+    });
+
+    document.querySelectorAll("#myCartsBody [data-open-cart-id]").forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cart = carts.find(c => String(c.id) === String(btn.dataset.openCartId));
+            if (!cart) return;
+
+            selectCart(cart);
+        });
+    });
+
+    document.querySelectorAll("#myCartsBody [data-cart-details-id]").forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cart = carts.find(c => String(c.id) === String(btn.dataset.cartDetailsId));
+            if (!cart) return;
+
+            openCartDetails(cart);
+        });
+    });
+
+    document.querySelectorAll("#myCartsBody .inline-edit-btn").forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const wrapper = btn.closest(".inline-edit-control");
+            if (!wrapper) return;
+
+            activateInlineEdit(wrapper, carts);
+        });
+    });
+
+    document.querySelectorAll("#myCartsBody .cart-index-input").forEach(input => {
+        input.addEventListener("change", async () => {
+            await reorderCart(input.dataset.cartId, input.value);
+        });
+
+        input.addEventListener("click", event => {
+            event.stopPropagation();
+        });
+    });
+
+    bindDragReorder();
+}
+
+async function reorderCart(cartId, newIndex) {
+    const parsedIndex = Number.parseInt(newIndex, 10);
+
+    if (!cartId || !Number.isFinite(parsedIndex) || parsedIndex < 1) {
+        setStatus("Enter a valid cart index.", false);
+        await loadMyCarts();
+        return;
+    }
+
+    try {
+        const data = await apiPost(
+            "/api/my-carts/reorder",
+            {
+                cart_id: cartId,
+                new_index: parsedIndex,
+            },
+            "Unable to reorder carts."
+        );
+
+        myCartsCache = data.carts || [];
+        renderMyCartsTable(myCartsCache);
+
+        if (selectedCart) {
+            collapseMyCartsTable();
+        }
+
+        setStatus("Cart order updated.", true);
+    } catch (err) {
+        setStatus(err.message || "Unable to reorder carts.", false);
+        await loadMyCarts();
+    }
+}
+
+function bindDragReorder() {
+    const tbody = $("myCartsBody");
+    if (!tbody) return;
+
+    let draggingRow = null;
+
+    tbody.querySelectorAll("tr[draggable='true']").forEach(row => {
+        row.addEventListener("dragstart", () => {
+            draggingRow = row;
+            row.classList.add("dragging");
+        });
+
+        row.addEventListener("dragend", async () => {
+            if (!draggingRow) return;
+
+            draggingRow.classList.remove("dragging");
+
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            const cartId = draggingRow.dataset.cartId;
+            const newIndex = rows.indexOf(draggingRow) + 1;
+
+            draggingRow = null;
+
+            await reorderCart(cartId, newIndex);
+        });
+
+        row.addEventListener("dragover", event => {
+            event.preventDefault();
+
+            const afterElement = getDragAfterElement(tbody, event.clientY);
+
+            if (!draggingRow) return;
+
+            if (afterElement == null) {
+                tbody.appendChild(draggingRow);
+            } else {
+                tbody.insertBefore(draggingRow, afterElement);
+            }
+        });
+    });
+}
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [
+        ...container.querySelectorAll("tr[draggable='true']:not(.dragging)")
+    ];
+
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+
+        if (offset < 0 && offset > closest.offset) {
+            return {
+                offset,
+                element: child,
+            };
+        }
+
+        return closest;
+    }, {
+        offset: Number.NEGATIVE_INFINITY,
+        element: null,
+    }).element;
+}
+
+function renderCartCards(containerId, carts, options = {}) {
     const el = $(containerId);
     if (!el) return;
 
@@ -244,25 +524,25 @@ function renderCartList(containerId, carts, options = {}) {
             : "";
 
         return `
-      <div class="cart-card ${selectedCart && String(selectedCart.id) === String(cart.id) ? "selected" : ""}" data-cart-id="${escapeHtml(cart.id)}">
-        <button class="cart-main" type="button" data-open-cart-id="${escapeHtml(cart.id)}">
-          <strong>${escapeHtml(cartDisplayName(cart))}</strong>
-          <div class="muted">
-            ${escapeHtml(cart.model_name || "")}
-            ${cart.location_name ? " • " + escapeHtml(cart.location_name) : ""}
-          </div>
-          <div class="muted">${escapeHtml(ownershipText)}</div>
-        </button>
+            <div class="cart-card ${selectedCart && String(selectedCart.id) === String(cart.id) ? "selected" : ""}" data-cart-id="${escapeHtml(cart.id)}">
+                <button class="cart-main" type="button" data-open-cart-id="${escapeHtml(cart.id)}">
+                    <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+                    <div class="muted">
+                        ${escapeHtml(cart.model_name || "")}
+                        ${cart.location_name ? " • " + escapeHtml(cart.location_name) : ""}
+                    </div>
+                    <div class="muted">${escapeHtml(ownershipText)}</div>
+                </button>
 
-        <div class="cart-actions">
-          <div class="cart-action-group">
-            ${ownershipButton}
-            ${assignOwnerButton}
-          </div>
-          ${cart.asset_url ? `<a class="snipe-link" href="${escapeHtml(cart.asset_url)}" target="_blank" rel="noopener">Snipe-IT</a>` : ""}
-        </div>
-      </div>
-    `;
+                <div class="cart-actions">
+                    <div class="cart-action-group">
+                        ${ownershipButton}
+                        ${assignOwnerButton}
+                    </div>
+                    ${cart.asset_url ? `<a class="snipe-link" href="${escapeHtml(cart.asset_url)}" target="_blank" rel="noopener">Snipe-IT</a>` : ""}
+                </div>
+            </div>
+        `;
     }).join("");
 
     el.querySelectorAll("[data-open-cart-id]").forEach(btn => {
@@ -276,7 +556,7 @@ function renderCartList(containerId, carts, options = {}) {
             }
 
             if (selectedCart && String(selectedCart.id) === String(cart.id)) {
-                hideSelectedCartPanel();
+                hideSelectedCartPanel(true);
                 setStatus("Cart unselected.", true);
                 return;
             }
@@ -318,12 +598,21 @@ async function selectCart(cart) {
     }
 
     if (subtitle) {
-        const owner = cart.ownership?.owner_display_name || cart.ownership?.owner_email || "Unassigned";
-        subtitle.textContent = `${cart.name || ""}${cart.location_name ? " • " + cart.location_name : ""} • Owner: ${owner}`;
+        const ownership = cart.ownership || {};
+        const owner = ownership.media_specialist_owner
+            || ownership.owner_display_name
+            || ownership.owner_email
+            || "Unassigned";
+
+        const teacher = ownership.teacher_name ? ` • Teacher: ${ownership.teacher_name}` : "";
+        const room = ownership.room_number ? ` • Room: ${ownership.room_number}` : "";
+
+        subtitle.innerHTML = renderSelectedCartMeta(cart);
     }
 
     renderSheetEmpty("Loading assigned devices...");
     setStatus("Loading cart devices...", true);
+    collapseMyCartsTable();
 
     try {
         const data = await apiGet(`/api/carts/${cart.id}/devices`, "Unable to load cart devices.");
@@ -338,12 +627,79 @@ async function selectCart(cart) {
         renderSheet();
         setDeviceCount(sheetDevices.size);
         setStatus(`Loaded ${sheetDevices.size} device(s) in this cart.`, true);
-        await loadMyCarts();
+        updateActiveCartSummary();
         $("deviceInput")?.focus();
     } catch (err) {
         renderSheetEmpty(err.message || "Unable to load cart devices.");
         setDeviceCount("—");
         setStatus(err.message || "Unable to load cart devices.", false);
+    }
+}
+
+function showSelectedCartPanel() {
+    $("selectedCartPanel")?.classList.remove("hidden");
+}
+
+function hideSelectedCartPanel(reloadCarts = true) {
+    $("selectedCartPanel")?.classList.add("hidden");
+
+    selectedCart = null;
+    pendingMoveDevice = null;
+    sheetDevices.clear();
+    setDeviceCount("—");
+    renderSheetEmpty("Select a cart to load assigned devices.");
+
+    if ($("cartTitle")) $("cartTitle").textContent = "Select a Cart";
+    if ($("cartSubtitle")) $("cartSubtitle").textContent = "Choose a cart from My Carts to add devices.";
+
+    expandMyCartsTable();
+
+    if (reloadCarts) {
+        loadMyCarts();
+    }
+}
+
+function collapseMyCartsTable() {
+    const expanded = $("myCartsExpandedView");
+    const collapsed = $("myCartsCollapsedView");
+
+    if (expanded) expanded.classList.add("hidden");
+    if (collapsed) collapsed.classList.remove("hidden");
+
+    updateActiveCartSummary();
+}
+
+function expandMyCartsTable() {
+    const expanded = $("myCartsExpandedView");
+    const collapsed = $("myCartsCollapsedView");
+
+    if (expanded) expanded.classList.remove("hidden");
+    if (collapsed) collapsed.classList.add("hidden");
+}
+
+function updateActiveCartSummary() {
+    if (!selectedCart) return;
+
+    const title = $("activeCartSummaryTitle");
+    const subtitle = $("activeCartSummarySubtitle");
+    const ownership = selectedCart.ownership || {};
+
+    if (title) {
+        title.textContent = selectedCart.asset_tag
+            ? `Cart ${selectedCart.asset_tag}`
+            : selectedCart.name || "Selected Cart";
+    }
+
+    if (subtitle) {
+        const owner = ownership.media_specialist_owner
+            || ownership.owner_display_name
+            || ownership.owner_email
+            || "Unassigned";
+
+        const teacher = ownership.teacher_name ? ` • Teacher: ${ownership.teacher_name}` : "";
+        const room = ownership.room_number ? ` • Room: ${ownership.room_number}` : "";
+
+        subtitle.textContent = `${selectedCart.name || ""} • Owner: ${owner}${teacher}${room}`;
     }
 }
 
@@ -586,6 +942,7 @@ async function addDeviceToCart(device, force) {
         prependRecent("add_to_cart", device, selectedCart, true, data.message || "Device assigned to cart.");
         setStatus("Device assigned to cart.", true);
     } catch (err) {
+        prependRecent("add_failed", device, selectedCart, false, err.message || "Unable to add device to cart.");
         setStatus(err.message || "Unable to add device to cart.", false);
     }
 }
@@ -622,6 +979,7 @@ async function removeFromCart(device) {
         setStatus(`Device removed. ${sheetDevices.size} device(s) remain in this cart.`, true);
 
     } catch (err) {
+        prependRecent("remove_failed", device, selectedCart, false, err.message || "Unable to remove device from cart.");
         setStatus(err.message || "Unable to remove device from cart.", false);
     }
 }
@@ -646,22 +1004,22 @@ function renderSheet() {
     }
 
     tbody.innerHTML = devices.map((device, index) => `
-    <tr class="device-row" data-device-id="${escapeHtml(device.id)}">
-      <td class="row-index">${index + 1}</td>
-      <td>
-        <button class="mini-btn remove" type="button" data-remove-id="${escapeHtml(device.id)}">
-          Remove
-        </button>
-      </td>
-      <td class="mono">${escapeHtml(device.asset_tag || "")}</td>
-      <td class="mono">${escapeHtml(device.serial || "")}</td>
-      <td>${escapeHtml(device.model_name || "")}</td>
-      <td>${escapeHtml(device.location_name || "")}</td>
-      <td>
-        ${device.asset_url ? `<a class="snipe-link" href="${escapeHtml(device.asset_url)}" target="_blank" rel="noopener">Open</a>` : "—"}
-      </td>
-    </tr>
-  `).join("");
+        <tr class="device-row" data-device-id="${escapeHtml(device.id)}">
+            <td class="row-index">${index + 1}</td>
+            <td>
+                <button class="mini-btn remove" type="button" data-remove-id="${escapeHtml(device.id)}">
+                    Remove
+                </button>
+            </td>
+            <td class="mono">${escapeHtml(device.asset_tag || "")}</td>
+            <td class="mono">${escapeHtml(device.serial || "")}</td>
+            <td>${escapeHtml(device.model_name || "")}</td>
+            <td>${escapeHtml(device.location_name || "")}</td>
+            <td>
+                ${device.asset_url ? `<a class="snipe-link" href="${escapeHtml(device.asset_url)}" target="_blank" rel="noopener">Open</a>` : "—"}
+            </td>
+        </tr>
+    `).join("");
 
     tbody.querySelectorAll("[data-remove-id]").forEach(btn => {
         btn.addEventListener("click", event => {
@@ -694,10 +1052,10 @@ function bindSyncButton() {
             btn.innerHTML = `
                 <span class="btn-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
-                    <path d="M3 3v5h5" />
-                    <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
-                    <path d="M21 21v-5h-5" />
+                        <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
+                        <path d="M3 3v5h5" />
+                        <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
+                        <path d="M21 21v-5h-5" />
                     </svg>
                 </span>
                 <span>Syncing...</span>
@@ -724,10 +1082,10 @@ function bindSyncButton() {
                 btn.innerHTML = `
                     <span class="btn-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
-                        <path d="M3 3v5h5" />
-                        <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
-                        <path d="M21 21v-5h-5" />
+                            <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
+                            <path d="M3 3v5h5" />
+                            <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
+                            <path d="M21 21v-5h-5" />
                         </svg>
                     </span>
                     <span>Sync Snipe-IT</span>
@@ -815,20 +1173,20 @@ function openDeviceDetailModal(device) {
     ];
 
     body.innerHTML = `
-    <div class="device-detail-grid">
-      ${detailRows.map(([label, value]) => `
-        <div class="detail-item">
-          <span class="detail-label">${escapeHtml(label)}</span>
-          <span class="detail-value">${label === "Snipe-IT" ? value : escapeHtml(value)}</span>
+        <div class="device-detail-grid">
+            ${detailRows.map(([label, value]) => `
+                <div class="detail-item">
+                    <span class="detail-label">${escapeHtml(label)}</span>
+                    <span class="detail-value">${label === "Snipe-IT" ? value : escapeHtml(value)}</span>
+                </div>
+            `).join("")}
         </div>
-      `).join("")}
-    </div>
 
-    <div class="device-detail-actions">
-      <button class="media-btn ghost" type="button" id="detailMoveBtn">Move Device</button>
-      <button class="media-btn danger" type="button" id="detailRemoveBtn">Remove from Cart</button>
-    </div>
-  `;
+        <div class="device-detail-actions">
+            <button class="media-btn ghost" type="button" id="detailMoveBtn">Move Device</button>
+            <button class="media-btn danger" type="button" id="detailRemoveBtn">Remove from Cart</button>
+        </div>
+    `;
 
     $("detailRemoveBtn")?.addEventListener("click", () => {
         closeDeviceDetailModal();
@@ -836,8 +1194,8 @@ function openDeviceDetailModal(device) {
     });
 
     $("detailMoveBtn")?.addEventListener("click", () => {
-    closeDeviceDetailModal();
-    openMoveDeviceModal(device);
+        closeDeviceDetailModal();
+        openMoveDeviceModal(device);
     });
 
     modal.classList.remove("hidden");
@@ -855,35 +1213,17 @@ function prependRecent(action, device, cart, ok, message) {
     tr.className = ok ? "ok" : "bad";
 
     tr.innerHTML = `
-    <td class="mono">${escapeHtml(new Date().toISOString())}</td>
-    <td>${escapeHtml(friendlyAction(action))}</td>
-    <td>${escapeHtml(currentUser?.display_name || currentUser?.email || "—")}</td>
-    <td class="mono">${escapeHtml(device?.asset_tag || device?.name || device?.id || "—")}</td>
-    <td class="mono">${escapeHtml(device?.serial || "—")}</td>
-    <td class="mono">${escapeHtml(cart?.asset_tag || cart?.name || cart?.id || "—")}</td>
-    <td>${ok ? "Success" : "Error"}</td>
-    <td class="muted">${escapeHtml(message || "")}</td>
+        <td class="mono">${escapeHtml(new Date().toISOString())}</td>
+        <td>${escapeHtml(friendlyAction(action))}</td>
+        <td>${escapeHtml(currentUser?.display_name || currentUser?.email || "—")}</td>
+        <td class="mono">${escapeHtml(device?.asset_tag || device?.name || device?.id || "—")}</td>
+        <td class="mono">${escapeHtml(device?.serial || "—")}</td>
+        <td class="mono">${escapeHtml(cart?.asset_tag || cart?.name || cart?.id || "—")}</td>
+        <td class="result-cell">${ok ? "Success" : "Error"}</td>
+        <td class="muted">${escapeHtml(message || "")}</td>
     `;
 
     tbody.prepend(tr);
-}
-
-function showSelectedCartPanel() {
-    $("selectedCartPanel")?.classList.remove("hidden");
-}
-
-function hideSelectedCartPanel() {
-    $("selectedCartPanel")?.classList.add("hidden");
-    selectedCart = null;
-    pendingMoveDevice = null;
-    sheetDevices.clear();
-    setDeviceCount("—");
-    renderSheetEmpty("Select a cart to load assigned devices.");
-
-    if ($("cartTitle")) $("cartTitle").textContent = "Select a Cart";
-    if ($("cartSubtitle")) $("cartSubtitle").textContent = "Choose a cart from My Carts or Find Cart to load assigned devices.";
-
-    loadMyCarts();
 }
 
 function requestMoveDeviceToCart(device, destinationCart) {
@@ -909,166 +1249,170 @@ function requestMoveDeviceToCart(device, destinationCart) {
 }
 
 function bindMoveDeviceModal() {
-  $("closeMoveDeviceBtn")?.addEventListener("click", closeMoveDeviceModal);
-  $("moveCartSearchBtn")?.addEventListener("click", searchMoveDestinationCarts);
+    $("closeMoveDeviceBtn")?.addEventListener("click", closeMoveDeviceModal);
+    $("moveCartSearchBtn")?.addEventListener("click", searchMoveDestinationCarts);
 
-  $("moveCartSearch")?.addEventListener("keydown", event => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      searchMoveDestinationCarts();
-    }
-  });
+    $("moveCartSearch")?.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            searchMoveDestinationCarts();
+        }
+    });
 
-  $("moveDeviceModal")?.addEventListener("click", event => {
-    if (event.target.id === "moveDeviceModal") {
-      closeMoveDeviceModal();
-    }
-  });
+    $("moveDeviceModal")?.addEventListener("click", event => {
+        if (event.target.id === "moveDeviceModal") {
+            closeMoveDeviceModal();
+        }
+    });
 }
 
 function openMoveDeviceModal(device) {
-  moveModalDevice = device;
+    moveModalDevice = device;
 
-  $("moveDeviceTitle").textContent = `Move ${device.asset_tag || device.serial || "Device"}`;
-  $("moveDeviceSubtitle").textContent = "Search for the destination cart to move this device into.";
+    $("moveDeviceTitle").textContent = `Move ${device.asset_tag || device.serial || "Device"}`;
+    $("moveDeviceSubtitle").textContent = "Search for the destination cart to move this device into.";
 
-  if ($("moveCartSearch")) {
-    $("moveCartSearch").value = "";
-  }
+    if ($("moveCartSearch")) {
+        $("moveCartSearch").value = "";
+    }
 
-  if ($("moveCartResults")) {
-    $("moveCartResults").innerHTML = "";
-  }
+    if ($("moveCartResults")) {
+        $("moveCartResults").innerHTML = "";
+    }
 
-  $("moveDeviceModal")?.classList.remove("hidden");
-  setTimeout(() => $("moveCartSearch")?.focus(), 50);
+    $("moveDeviceModal")?.classList.remove("hidden");
+    setTimeout(() => $("moveCartSearch")?.focus(), 50);
 }
 
 function closeMoveDeviceModal() {
-  moveModalDevice = null;
-  $("moveDeviceModal")?.classList.add("hidden");
+    moveModalDevice = null;
+    $("moveDeviceModal")?.classList.add("hidden");
 }
 
 async function searchMoveDestinationCarts() {
-  const query = ($("moveCartSearch")?.value || "").trim();
-  const resultsEl = $("moveCartResults");
+    const query = ($("moveCartSearch")?.value || "").trim();
+    const resultsEl = $("moveCartResults");
 
-  if (!resultsEl) return;
+    if (!resultsEl) return;
 
-  if (query.length < 2) {
-    resultsEl.innerHTML = `<div class="muted">Type at least 2 characters.</div>`;
-    return;
-  }
+    if (query.length < 2) {
+        resultsEl.innerHTML = `<div class="muted">Type at least 2 characters.</div>`;
+        return;
+    }
 
-  resultsEl.innerHTML = `<div class="muted">Searching destination carts...</div>`;
+    resultsEl.innerHTML = `<div class="muted">Searching destination carts...</div>`;
 
-  try {
-    const data = await apiGet(`/api/carts?q=${encodeURIComponent(query)}`, "Cart search failed.");
-    renderMoveDestinationCarts(data.carts || []);
-  } catch (err) {
-    resultsEl.innerHTML = `<div class="muted">${escapeHtml(err.message || "Cart search failed.")}</div>`;
-  }
+    try {
+        const data = await apiGet(`/api/carts?q=${encodeURIComponent(query)}`, "Cart search failed.");
+        renderMoveDestinationCarts(data.carts || []);
+    } catch (err) {
+        resultsEl.innerHTML = `<div class="muted">${escapeHtml(err.message || "Cart search failed.")}</div>`;
+    }
 }
 
 function renderMoveDestinationCarts(carts) {
-  const el = $("moveCartResults");
-  if (!el) return;
+    const el = $("moveCartResults");
+    if (!el) return;
 
-  if (!carts.length) {
-    el.innerHTML = `<div class="muted">No destination carts found.</div>`;
-    return;
-  }
+    if (!carts.length) {
+        el.innerHTML = `<div class="muted">No destination carts found.</div>`;
+        return;
+    }
 
-  el.innerHTML = carts.map(cart => `
-    <div class="cart-card">
-      <button class="cart-main" type="button" data-move-cart-id="${escapeHtml(cart.id)}">
-        <strong>${escapeHtml(cartDisplayName(cart))}</strong>
-        <div class="muted">
-          ${escapeHtml(cart.model_name || "")}
-          ${cart.location_name ? " • " + escapeHtml(cart.location_name) : ""}
+    el.innerHTML = carts.map(cart => `
+        <div class="cart-card">
+            <button class="cart-main" type="button" data-move-cart-id="${escapeHtml(cart.id)}">
+                <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+                <div class="muted">
+                    ${escapeHtml(cart.model_name || "")}
+                    ${cart.location_name ? " • " + escapeHtml(cart.location_name) : ""}
+                </div>
+            </button>
+            <div class="cart-actions">
+                ${cart.asset_url ? `<a class="snipe-link" href="${escapeHtml(cart.asset_url)}" target="_blank" rel="noopener">Snipe-IT</a>` : ""}
+            </div>
         </div>
-      </button>
-      <div class="cart-actions">
-        ${cart.asset_url ? `<a class="snipe-link" href="${escapeHtml(cart.asset_url)}" target="_blank" rel="noopener">Snipe-IT</a>` : ""}
-      </div>
-    </div>
-  `).join("");
+    `).join("");
 
-  el.querySelectorAll("[data-move-cart-id]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const destinationCart = carts.find(c => String(c.id) === String(btn.dataset.moveCartId));
-      if (!destinationCart || !moveModalDevice) return;
+    el.querySelectorAll("[data-move-cart-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const destinationCart = carts.find(c => String(c.id) === String(btn.dataset.moveCartId));
+            if (!destinationCart || !moveModalDevice) return;
 
-      const deviceToMove = moveModalDevice;
-      closeMoveDeviceModal();
+            const deviceToMove = moveModalDevice;
+            closeMoveDeviceModal();
 
-      window.setTimeout(() => {
-        openConfirmModal({
-          title: "Move Device?",
-          message: `Move asset ${deviceToMove.asset_tag || deviceToMove.serial || deviceToMove.id} to ${destinationCart.asset_tag || destinationCart.name}?`,
-          buttonText: "Move Device",
-          action: async () => moveDeviceToCart(deviceToMove, destinationCart)
+            window.setTimeout(() => {
+                openConfirmModal({
+                    title: "Move Device?",
+                    message: `Move asset ${deviceToMove.asset_tag || deviceToMove.serial || deviceToMove.id} to ${destinationCart.asset_tag || destinationCart.name}?`,
+                    buttonText: "Move Device",
+                    action: async () => moveDeviceToCart(deviceToMove, destinationCart)
+                });
+            }, 75);
         });
-      }, 75);
     });
-  });
 }
 
 async function moveDeviceToCart(device, destinationCart) {
-  if (!device || !destinationCart) return;
+    if (!device || !destinationCart) return;
 
-  const sourceCart = selectedCart;
+    const sourceCart = selectedCart;
 
-  setStatus("Moving device to destination cart...", true);
+    setStatus("Moving device to destination cart...", true);
 
-  try {
-    const data = await apiPost(
-      "/api/add-to-cart",
-      {
-        cart_id: destinationCart.id,
-        device_id: device.id,
-        force: true
-      },
-      "Unable to move device."
-    );
+    try {
+        const data = await apiPost(
+            "/api/add-to-cart",
+            {
+                cart_id: destinationCart.id,
+                device_id: device.id,
+                force: true
+            },
+            "Unable to move device."
+        );
 
-    if (sourceCart && String(sourceCart.id) !== String(destinationCart.id)) {
-      sheetDevices.delete(String(device.id));
-      renderSheet();
-      setDeviceCount(sheetDevices.size);
+        if (sourceCart && String(sourceCart.id) !== String(destinationCart.id)) {
+            sheetDevices.delete(String(device.id));
+            renderSheet();
+            setDeviceCount(sheetDevices.size);
+        }
+
+        prependRecent(
+            "moved_to_cart",
+            device,
+            destinationCart,
+            true,
+            data.message || "Device moved to destination cart."
+        );
+
+        selectedCart = destinationCart;
+        await selectCart(destinationCart);
+
+        setStatus("Device moved to destination cart.", true);
+    } catch (err) {
+        prependRecent("move_failed", device, destinationCart, false, err.message || "Unable to move device.");
+        setStatus(err.message || "Unable to move device.", false);
     }
-
-    prependRecent(
-      "moved_to_cart",
-      device,
-      destinationCart,
-      true,
-      data.message || "Device moved to destination cart."
-    );
-
-    selectedCart = destinationCart;
-    await selectCart(destinationCart);
-
-    setStatus("Device moved to destination cart.", true);
-  } catch (err) {
-    setStatus(err.message || "Unable to move device.", false);
-  }
 }
 
 function friendlyAction(action) {
-  const labels = {
-    add_to_cart: "Added to Cart",
-    added_to_cart: "Added to Cart",
-    remove_from_cart: "Removed from Cart",
-    removed_from_cart: "Removed from Cart",
-    moved_to_cart: "Moved to Cart",
-    claimed_cart: "Claimed Cart",
-    move_failed: "Move Failed",
-    add_failed: "Add Failed",
-    assigned_cart_owner: "Assigned Cart Owner",
-  };
+    const labels = {
+        add_to_cart: "Added to Cart",
+        added_to_cart: "Added to Cart",
+        remove_from_cart: "Removed from Cart",
+        removed_from_cart: "Removed from Cart",
+        remove_failed: "Remove Failed",
+        moved_to_cart: "Moved to Cart",
+        claimed_cart: "Claimed Cart",
+        move_failed: "Move Failed",
+        add_failed: "Add Failed",
+        assigned_cart_owner: "Assigned Cart Owner",
+        updated_cart_metadata: "Updated Cart Fields",
+        reordered_cart: "Reordered Cart",
+    };
 
-  return labels[action] || String(action || "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+    return labels[action] || String(action || "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function bindAssignOwnerModal() {
@@ -1229,5 +1573,308 @@ async function assignCartOwner(cart, user) {
         }
     } catch (err) {
         setStatus(err.message || "Unable to assign owner.", false);
+    }
+}
+
+function openCartDetails(cart) {
+    const ownership = cart.ownership || {};
+
+    openConfirmModal({
+        title: "Cart Details",
+        messageHtml: `
+            <div class="ownership-detail-card">
+                <div class="ownership-detail-heading">Cart Information</div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">Cart</div>
+                    <div class="ownership-detail-value">${escapeHtml(cartDisplayName(cart))}</div>
+                </div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">Media Specialist</div>
+                    <div class="ownership-detail-value">${escapeHtml(ownership.owner_display_name || ownership.owner_email || "Unassigned")}</div>
+                </div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">Teacher</div>
+                    <div class="ownership-detail-value">${escapeHtml(ownership.teacher_name || "—")}</div>
+                </div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">Room</div>
+                    <div class="ownership-detail-value">${escapeHtml(ownership.room_number || "—")}</div>
+                </div>
+            </div>
+        `,
+        buttonText: "Close",
+        action: async () => {}
+    });
+}
+
+function bindMediaTabs() {
+    document.querySelectorAll(".settings-tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+            const target = tab.dataset.tab;
+
+            document.querySelectorAll(".settings-tab").forEach(item => {
+                item.classList.toggle("active", item === tab);
+            });
+
+            document.querySelectorAll(".settings-tab-panel").forEach(panel => {
+                panel.classList.toggle("active", panel.dataset.panel === target);
+            });
+        });
+    });
+}
+
+function drawMyCartsRows(rows) {
+    const tbody = $("myCartsBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = rows.map((cart, index) => {
+        const ownership = cart.ownership || {};
+        const displayOrder = ownership.display_order || ((myCartsPage - 1) * myCartsPageSize) + index + 1;
+
+        return `
+            <tr class="my-cart-row" draggable="true" data-cart-id="${escapeHtml(cart.id)}">
+                <td class="drag-handle" title="Drag to reorder">☰</td>
+                <td>
+                    <input class="cart-index-input" type="number" min="1" value="${escapeHtml(displayOrder)}" data-cart-id="${escapeHtml(cart.id)}">
+                </td>
+                <td>
+                    <button class="link-button" type="button" data-open-cart-id="${escapeHtml(cart.id)}">
+                        ${escapeHtml(cartDisplayName(cart))}
+                    </button>
+                    <div class="muted">${escapeHtml(cart.model_name || "")}</div>
+                </td>
+                <td><span class="readonly-owner">${escapeHtml(ownership.owner_display_name || ownership.owner_email || "Unassigned")}</span></td>
+                <td>
+                    ${renderInlineEditField(cart.id, "teacher_name", ownership.teacher_name || "—")}
+                </td>
+                <td>
+                    ${renderInlineEditField(cart.id, "room_number", ownership.room_number || "—")}
+                </td>
+                <td>
+                    <span
+                        class="device-count-badge"
+                        data-device-count-cart-id="${escapeHtml(cart.id)}"
+                    >
+                        ...
+                    </span>
+                </td>
+                <td><button class="mini-btn" type="button" data-cart-details-id="${escapeHtml(cart.id)}">Details</button></td>
+            </tr>
+        `;
+    }).join("");
+
+    bindMyCartTableEvents(rows);
+    loadVisibleCartDeviceCounts(rows);
+}
+
+async function loadVisibleCartDeviceCounts(carts) {
+    await Promise.allSettled(carts.map(async cart => {
+        const cell = document.querySelector(`[data-device-count-cart-id="${CSS.escape(String(cart.id))}"]`);
+        if (!cell) return;
+
+        try {
+            const data = await apiGet(`/api/carts/${cart.id}/devices`, "Unable to load device count.");
+            cell.textContent = String((data.devices || []).length);
+        } catch {
+            cell.textContent = "—";
+        }
+    }));
+}
+
+function getFilteredMyCarts() {
+    if (!myCartsSearchQuery) return myCartsCache;
+
+    return myCartsCache.filter(cart => {
+        const ownership = cart.ownership || {};
+        const haystack = [
+            cart.asset_tag,
+            cart.name,
+            cart.model_name,
+            cart.location_name,
+            ownership.owner_display_name,
+            ownership.owner_email,
+            ownership.teacher_name,
+            ownership.room_number,
+        ].join(" ").toLowerCase();
+
+        return haystack.includes(myCartsSearchQuery);
+    });
+}
+
+function drawCurrentMyCartsPage() {
+    const filtered = getFilteredMyCarts();
+    const empty = $("myCartsEmptyState");
+    const tbody = $("myCartsBody");
+
+    if (!tbody) return;
+
+    if (!filtered.length) {
+        tbody.innerHTML = "";
+        if (empty) empty.classList.remove("hidden");
+        updateMyCartsPagination(0);
+        return;
+    }
+
+    if (empty) empty.classList.add("hidden");
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / myCartsPageSize));
+    myCartsPage = Math.min(myCartsPage, totalPages);
+
+    const start = (myCartsPage - 1) * myCartsPageSize;
+    const rows = filtered.slice(start, start + myCartsPageSize);
+
+    drawMyCartsRows(rows);
+    updateMyCartsPagination(filtered.length);
+}
+
+function updateMyCartsPagination(totalRows) {
+    const totalPages = Math.max(1, Math.ceil(totalRows / myCartsPageSize));
+
+    if ($("myCartsPageLabel")) {
+        $("myCartsPageLabel").textContent = `Page ${myCartsPage} of ${totalPages}`;
+    }
+
+    if ($("myCartsPrevPage")) {
+        $("myCartsPrevPage").disabled = myCartsPage <= 1;
+    }
+
+    if ($("myCartsNextPage")) {
+        $("myCartsNextPage").disabled = myCartsPage >= totalPages || totalRows === 0;
+    }
+}
+
+function renderSelectedCartMeta(cart) {
+    const ownership = cart.ownership || {};
+
+    const items = [
+        ["Cart", cart.asset_tag || cart.name || "—"],
+        ["Location", cart.location_name || "—"],
+        ["Owner", ownership.owner_display_name || ownership.owner_email || "Unassigned"],
+        ["Teacher", ownership.teacher_name || "—"],
+        ["Room", ownership.room_number || "—"],
+    ];
+
+    return `
+        <div class="selected-cart-meta">
+            ${items.map(([label, value]) => `
+                <span class="selected-cart-chip">
+                    <strong>${escapeHtml(label)}</strong>
+                    ${escapeHtml(value)}
+                </span>
+            `).join("")}
+        </div>
+    `;
+}
+
+function renderInlineEditField(cartId, field, value) {
+    return `
+        <div class="inline-edit-control" data-field-wrap="${escapeHtml(field)}" data-cart-id="${escapeHtml(cartId)}">
+            <span class="inline-edit-value">${escapeHtml(value || "—")}</span>
+            <input
+                class="inline-cart-field hidden"
+                data-field="${escapeHtml(field)}"
+                data-cart-id="${escapeHtml(cartId)}"
+                value="${escapeHtml(value === "—" ? "" : value)}"
+            >
+            <button class="inline-edit-btn" type="button" title="Edit">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 20h9"/>
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                </svg>
+            </button>
+        </div>
+    `;
+}
+
+function activateInlineEdit(wrapper, carts) {
+    const input = wrapper.querySelector(".inline-cart-field");
+    if (!input) return;
+
+    wrapper.classList.add("is-editing");
+    input.classList.remove("hidden");
+    input.classList.add("inline-edit-active");
+
+    input.focus();
+    input.select();
+
+    const finish = async () => {
+        await saveInlineEdit(input, wrapper, carts);
+    };
+
+    input.addEventListener("keydown", async event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            await finish();
+        }
+
+        if (event.key === "Escape") {
+            event.preventDefault();
+            cancelInlineEdit(wrapper);
+        }
+    }, { once: false });
+
+    input.addEventListener("blur", finish, { once: true });
+}
+
+function cancelInlineEdit(wrapper) {
+    const input = wrapper.querySelector(".inline-cart-field");
+    wrapper.classList.remove("is-editing");
+
+    if (input) {
+        input.classList.add("hidden");
+        input.classList.remove("inline-edit-active");
+    }
+}
+
+async function saveInlineEdit(input, wrapper, carts) {
+    if (!input || input.dataset.saving === "1") return;
+
+    const row = input.closest("tr");
+    const cartId = input.dataset.cartId;
+    const cart = carts.find(c => String(c.id) === String(cartId));
+
+    if (!row || !cart) {
+        cancelInlineEdit(wrapper);
+        return;
+    }
+
+    input.dataset.saving = "1";
+
+    const body = {
+        teacher_name: row.querySelector('[data-field="teacher_name"]')?.value || "",
+        room_number: row.querySelector('[data-field="room_number"]')?.value || "",
+    };
+
+    try {
+        const data = await apiPost(
+            `/api/carts/${cart.id}/metadata`,
+            body,
+            "Unable to update cart fields."
+        );
+
+        const updatedCart = data.cart || null;
+
+        if (updatedCart) {
+            myCartsCache = myCartsCache.map(item =>
+                String(item.id) === String(updatedCart.id) ? updatedCart : item
+            );
+        }
+
+        const valueEl = wrapper.querySelector(".inline-edit-value");
+        if (valueEl) {
+            valueEl.textContent = input.value.trim() || "—";
+        }
+
+        setStatus("Cart fields updated.", true);
+    } catch (err) {
+        setStatus(err.message || "Unable to update cart fields.", false);
+        await loadMyCarts();
+    } finally {
+        delete input.dataset.saving;
+        cancelInlineEdit(wrapper);
     }
 }

@@ -31,164 +31,180 @@
         </button>
     </div>
 
-    <section class="media-panel">
-        <div class="media-section-head">
-            <div>
-                <h2>My Carts</h2>
-                <p class="muted">Carts you have taken ownership of.</p>
-            </div>
+    <div class="settings-tabs media-catalog-tabs">
+        <button type="button" class="settings-tab active" data-tab="cart-management">
+            Cart Management
+        </button>
+        <button type="button" class="settings-tab" data-tab="recent-activity">
+            Recent Activity
+        </button>
+    </div>
 
-            <div class="media-section-actions">
-                <button id="refreshMyCartsBtn" class="media-btn ghost icon-btn" type="button">
-                    <span class="btn-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
-                            stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                            <path d="M3 3v5h5" />
-                            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                            <path d="M16 16h5v5" />
-                        </svg>
-                    </span>
-                    <span>Refresh</span>
-                </button>
+    <div class="settings-section-stack media-catalog-tab-stack">
+        <div class="settings-tab-panel active" data-panel="cart-management">
+            <section class="media-panel">
+                <div class="media-section-head">
+                    <div>
+                        <h2>My Carts</h2>
+                        <p class="muted">Carts you have taken ownership of.</p>
+                    </div>
 
-                <button id="toggleFindCartBtn" class="media-btn ghost icon-btn" type="button">
-                    <span class="btn-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
-                            stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="m21 21-4.34-4.34" />
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="M11 8v6" />
-                            <path d="M8 11h6" />
-                        </svg>
-                    </span>
-                    <span>Find / Claim Cart</span>
-                </button>
-            </div>
-        </div>
+                    <div class="media-section-actions">
+                        <button id="refreshMyCartsBtn" class="media-btn ghost icon-btn" type="button">
+                            <span class="btn-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                                    stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                    <path d="M3 3v5h5" />
+                                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                    <path d="M16 16h5v5" />
+                                </svg>
+                            </span>
+                            <span>Refresh</span>
+                        </button>
 
-        <div id="myCarts" class="cart-pill-grid"></div>
-    </section>
-
-    <section id="findCartPanel" class="media-panel find-cart-panel hidden">
-        <div class="media-section-head">
-            <div>
-                <h2>Find Cart</h2>
-                <p class="muted">Search any cart district-wide and take ownership if needed.</p>
-            </div>
-        </div>
-
-        <div class="form-card">
-            <label class="media-label" for="cartSearch">Cart Search</label>
-            <div class="media-row">
-                <input id="cartSearch" class="media-input" autocomplete="off"
-                    placeholder="Search cart by asset tag or name...">
-                <button id="cartSearchBtn" class="media-btn" type="button">Search</button>
-            </div>
-        </div>
-
-        <div id="cartResults" class="cart-pill-grid search-grid"></div>
-    </section>
-
-    <section id="selectedCartPanel" class="media-panel media-wide hidden">
-        <div class="cart-detail-header">
-            <div>
-                <p class="media-eyebrow">Selected Cart</p>
-                <h2 id="cartTitle">Select a Cart</h2>
-                <p id="cartSubtitle" class="muted">Choose a cart from My Carts or Find Cart to load assigned devices.
-                </p>
-            </div>
-
-            <div class="cart-metrics">
-                <div class="metric-card">
-                    <span class="metric-value" id="deviceCount">—</span>
-                    <span class="metric-label">Devices in Cart</span>
+                        <button id="toggleFindCartBtn" class="media-btn ghost icon-btn" type="button">
+                            <span class="btn-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                                    stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="m21 21-4.34-4.34" />
+                                    <circle cx="11" cy="11" r="8" />
+                                    <path d="M11 8v6" />
+                                    <path d="M8 11h6" />
+                                </svg>
+                            </span>
+                            <span>Find / Claim Cart</span>
+                        </button>
+                    </div>
                 </div>
-                <div id="status" class="media-status">Ready.</div>
-            </div>
+
+                <div id="myCarts"></div>
+            </section>
+
+            <section id="findCartPanel" class="media-panel find-cart-panel hidden">
+                <div class="media-section-head">
+                    <div>
+                        <h2>Find Cart</h2>
+                        <p class="muted">Search any cart district-wide and take ownership if needed.</p>
+                    </div>
+                </div>
+
+                <div class="form-card">
+                    <label class="media-label" for="cartSearch">Cart Search</label>
+                    <div class="media-row">
+                        <input id="cartSearch" class="media-input" autocomplete="off"
+                            placeholder="Search cart by asset tag or name...">
+                        <button id="cartSearchBtn" class="media-btn" type="button">Search</button>
+                    </div>
+                </div>
+
+                <div id="cartResults" class="cart-pill-grid search-grid"></div>
+            </section>
+
+            <section id="selectedCartPanel" class="media-panel media-wide hidden">
+                <div class="cart-detail-header">
+                    <div>
+                        <p class="media-eyebrow">Selected Cart</p>
+                        <h2 id="cartTitle">Select a Cart</h2>
+                        <p id="cartSubtitle" class="muted">
+                            Choose a cart from My Carts or Find Cart to load assigned devices.
+                        </p>
+                    </div>
+
+                    <div class="cart-metrics">
+                        <div class="metric-card">
+                            <span class="metric-value" id="deviceCount">—</span>
+                            <span class="metric-label">Devices in Cart</span>
+                        </div>
+                        <div id="status" class="media-status">Ready.</div>
+                    </div>
+                </div>
+
+                <div class="add-device-box">
+                    <div>
+                        <h3>Add Devices to Active Cart</h3>
+                        <p class="muted">Scan or enter a device serial number or asset tag to add it to the selected cart.</p>
+                    </div>
+
+                    <div class="media-row add-device-row">
+                        <input id="deviceInput" class="media-input" autocomplete="off"
+                            placeholder="Scan / Type Asset Tag or Serial Number">
+                        <button id="deviceAddBtn" class="media-btn" type="button">Add Device</button>
+                    </div>
+                </div>
+
+                <div class="sheet-toolbar">
+                    <div class="sheet-title">
+                        <strong>Cart Device Sheet</strong>
+                        <span class="muted">Click a row to view more device details.</span>
+                    </div>
+                </div>
+
+                <div class="sheet-wrap">
+                    <table class="media-sheet">
+                        <thead>
+                            <tr>
+                                <th class="row-index-col">#</th>
+                                <th>Action</th>
+                                <th>Asset Tag</th>
+                                <th>Serial</th>
+                                <th>Model</th>
+                                <th>Location</th>
+                                <th>Snipe-IT</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sheetBody">
+                            <tr>
+                                <td colspan="7" class="muted">Select a cart to load assigned devices.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
         </div>
 
-        <div class="add-device-box">
-            <div>
-                <h3>Add Device</h3>
-                <p class="muted">Scan or manually type an asset tag or serial number in the same field.</p>
-            </div>
+        <div class="settings-tab-panel" data-panel="recent-activity">
+            <section id="recentActivityPanel" class="media-panel media-wide">
+                <div class="media-section-head">
+                    <div>
+                        <h2>Recent Media Catalog Activity</h2>
+                        <p class="muted">Recent cart and device actions recorded locally in SnipeOps.</p>
+                    </div>
+                </div>
 
-            <div class="media-row add-device-row">
-                <input id="deviceInput" class="media-input" autocomplete="off"
-                    placeholder="Scan / Type Asset Tag or Serial Number">
-                <button id="deviceAddBtn" class="media-btn" type="button">Add Device</button>
-            </div>
+                <div class="sheet-wrap compact">
+                    <table class="media-sheet">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Action</th>
+                                <th>User</th>
+                                <th>Device</th>
+                                <th>Serial</th>
+                                <th>Cart</th>
+                                <th>Result</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentBody">
+                            {% for r in recent %}
+                            <tr class="{{ 'ok' if r.ok else 'bad' }}">
+                                <td class="mono">{{ r.created_at|localtime }}</td>
+                                <td>{{ r.action.replace('_', ' ')|title }}</td>
+                                <td>{{ r.actor_display_name or r.actor_email or '—' }}</td>
+                                <td class="mono">{{ r.device_asset_tag or r.device_name or r.device_asset_id or '' }}</td>
+                                <td class="mono">{{ r.device_serial or '' }}</td>
+                                <td class="mono">{{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '' }}</td>
+                                <td>{{ 'Success' if r.ok else 'Error' }}</td>
+                                <td class="muted">{{ r.message or '' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
         </div>
-
-        <div class="sheet-toolbar">
-            <div class="sheet-title">
-                <strong>Cart Device Sheet</strong>
-                <span class="muted">Click a row to view more device details.</span>
-            </div>
-        </div>
-
-        <div class="sheet-wrap">
-            <table class="media-sheet">
-                <thead>
-                    <tr>
-                        <th class="row-index-col">#</th>
-                        <th>Action</th>
-                        <th>Asset Tag</th>
-                        <th>Serial</th>
-                        <th>Model</th>
-                        <th>Location</th>
-                        <th>Snipe-IT</th>
-                    </tr>
-                </thead>
-                <tbody id="sheetBody">
-                    <tr>
-                        <td colspan="7" class="muted">Select a cart to load assigned devices.</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
-
-    <section class="media-panel media-wide">
-        <div class="media-section-head">
-            <div>
-                <h2>Recent Media Catalog Activity</h2>
-                <p class="muted">Recent cart and device actions recorded locally in SnipeOps.</p>
-            </div>
-        </div>
-
-        <div class="sheet-wrap compact">
-            <table class="media-sheet">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Action</th>
-                        <th>User</th>
-                        <th>Device</th>
-                        <th>Serial</th>
-                        <th>Cart</th>
-                        <th>Result</th>
-                        <th>Message</th>
-                    </tr>
-                </thead>
-                <tbody id="recentBody">
-                    {% for r in recent %}
-                    <tr class="{{ 'ok' if r.ok else 'bad' }}">
-                        <td class="mono">{{ r.created_at|localtime }}</td>
-                        <td>{{ r.action.replace('_', ' ')|title }}</td>
-                        <td>{{ r.actor_display_name or r.actor_email or '—' }}</td>
-                        <td class="mono">{{ r.device_asset_tag or r.device_name or r.device_asset_id or '' }}</td>
-                        <td class="mono">{{ r.device_serial or '' }}</td>
-                        <td class="mono">{{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '' }}</td>
-                        <td>{{ 'Success' if r.ok else 'Error' }}</td>
-                        <td class="muted">{{ r.message or '' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </section>
+    </div>
 </div>
 
 <div id="confirmModal" class="media-modal hidden" role="dialog" aria-modal="true">
@@ -242,26 +258,26 @@
 </div>
 
 <div id="assignOwnerModal" class="media-modal hidden" role="dialog" aria-modal="true">
-  <div class="media-modal-card device-detail-card">
-    <div class="modal-head">
-      <div>
-        <p class="media-eyebrow">Assign Owner</p>
-        <h2 id="assignOwnerTitle">Assign Cart Owner</h2>
-        <p id="assignOwnerSubtitle" class="muted">Search for a Launchpad user to assign this cart to.</p>
-      </div>
-      <button id="closeAssignOwnerBtn" class="mini-btn" type="button">Close</button>
-    </div>
+    <div class="media-modal-card device-detail-card">
+        <div class="modal-head">
+            <div>
+                <p class="media-eyebrow">Assign Owner</p>
+                <h2 id="assignOwnerTitle">Assign Cart Owner</h2>
+                <p id="assignOwnerSubtitle" class="muted">Search for a Launchpad user to assign this cart to.</p>
+            </div>
+            <button id="closeAssignOwnerBtn" class="mini-btn" type="button">Close</button>
+        </div>
 
-    <div class="form-card">
-      <label class="media-label" for="ownerSearch">User Search</label>
-      <div class="media-row">
-        <input id="ownerSearch" class="media-input" autocomplete="off" placeholder="Search by name or email...">
-        <button id="ownerSearchBtn" class="media-btn" type="button">Search</button>
-      </div>
-    </div>
+        <div class="form-card">
+            <label class="media-label" for="ownerSearch">User Search</label>
+            <div class="media-row">
+                <input id="ownerSearch" class="media-input" autocomplete="off" placeholder="Search by name or email...">
+                <button id="ownerSearchBtn" class="media-btn" type="button">Search</button>
+            </div>
+        </div>
 
-    <div id="ownerResults" class="owner-result-grid"></div>
-  </div>
+        <div id="ownerResults" class="owner-result-grid"></div>
+    </div>
 </div>
 {% endblock %}
 

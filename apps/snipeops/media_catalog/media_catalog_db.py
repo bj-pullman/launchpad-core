@@ -89,6 +89,23 @@ def init_db() -> None:
         )
         """)
 
+        existing_columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(media_cart_ownership)").fetchall()
+        }
+
+        if "media_specialist_owner" not in existing_columns:
+            conn.execute("ALTER TABLE media_cart_ownership ADD COLUMN media_specialist_owner TEXT")
+
+        if "teacher_name" not in existing_columns:
+            conn.execute("ALTER TABLE media_cart_ownership ADD COLUMN teacher_name TEXT")
+
+        if "room_number" not in existing_columns:
+            conn.execute("ALTER TABLE media_cart_ownership ADD COLUMN room_number TEXT")
+
+        if "display_order" not in existing_columns:
+            conn.execute("ALTER TABLE media_cart_ownership ADD COLUMN display_order INTEGER")
+
         conn.commit()
 
 
@@ -188,7 +205,10 @@ def list_owned_carts(owner_user_id: int) -> list[dict]:
             SELECT *
             FROM media_cart_ownership
             WHERE owner_user_id = ?
-            ORDER BY cart_asset_tag, cart_name
+            ORDER BY
+                COALESCE(display_order, 999999),
+                cart_asset_tag,
+                cart_name
             """,
             (int(owner_user_id),),
         ).fetchall()
@@ -281,3 +301,120 @@ def claim_cart(*, cart_asset: dict, user: dict) -> dict:
         conn.commit()
 
     return get_cart_ownership(cart_asset_id)
+
+def normalize_cart_order(owner_user_id: int) -> None:
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id
+            FROM media_cart_ownership
+            WHERE owner_user_id = ?
+            ORDER BY
+                COALESCE(display_order, 999999),
+                cart_asset_tag,
+                cart_name
+            """,
+            (int(owner_user_id),),
+        ).fetchall()
+
+        for index, row in enumerate(rows, start=1):
+            conn.execute(
+                """
+                UPDATE media_cart_ownership
+                SET display_order = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (index, _now_iso(), row["id"]),
+            )
+
+        conn.commit()
+
+
+def update_cart_metadata(
+    *,
+    cart_asset_id: int,
+    owner_user_id: int,
+    media_specialist_owner: str | None,
+    teacher_name: str | None,
+    room_number: str | None,
+) -> dict:
+    init_db()
+
+    with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE media_cart_ownership
+            SET
+                media_specialist_owner = ?,
+                teacher_name = ?,
+                room_number = ?,
+                updated_at = ?
+            WHERE cart_asset_id = ?
+              AND owner_user_id = ?
+            """,
+            (
+                (media_specialist_owner or "").strip(),
+                (teacher_name or "").strip(),
+                (room_number or "").strip(),
+                _now_iso(),
+                int(cart_asset_id),
+                int(owner_user_id),
+            ),
+        )
+        conn.commit()
+
+    return get_cart_ownership(cart_asset_id)
+
+
+def reorder_owned_cart(
+    *,
+    owner_user_id: int,
+    cart_asset_id: int,
+    new_index: int,
+) -> list[dict]:
+    init_db()
+    normalize_cart_order(owner_user_id)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM media_cart_ownership
+            WHERE owner_user_id = ?
+            ORDER BY display_order, cart_asset_tag, cart_name
+            """,
+            (int(owner_user_id),),
+        ).fetchall()
+
+        ordered = [dict(row) for row in rows]
+        moving = next(
+            (row for row in ordered if int(row["cart_asset_id"]) == int(cart_asset_id)),
+            None,
+        )
+
+        if not moving:
+            raise ValueError("Cart is not assigned to this user.")
+
+        ordered = [
+            row for row in ordered
+            if int(row["cart_asset_id"]) != int(cart_asset_id)
+        ]
+
+        target_index = max(1, min(int(new_index), len(ordered) + 1))
+        ordered.insert(target_index - 1, moving)
+
+        now = _now_iso()
+
+        for index, row in enumerate(ordered, start=1):
+            conn.execute(
+                """
+                UPDATE media_cart_ownership
+                SET display_order = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (index, now, row["id"]),
+            )
+
+        conn.commit()
+
+    return list_owned_carts(owner_user_id)

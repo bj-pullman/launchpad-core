@@ -21,7 +21,10 @@ from apps.snipeops.media_catalog.media_catalog_db import (
     list_owned_carts,
     get_cart_ownership,
     claim_cart,
+    update_cart_metadata,
+    reorder_owned_cart,
 )
+
 from apps.snipeops.media_catalog.snipe import (
     checkin_asset,
     checkout_asset_to_cart,
@@ -487,4 +490,81 @@ def api_assign_cart_owner(cart_id: int):
         "message": message,
         "cart": _asset_payload(cart),
         "ownership": ownership,
+    })
+
+@bp.post("/api/carts/<int:cart_id>/metadata")
+@login_required
+@require_permission("snipeops.media_catalog.manage")
+def api_update_cart_metadata(cart_id: int):
+    body = _body()
+    user = _current_user_profile()
+    cart = get_asset(cart_id)
+
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+
+    if not cart:
+        return jsonify({"ok": False, "error": "Cart not found."}), 404
+
+    ownership = get_cart_ownership(cart_id)
+
+    if not ownership:
+        return jsonify({"ok": False, "error": "Cart ownership record not found."}), 404
+
+    if int(ownership.get("owner_user_id") or 0) != int(user["id"]):
+        return jsonify({"ok": False, "error": "You can only edit carts assigned to you."}), 403
+
+    updated = update_cart_metadata(
+        cart_asset_id=cart_id,
+        owner_user_id=int(user["id"]),
+        media_specialist_owner=body.get("media_specialist_owner"),
+        teacher_name=body.get("teacher_name"),
+        room_number=body.get("room_number"),
+    )
+
+    log_media_action(
+        action="updated_cart_metadata",
+        cart_asset=cart,
+        device_asset=None,
+        ok=True,
+        message="Cart friendly fields updated.",
+        actor_user=user,
+    )
+
+    return jsonify({
+        "ok": True,
+        "message": "Cart friendly fields updated.",
+        "cart": _ownership_payload(updated),
+    })
+
+
+@bp.post("/api/my-carts/reorder")
+@login_required
+@require_permission("snipeops.media_catalog.manage")
+def api_reorder_my_carts():
+    body = _body()
+    user = _current_user_profile()
+
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+
+    try:
+        cart_id = int(body.get("cart_id") or 0)
+        new_index = int(body.get("new_index") or 0)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid cart id or index."}), 400
+
+    try:
+        rows = reorder_owned_cart(
+            owner_user_id=int(user["id"]),
+            cart_asset_id=cart_id,
+            new_index=new_index,
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    return jsonify({
+        "ok": True,
+        "message": "Cart order updated.",
+        "carts": [_ownership_payload(row) for row in rows],
     })
