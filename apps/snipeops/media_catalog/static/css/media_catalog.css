@@ -262,44 +262,61 @@ body[data-theme="light"] .mini-btn.remove {
   gap: 6px;
   padding: 6px;
   margin: 18px 0 20px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(122,162,255,.22);
   border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+  background: rgba(255,255,255,.035);
+  box-shadow: none;
 }
 
 .media-catalog-tabs .settings-tab {
   appearance: none;
   border: 1px solid transparent;
   background: transparent;
-  color: #64748b;
+  color: var(--muted);
   border-radius: 12px;
   padding: 11px 18px;
   font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-weight: 700;
   cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    border-color 0.15s ease;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+  box-shadow: none;
 }
 
 .media-catalog-tabs .settings-tab:hover {
+  background: rgba(122,162,255,.10);
+  color: var(--text);
+}
+
+.media-catalog-tabs .settings-tab.active {
+  background: rgba(122,162,255,.16);
+  border-color: rgba(122,162,255,.42);
+  color: var(--text);
+  font-weight: 800;
+  box-shadow: none;
+}
+
+body[data-theme="light"] .media-catalog-tabs {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+body[data-theme="light"] .media-catalog-tabs .settings-tab {
+  color: #64748b;
+}
+
+body[data-theme="light"] .media-catalog-tabs .settings-tab:hover {
   background: #f8fafc;
   color: #1f2937;
 }
 
-.media-catalog-tabs .settings-tab.active {
+body[data-theme="light"] .media-catalog-tabs .settings-tab.active {
   background: linear-gradient(to bottom, #ffffff, #f8fbff);
   border-color: rgba(59, 130, 246, 0.18);
   color: #0f172a;
-  font-weight: 650;
   box-shadow:
     0 6px 14px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    inset 0 1px 0 rgba(255,255,255,0.9);
 }
 
 .media-catalog-tab-stack .settings-tab-panel {
@@ -556,8 +573,20 @@ body[data-theme="light"] .assign-owner {
   cursor: pointer;
 }
 
-.my-carts-table tbody tr.my-cart-row:hover td {
+.my-carts-table tbody tr.my-cart-row {
+  transition: background .12s ease;
+}
+
+body[data-theme="light"] .my-carts-table tbody tr.my-cart-row:hover td {
   background: #eff6ff !important;
+}
+
+body[data-theme="dark"] .my-carts-table tbody tr.my-cart-row:hover td {
+  background: rgba(122,162,255,.10) !important;
+}
+
+.my-carts-table tbody tr.my-cart-row:hover {
+  box-shadow: inset 3px 0 0 #2563eb;
 }
 
 .readonly-owner {
@@ -647,10 +676,10 @@ body[data-theme="light"] .device-count-badge {
 .inline-edit-value {
   display: flex;
   align-items: center;
-  min-height: 34px;
+  min-height: 36px;
   padding: 0 2px;
-  font-weight: 700;
-  color: #0f172a;
+  color: var(--text);
+  font-weight: 850;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -659,29 +688,25 @@ body[data-theme="light"] .device-count-badge {
 .inline-edit-btn {
   width: 32px;
   height: 32px;
+  opacity: .9;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #bfdbfe;
+  border: 1px solid rgba(122,162,255,.38);
   border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: rgba(122,162,255,.12);
+  color: #9db8ff;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(29, 78, 216, 0.08);
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
+  box-shadow: none;
+  transition: opacity .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
 }
 
+.inline-edit-control:hover .inline-edit-btn,
 .inline-edit-btn:hover {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #1e40af;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 16px rgba(29, 78, 216, 0.14);
+  opacity: 1;
+  background: rgba(122,162,255,.20);
+  border-color: rgba(122,162,255,.58);
+  color: #c7d6ff;
 }
 
 .inline-edit-btn svg {
@@ -702,13 +727,13 @@ body[data-theme="light"] .device-count-badge {
   display: block !important;
   width: 100%;
   height: 36px;
-  border: 1px solid rgba(37, 99, 235, 0.45);
+  border: 1px solid rgba(122,162,255,.55);
   border-radius: 10px;
-  background: #ffffff;
-  color: #0f172a;
+  background: rgba(15, 26, 46, 0.96);
+  color: var(--text);
   padding: 0.45rem 0.6rem;
-  font-weight: 700;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  font-weight: 850;
+  box-shadow: 0 0 0 3px rgba(122,162,255,.14);
 }
 
 .inline-edit-control.is-editing {
@@ -720,10 +745,34 @@ body[data-theme="light"] .device-count-badge {
   display: none;
 }
 
-body[data-theme="light"] .inline-cart-field {
+body[data-theme="light"] .inline-edit-value {
+  color: #0f172a;
+}
+
+body[data-theme="light"] .inline-edit-btn {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 4px 10px rgba(29, 78, 216, 0.08);
+}
+
+body[data-theme="light"] .inline-edit-btn:hover,
+body[data-theme="light"] .inline-edit-control:hover .inline-edit-btn {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+body[data-theme="light"] .inline-cart-field,
+body[data-theme="light"] .inline-cart-field.inline-edit-active {
   background: #ffffff;
   color: #0f172a;
   border-color: #cbd5e1;
+}
+
+body[data-theme="light"] .inline-cart-field.inline-edit-active {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 /* ---------- Selected / Active Cart ---------- */
