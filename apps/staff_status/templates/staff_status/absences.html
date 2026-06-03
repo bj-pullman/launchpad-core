@@ -312,7 +312,7 @@
             <input type="text" id="absence-user-search" placeholder="Type a name">
             <div id="absence-user-filter-list" hidden>
               {% for user in users %}
-                <label data-user-label="{{ user.resolved_display_name|lower }}">
+                <label class="staff-status-user-filter-option" data-user-label="{{ user.resolved_display_name|lower }}">
                   <input type="checkbox" name="user_ids" value="{{ user.id }}" {% if user.id|string in current_user_ids %}checked{% endif %}>
                   {{ user.resolved_display_name }}
                 </label>
