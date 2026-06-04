@@ -202,9 +202,23 @@ function setActiveTab(tab) {
 async function runSync() {
   const btn = document.getElementById("syncBtn");
   const status = document.getElementById("syncStatus");
+  const originalHtml = btn.innerHTML;
 
   btn.disabled = true;
-  status.textContent = "Syncing...";
+  btn.classList.add("is-syncing");
+  btn.innerHTML = `
+    <span class="btn-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
+        <path d="M3 3v5h5" />
+        <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
+        <path d="M21 21v-5h-5" />
+      </svg>
+    </span>
+    <span>Syncing...</span>
+  `;
+  status.textContent = "Syncing Snipe-IT catalog...";
 
   try {
     const res = await fetch("/snipe-catalog/sync", { method: "POST" });
@@ -227,6 +241,8 @@ async function runSync() {
     status.textContent = err.message || "Sync failed.";
   } finally {
     btn.disabled = false;
+    btn.classList.remove("is-syncing");
+    btn.innerHTML = originalHtml;
   }
 }
 

@@ -33,26 +33,53 @@
 }
 
 /* Sync button styling */
-.btn-sync {
-  background: linear-gradient(135deg, #2a8a3a, #1f6e2c);
-  border: none;
-  color: #fff;
-  font-weight: 600;
-  padding: 10px 16px;
-  border-radius: 8px;
+.catalog-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+
+  border: 1px solid rgba(122,162,255,.35);
+  border-radius: 12px;
+  background: rgba(122,162,255,.16);
+  color: var(--text);
+
+  padding: .7rem .95rem;
+  font-weight: 800;
   cursor: pointer;
-  transition: all .15s ease;
-  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  white-space: nowrap;
+
+  min-width: 145px;
+  box-shadow: 0 8px 18px rgba(29,78,216,.18);
 }
 
-.btn-sync:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+.catalog-sync-btn:hover {
+  background: rgba(122,162,255,.24);
 }
 
-.btn-sync:disabled {
-  opacity: .6;
+body[data-theme="light"] .catalog-sync-btn {
+  background: #1d4ed8;
+  color: #ffffff;
+  border-color: #1d4ed8;
+}
+
+body[data-theme="light"] .catalog-sync-btn:hover {
+  background: #1e40af;
+}
+
+.catalog-sync-btn:disabled {
+  opacity: .65;
   cursor: not-allowed;
+}
+
+.catalog-sync-btn.is-syncing .btn-icon {
+  animation: spin-sync 900ms linear infinite;
+}
+
+@keyframes spin-sync {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .sync-status {
