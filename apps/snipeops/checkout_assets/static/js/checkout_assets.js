@@ -246,20 +246,28 @@ function renderParent() {
 
   el.className = "selected-parent";
   el.innerHTML = `
+  <div class="selected-parent-topline">
     <div class="selected-parent-badge">✓ Parent Asset Selected</div>
-    <div class="selected-title">${escapeHtml(assetLabel(selectedParent))}</div>
-    <div class="muted small">
-      ${escapeHtml(selectedParent.model_name || "")}
-      ${selectedParent.location_name ? " • " + escapeHtml(selectedParent.location_name) : ""}
-      ${selectedParent.asset_url ? ` • <a class="snipe-link" href="${selectedParent.asset_url}" target="_blank" rel="noopener">Open in Snipe-IT ↗</a>` : ""}
-    </div>
-    <div class="selected-parent-actions">
-      <button id="changeParentBtn" class="btn btn-ghost" type="button">Change Parent Asset</button>
-      <button id="checkinAllChildrenBtn" class="btn btn-danger" type="button">Check All Assets In</button>
-    </div>
-  `;
+    <div class="selected-parent-count" id="parentAssetCountBadge">Loading...</div>
+  </div>
+
+  <div class="selected-title">${escapeHtml(assetLabel(selectedParent))}</div>
+  <div class="muted small">
+    ${escapeHtml(selectedParent.model_name || "")}
+    ${selectedParent.location_name ? " • " + escapeHtml(selectedParent.location_name) : ""}
+    ${selectedParent.asset_url ? ` • <a class="snipe-link" href="${selectedParent.asset_url}" target="_blank" rel="noopener">Open in Snipe-IT ↗</a>` : ""}
+  </div>
+
+  <div class="selected-parent-actions">
+    <button id="changeParentBtn" class="btn btn-ghost" type="button">Change Parent Asset</button>
+    <button id="viewParentAssetsBtn" class="btn btn-ghost" type="button">View Assets</button>
+    <button id="checkinAllChildrenBtn" class="btn btn-danger" type="button">Check All Assets In</button>
+  </div>
+`;
   $("changeParentBtn")?.addEventListener("click", clearParentSelection);
+  $("viewParentAssetsBtn")?.addEventListener("click", viewParentAssets);
   $("checkinAllChildrenBtn")?.addEventListener("click", checkinAllChildrenForParent);
+  loadParentAssetCount(selectedParent.id);
 }
 
 function clearParentSelection() {
@@ -328,29 +336,52 @@ function renderSelectedChildren() {
   const assets = Array.from(selectedChildren.values());
 
   if (!assets.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="muted">No child assets selected.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="muted">No child assets selected.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = assets.map(asset => `
-    <tr>
-      <td>
-        <button class="btn-mini remove-child" type="button" data-id="${asset.id}">Remove</button>
-      </td>
-      <td class="mono">${escapeHtml(asset.asset_tag || "")}</td>
-      <td class="mono">${escapeHtml(asset.serial || "")}</td>
-      <td>${escapeHtml(asset.name || "")}</td>
-      <td>${escapeHtml(asset.model_name || "")}</td>
-      <td>${escapeHtml(asset.status_name || "")}</td>
-      <td>${escapeHtml(asset.assigned_name || "—")}</td>
-      <td>
-        ${asset.asset_url ? `<a class="snipe-link" href="${asset.asset_url}" target="_blank" rel="noopener">Open ↗</a>` : "—"}
-      </td>
-    </tr>
-  `).join("");
+  <tr class="selected-child-row" data-id="${asset.id}">
+    <td>
+      <button class="btn-mini remove-child" type="button" data-id="${asset.id}">Remove</button>
+    </td>
+    <td class="mono">${escapeHtml(asset.asset_tag || "")}</td>
+    <td class="mono">${escapeHtml(asset.serial || "")}</td>
+    <td>${escapeHtml(asset.model_name || "")}</td>
+    <td>${escapeHtml(asset.status_name || "")}</td>
+    <td>${escapeHtml(asset.assigned_name || "—")}</td>
+    <td>
+      <button class="btn-mini btn-checkin checkin-child" type="button" data-id="${asset.id}">Check In</button>
+    </td>
+    <td>
+      <button class="btn-mini btn-edit edit-asset-tag" type="button" data-id="${asset.id}">Edit</button>
+    </td>
+    <td>
+      ${asset.asset_url ? `<a class="snipe-link" href="${asset.asset_url}" target="_blank" rel="noopener">Open ↗</a>` : "—"}
+    </td>
+  </tr>
+`).join("");
 
   tbody.querySelectorAll(".remove-child").forEach(btn => {
     btn.addEventListener("click", () => removeChild(btn.dataset.id));
+  });
+
+  tbody.querySelectorAll(".checkin-child").forEach(btn => {
+    btn.addEventListener("click", () => checkinSingleAsset(btn.dataset.id));
+  });
+
+  tbody.querySelectorAll(".edit-asset-tag").forEach(btn => {
+    btn.addEventListener("click", () => openAssetTagModal(btn.dataset.id));
+  });
+
+  tbody.querySelectorAll(".selected-child-row").forEach(row => {
+    row.addEventListener("click", event => {
+      if (event.target.closest("button, a, input, select, textarea")) {
+        return;
+      }
+
+      openAssetTagModal(row.dataset.id);
+    });
   });
 }
 
@@ -368,17 +399,44 @@ async function refreshChildSearchResults() {
   }
 }
 
+function formatRecentTimestamp(value) {
+  if (!value) {
+    return "";
+  }
+
+  const raw = String(value).trim();
+
+  // If the server already sent a friendly/local DB timestamp, keep it.
+  if (!raw.includes("T")) {
+    return raw;
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    return raw;
+  }
+
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
 function prependRecent(result) {
   const tbody = $("recentBody");
   if (!tbody) return;
 
   const child = result.child_asset || {};
   const parent = result.parent_asset || selectedParent || {};
+  const createdAt = result.created_at || "";
 
   const tr = document.createElement("tr");
   tr.className = result.ok ? "ok" : "bad";
   tr.innerHTML = `
-    <td class="mono">${escapeHtml(result.created_at || new Date().toISOString())}</td>
+    <td class="mono">${escapeHtml(formatRecentTimestamp(createdAt))}</td>
     <td class="mono">${escapeHtml(child.asset_tag || child.name || child.id || "")}</td>
     <td class="mono">${escapeHtml(child.serial || "")}</td>
     <td class="mono">${escapeHtml(parent.asset_tag || parent.name || parent.id || "")}</td>
@@ -643,17 +701,46 @@ function bindConfirmModal() {
   });
 }
 
-function openConfirmModal({ title, messageHtml, buttonText, action }) {
+function openConfirmModal({
+  title,
+  messageHtml,
+  buttonText,
+  action,
+  wide = false,
+  hideCancel = false,
+  buttonClass = "btn-primary"
+}) {
   pendingConfirmAction = action;
 
   $("confirmTitle").textContent = title || "Confirm";
   $("confirmMessage").innerHTML = messageHtml || "";
-  $("confirmActionBtn").textContent = buttonText || "Continue";
+
+  const actionBtn = $("confirmActionBtn");
+  if (actionBtn) {
+    actionBtn.textContent = buttonText || "Continue";
+    actionBtn.classList.remove("btn-danger", "btn-primary");
+    actionBtn.classList.add(buttonClass);
+    actionBtn.disabled = false;
+  }
+
+  const modalCard = $("confirmModal")?.querySelector(".checkout-modal-card");
+  modalCard?.classList.toggle("modal-wide", Boolean(wide));
+
+  const cancelBtn = $("cancelConfirmBtn");
+  if (cancelBtn) {
+    cancelBtn.classList.toggle("hidden", Boolean(hideCancel));
+  }
+
   $("confirmModal")?.classList.remove("hidden");
 }
 
 function closeConfirmModal() {
   pendingConfirmAction = null;
+
+  const modalCard = $("confirmModal")?.querySelector(".checkout-modal-card");
+  modalCard?.classList.remove("modal-wide");
+
+  $("cancelConfirmBtn")?.classList.remove("hidden");
   $("confirmModal")?.classList.add("hidden");
 }
 
@@ -669,4 +756,281 @@ async function getAssignedChildrenCount(parentAssetId) {
   }
 
   return data.count || 0;
+}
+
+async function checkinSingleAsset(assetId) {
+  const delayMs = Number($("delayMs")?.value || 350);
+
+  try {
+    const resp = await fetch(`/checkout-assets/api/assets/${encodeURIComponent(assetId)}/checkin`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({ delay_ms: delayMs })
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok || data.ok === false) {
+      throw new Error(data.error || "Check-in failed.");
+    }
+
+    prependRecent(data);
+    setStatus("Asset checked in.", true);
+    refreshChildSearchResults();
+  } catch (err) {
+    setStatus(err.message || "Check-in failed.", false);
+  }
+}
+
+function openAssetTagModal(assetId) {
+  const asset = selectedChildren.get(String(assetId));
+  if (!asset) return;
+
+  openConfirmModal({
+    title: "Edit Asset Tag",
+    messageHtml: `
+      <p class="confirm-copy">
+        Update the asset number for this selected asset.
+      </p>
+
+      <div class="confirm-detail-card">
+        <div class="confirm-detail-heading">Selected Asset</div>
+
+        <div class="confirm-detail-row">
+          <div class="confirm-detail-label">Current Tag</div>
+          <div class="confirm-detail-value">${escapeHtml(asset.asset_tag || "—")}</div>
+        </div>
+
+        <div class="confirm-detail-row">
+          <div class="confirm-detail-label">Serial</div>
+          <div class="confirm-detail-value">${escapeHtml(asset.serial || "—")}</div>
+        </div>
+
+        <div class="confirm-detail-row">
+          <div class="confirm-detail-label">Model</div>
+          <div class="confirm-detail-value">${escapeHtml(asset.model_name || "—")}</div>
+        </div>
+      </div>
+
+      <div class="modal-form">
+        <label class="label" for="assetTagModalInput">New Asset Tag</label>
+        <input id="assetTagModalInput" class="input" autocomplete="off" value="${escapeHtml(asset.asset_tag || "")}">
+      </div>
+    `,
+    buttonText: "Save Asset Tag",
+    action: async () => {
+      const input = $("assetTagModalInput");
+      await updateSelectedAssetTag(assetId, input?.value || "");
+    }
+  });
+
+  window.setTimeout(() => {
+    const input = $("assetTagModalInput");
+    input?.focus();
+    input?.select();
+  }, 50);
+}
+
+async function updateSelectedAssetTag(assetId, assetTag) {
+  try {
+    const resp = await fetch(`/checkout-assets/api/assets/${encodeURIComponent(assetId)}/asset-tag`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({ asset_tag: assetTag })
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok || data.ok === false) {
+      throw new Error(data.error || "Asset number update failed.");
+    }
+
+    if (data.asset) {
+      selectedChildren.set(String(data.asset.id), data.asset);
+      renderSelectedChildren();
+    }
+
+    setStatus("Asset number updated.", true);
+    refreshChildSearchResults();
+  } catch (err) {
+    setStatus(err.message || "Asset number update failed.", false);
+  }
+}
+
+async function loadParentAssetCount(parentAssetId) {
+  try {
+    const count = await getAssignedChildrenCount(parentAssetId);
+    const badge = $("parentAssetCountBadge");
+
+    if (badge) {
+      badge.textContent = `${count} device${count === 1 ? "" : "s"}`;
+    }
+  } catch (err) {
+    const badge = $("parentAssetCountBadge");
+    if (badge) badge.textContent = "Count unavailable";
+  }
+}
+
+async function viewParentAssets() {
+  if (!selectedParent) {
+    setStatus("Select a parent asset first.", false);
+    return;
+  }
+
+  pendingParentAssetCheckins.clear();
+
+  try {
+    const resp = await fetch(`/checkout-assets/api/assets/${encodeURIComponent(selectedParent.id)}/children`, {
+      headers: { "Accept": "application/json" }
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok || data.ok === false) {
+      throw new Error(data.error || "Unable to load parent assets.");
+    }
+
+    const rows = (data.assets || []).map(asset => `
+      <tr>
+        <td class="mono">${escapeHtml(asset.asset_tag || "")}</td>
+        <td class="mono">${escapeHtml(asset.serial || "")}</td>
+        <td>${escapeHtml(asset.model_name || "")}</td>
+        <td>${escapeHtml(asset.status_name || "")}</td>
+        <td>
+          <button class="btn-mini btn-checkin parent-asset-checkin" type="button" data-id="${asset.id}">
+            Check In
+          </button>
+        </td>
+        <td>
+          ${asset.asset_url ? `<a class="snipe-link" href="${asset.asset_url}" target="_blank" rel="noopener">Open ↗</a>` : "—"}
+        </td>
+      </tr>
+    `).join("");
+
+    openConfirmModal({
+      title: `Assets in ${selectedParent.asset_tag || selectedParent.name || "Parent Asset"}`,
+      messageHtml: `
+        <p class="confirm-copy">
+          ${data.count || 0} asset(s) currently assigned to this parent.
+          Click <strong>Check In</strong> to stage changes, then click <strong>Save</strong>.
+        </p>
+
+        <div class="recent-wrap">
+          <table class="table parent-assets-modal-table">
+            <thead>
+              <tr>
+                <th>Asset Tag</th>
+                <th>Serial</th>
+                <th>Model</th>
+                <th>Status</th>
+                <th>Check In</th>
+                <th>Open</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || `<tr><td colspan="6" class="muted">No assets currently assigned.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      `,
+      buttonText: "Save",
+      wide: true,
+      hideCancel: false,
+      action: saveParentAssetCheckins
+    });
+
+    document.querySelectorAll(".parent-asset-checkin").forEach(btn => {
+      btn.addEventListener("click", () => toggleParentAssetCheckin(btn.dataset.id));
+    });
+  } catch (err) {
+    setStatus(err.message || "Unable to load parent assets.", false);
+  }
+}
+
+let pendingParentAssetCheckins = new Set();
+
+function toggleParentAssetCheckin(assetId) {
+  const key = String(assetId);
+
+  if (pendingParentAssetCheckins.has(key)) {
+    pendingParentAssetCheckins.delete(key);
+  } else {
+    pendingParentAssetCheckins.add(key);
+  }
+
+  document.querySelectorAll(".parent-asset-checkin").forEach(btn => {
+    const id = String(btn.dataset.id);
+    const isPending = pendingParentAssetCheckins.has(id);
+
+    btn.classList.toggle("is-pending", isPending);
+    btn.textContent = isPending ? "Undo" : "Check In";
+
+    const row = btn.closest("tr");
+    row?.classList.toggle("pending-checkin-row", isPending);
+  });
+}
+
+async function saveParentAssetCheckins() {
+  const assetIds = Array.from(pendingParentAssetCheckins);
+
+  if (!assetIds.length) {
+    closeConfirmModal();
+    return;
+  }
+
+  const delayMs = Number($("delayMs")?.value || 350);
+  const saveBtn = $("confirmActionBtn");
+
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+  }
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (const assetId of assetIds) {
+    try {
+      const resp = await fetch(`/checkout-assets/api/assets/${encodeURIComponent(assetId)}/checkin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ delay_ms: delayMs })
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok || data.ok === false) {
+        throw new Error(data.error || "Check-in failed.");
+      }
+
+      prependRecent(data);
+      successCount += 1;
+    } catch (err) {
+      errorCount += 1;
+    }
+  }
+
+  pendingParentAssetCheckins.clear();
+  closeConfirmModal();
+
+  if (selectedParent) {
+    loadParentAssetCount(selectedParent.id);
+  }
+
+  refreshChildSearchResults();
+
+  if (errorCount) {
+    setStatus(`Saved with ${successCount} check-in(s) and ${errorCount} error(s).`, false);
+  } else {
+    setStatus(`Checked in ${successCount} asset(s).`, true);
+  }
 }

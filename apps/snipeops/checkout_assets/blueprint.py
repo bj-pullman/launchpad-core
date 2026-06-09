@@ -19,6 +19,7 @@ from apps.snipeops.checkout_assets.snipe import (
     build_asset_url,
     checkout_asset_to_asset,
     checkin_asset,
+    update_asset_tag,
 )
 
 
@@ -305,4 +306,84 @@ def api_parent_children_count():
     return jsonify({
         "ok": True,
         "count": len(child_assets),
+    })
+
+@bp.post("/api/assets/<int:asset_id>/asset-tag")
+@login_required
+@require_permission("snipeops.checkout_assets.manage")
+def api_update_asset_tag(asset_id: int):
+    body = _get_body()
+    asset_tag = (body.get("asset_tag") or "").strip()
+
+    if not asset_tag:
+        return jsonify({"ok": False, "error": "Asset number is required."}), 400
+
+    asset = get_asset(asset_id)
+    if not asset:
+        return jsonify({"ok": False, "error": "Asset not found in SnipeOps Catalog."}), 404
+
+    try:
+        update_asset_tag(asset_id=asset_id, asset_tag=asset_tag)
+        refreshed = get_asset(asset_id) or {**asset, "asset_tag": asset_tag}
+
+        return jsonify({
+            "ok": True,
+            "asset": _asset_payload(refreshed),
+            "message": "Asset number updated.",
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    
+    
+@bp.post("/api/assets/<int:asset_id>/checkin")
+@login_required
+@require_permission("snipeops.checkout_assets.manage")
+def api_checkin_single_asset(asset_id: int):
+    body = _get_body()
+    delay_ms = int(body.get("delay_ms") or 350)
+    delay_ms = min(max(delay_ms, 0), 5000)
+
+    child_asset = get_asset(asset_id)
+    if not child_asset:
+        return jsonify({"ok": False, "error": "Asset not found in SnipeOps Catalog."}), 404
+
+    try:
+        checkin_asset(
+            asset_id=asset_id,
+            note="Checked in by SnipeOps Checkout Assets.",
+            delay_seconds=delay_ms / 1000,
+        )
+
+        meta = log_checkout(
+            parent_asset={},
+            child_asset=child_asset,
+            ok=True,
+            message="Checked in.",
+        )
+
+        return jsonify({
+            "ok": True,
+            "child_asset": _asset_payload(child_asset),
+            "message": "Checked in.",
+            "created_at": meta["created_at"],
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    
+
+@bp.get("/api/assets/<int:asset_id>/children")
+@login_required
+@require_permission("snipeops.checkout_assets.view")
+def api_get_parent_children(asset_id: int):
+    parent_asset = get_asset(asset_id)
+    if not parent_asset:
+        return jsonify({"ok": False, "error": "Parent asset not found in SnipeOps Catalog."}), 404
+
+    child_assets = get_assets_assigned_to_asset(asset_id)
+
+    return jsonify({
+        "ok": True,
+        "parent_asset": _asset_payload(parent_asset),
+        "count": len(child_assets),
+        "assets": [_asset_payload(row) for row in child_assets],
     })

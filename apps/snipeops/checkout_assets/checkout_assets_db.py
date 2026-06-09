@@ -3,8 +3,10 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from config.settings import SNIPE_CATALOG_DB_PATH
+from modules.core.settings.settings_service import get_setting
 
 
 DB_PATH = Path(SNIPE_CATALOG_DB_PATH).with_name("snipeops_checkout_assets.sqlite3")
@@ -14,6 +16,38 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _app_timezone() -> ZoneInfo:
+    tz_name = (
+        get_setting("general.timezone", "")
+        or get_setting("app.timezone", "")
+        or get_setting("timezone", "")
+        or "America/Chicago"
+    )
+
+    try:
+        return ZoneInfo(str(tz_name))
+    except Exception:
+        return ZoneInfo("America/Chicago")
+
+
+def _format_timestamp(value: str | None) -> str:
+    if not value:
+        return ""
+
+    raw = str(value).strip()
+
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        local_dt = dt.astimezone(_app_timezone())
+        return local_dt.strftime("%m/%d/%Y %I:%M %p")
+    except Exception:
+        return raw
 
 
 def init_db() -> None:
@@ -87,7 +121,7 @@ def log_checkout(
 
         return {
             "id": cur.lastrowid,
-            "created_at": created_at,
+            "created_at": _format_timestamp(created_at),
             "ok": ok,
             "message": message,
         }
@@ -107,4 +141,10 @@ def get_recent(limit: int = 50) -> list[dict]:
             (int(limit),),
         ).fetchall()
 
-        return [dict(r) for r in rows]
+    results = []
+    for row in rows:
+        item = dict(row)
+        item["created_at"] = _format_timestamp(item.get("created_at"))
+        results.append(item)
+
+    return results

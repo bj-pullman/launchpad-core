@@ -101,11 +101,15 @@ def checkout_asset_to_asset(
     )
 
     response.raise_for_status()
-
     data = response.json()
 
     if isinstance(data, dict) and data.get("status") == "error":
         raise ValueError(f"Snipe-IT checkout failed: {_format_snipe_messages(data)}")
+
+    update_asset_status(
+        asset_id=int(child_asset_id),
+        status_name="Deployed",
+    )
 
     return data
 
@@ -127,11 +131,15 @@ def checkin_asset(
     )
 
     response.raise_for_status()
-
     data = response.json()
 
     if isinstance(data, dict) and data.get("status") == "error":
         raise ValueError(f"Snipe-IT checkin failed: {_format_snipe_messages(data)}")
+
+    update_asset_status(
+        asset_id=int(asset_id),
+        status_name="Ready to Deploy",
+    )
 
     return data
 
@@ -141,3 +149,74 @@ def build_asset_url(asset_id: int | str | None) -> str | None:
         return None
 
     return f"{cfg['base_url']}/hardware/{int(asset_id)}"
+
+def _json_response(response):
+    response.raise_for_status()
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise ValueError("Snipe-IT returned a non-JSON response.") from exc
+
+
+def _ensure_snipe_write_success(payload, action):
+    if isinstance(payload, dict) and payload.get("status") == "error":
+        raise ValueError(f"Snipe-IT {action} failed: {_format_snipe_messages(payload)}")
+
+    return payload
+
+
+def update_asset_tag(*, asset_id: int, asset_tag: str) -> dict:
+    clean_tag = str(asset_tag or "").strip()
+    if not clean_tag:
+        raise ValueError("Asset tag is required.")
+
+    response = _request(
+        "PATCH",
+        f"/api/v1/hardware/{int(asset_id)}",
+        json={"asset_tag": clean_tag},
+    )
+
+    return _ensure_snipe_write_success(
+        _json_response(response),
+        "asset tag update",
+    )
+
+def get_status_label_id_by_name(name: str) -> int | None:
+    target = str(name or "").strip().lower()
+    if not target:
+        return None
+
+    response = _request(
+        "GET",
+        "/api/v1/statuslabels",
+        params={"search": target, "limit": 50},
+    )
+    response.raise_for_status()
+    payload = response.json()
+
+    for row in payload.get("rows", []):
+        if str(row.get("name") or "").strip().lower() == target:
+            return int(row["id"])
+
+    return None
+
+
+def update_asset_status(*, asset_id: int, status_name: str) -> dict:
+    status_id = get_status_label_id_by_name(status_name)
+    if not status_id:
+        raise ValueError(f'Snipe-IT status label not found: "{status_name}"')
+
+    response = _request(
+        "PATCH",
+        f"/api/v1/hardware/{int(asset_id)}",
+        json={"status_id": status_id},
+    )
+
+    response.raise_for_status()
+    data = response.json()
+
+    if isinstance(data, dict) and data.get("status") == "error":
+        raise ValueError(f"Snipe-IT status update failed: {_format_snipe_messages(data)}")
+
+    return data

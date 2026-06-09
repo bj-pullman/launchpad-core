@@ -2,7 +2,7 @@
 {% block title %}SnipeOps • Checkout Assets{% endblock %}
 
 {% block head %}
-  <link rel="stylesheet" href="{{ url_for('checkout_assets.static', filename='css/checkout_assets.css') }}">
+<link rel="stylesheet" href="{{ url_for('checkout_assets.static', filename='css/checkout_assets.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -17,16 +17,17 @@
   <section id="parentPanel" class="panel">
     <h2>1. Parent Asset</h2>
     <p class="muted">
-    Search the SnipeOps Catalog for the cart or asset that will receive the checked-out devices.
+      Search the SnipeOps Catalog for the cart or asset that will receive the checked-out devices.
     </p>
 
     <div id="parentSearchWrap">
-    <div class="row">
-        <input id="parentSearch" class="input" autocomplete="off" placeholder="Search cart by name, asset tag, or serial...">
+      <div class="row">
+        <input id="parentSearch" class="input" autocomplete="off"
+          placeholder="Search cart by name, asset tag, or serial...">
         <button id="parentSearchBtn" class="btn" type="button">Search</button>
-    </div>
+      </div>
 
-    <div id="parentResults" class="search-results"></div>
+      <div id="parentResults" class="search-results"></div>
     </div>
 
     <div id="selectedParent" class="selected-parent empty">
@@ -48,7 +49,8 @@
 
     <label class="label" for="childSearch">Manual child search</label>
     <div class="row">
-      <input id="childSearch" class="input" autocomplete="off" placeholder="Search by name, asset tag, serial, or model...">
+      <input id="childSearch" class="input" autocomplete="off"
+        placeholder="Search by name, asset tag, serial, or model...">
       <button id="childSearchBtn" class="btn" type="button">Search</button>
     </div>
 
@@ -80,22 +82,23 @@
   <div id="status" class="status muted">Ready.</div>
 
   <div class="recent-wrap">
-    <table class="table">
+    <table class="table selected-children-table">
       <thead>
         <tr>
           <th>Remove</th>
           <th>Asset Tag</th>
           <th>Serial</th>
-          <th>Name</th>
           <th>Model</th>
           <th>Status</th>
           <th>Assigned</th>
+          <th>Check In</th>
+          <th>Edit</th>
           <th>Open</th>
         </tr>
       </thead>
       <tbody id="selectedChildrenBody">
         <tr>
-          <td colspan="8" class="muted">No child assets selected.</td>
+          <td colspan="9" class="muted">No child assets selected.</td>
         </tr>
       </tbody>
     </table>
@@ -109,7 +112,7 @@
   </div>
 
   <div class="recent-wrap">
-    <table class="table">
+    <table class="table recent-activity-table">
       <thead>
         <tr>
           <th>Time</th>
@@ -122,14 +125,14 @@
       </thead>
       <tbody id="recentBody">
         {% for r in recent %}
-          <tr class="{{ 'ok' if r.ok else 'bad' }}">
-            <td class="mono">{{ r.created_at }}</td>
-            <td class="mono">{{ r.child_asset_tag or r.child_asset_name or r.child_asset_id or '' }}</td>
-            <td class="mono">{{ r.child_asset_serial or '' }}</td>
-            <td class="mono">{{ r.parent_asset_tag or r.parent_asset_name or r.parent_asset_id or '' }}</td>
-            <td>{{ 'Success' if r.ok else 'Error' }}</td>
-            <td class="muted">{{ r.message or '' }}</td>
-          </tr>
+        <tr class="{{ 'ok' if r.ok else 'bad' }}">
+          <td class="mono">{{ r.created_at }}</td>
+          <td class="mono">{{ r.child_asset_tag or r.child_asset_name or r.child_asset_id or '' }}</td>
+          <td class="mono">{{ r.child_asset_serial or '' }}</td>
+          <td class="mono">{{ r.parent_asset_tag or r.parent_asset_name or r.parent_asset_id or '' }}</td>
+          <td>{{ 'Success' if r.ok else 'Error' }}</td>
+          <td class="muted">{{ r.message or '' }}</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
@@ -141,14 +144,21 @@
     <h2 id="confirmTitle">Confirm</h2>
     <div id="confirmMessage" class="confirm-message"></div>
 
+    <div id="assetTagEditFields" class="modal-form hidden">
+      <label class="label" for="assetTagEditInput">Asset Tag</label>
+      <input id="assetTagEditInput" class="input" autocomplete="off">
+    </div>
+
+    <div id="parentAssetsList" class="parent-assets-list hidden"></div>
+
     <div class="checkout-modal-actions">
       <button id="cancelConfirmBtn" class="btn btn-ghost" type="button">Cancel</button>
-      <button id="confirmActionBtn" class="btn btn-danger" type="button">Continue</button>
+      <button id="confirmActionBtn" class="btn btn-primary" type="button">Continue</button>
     </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-  <script defer src="{{ url_for('checkout_assets.static', filename='js/checkout_assets.js') }}"></script>
+<script defer src="{{ url_for('checkout_assets.static', filename='js/checkout_assets.js') }}"></script>
 {% endblock %}
