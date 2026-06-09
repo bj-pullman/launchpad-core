@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
 from datetime import datetime, timezone
+
 from config.settings import SNIPE_CATALOG_DB_PATH
 
 DB_PATH = SNIPE_CATALOG_DB_PATH
@@ -15,6 +15,11 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _table_has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(row["name"] == column for row in rows)
+
+
 def init_db() -> None:
     with _connect() as conn:
         conn.execute("""
@@ -23,6 +28,7 @@ def init_db() -> None:
             value TEXT NOT NULL
         )
         """)
+
         conn.execute("""
         CREATE TABLE IF NOT EXISTS catalog_models (
             id INTEGER PRIMARY KEY,
@@ -33,6 +39,7 @@ def init_db() -> None:
             updated_at TEXT
         )
         """)
+
         conn.execute("""
         CREATE TABLE IF NOT EXISTS catalog_locations (
             id INTEGER PRIMARY KEY,
@@ -41,6 +48,7 @@ def init_db() -> None:
             updated_at TEXT
         )
         """)
+
         conn.execute("""
         CREATE TABLE IF NOT EXISTS catalog_statuslabels (
             id INTEGER PRIMARY KEY,
@@ -49,6 +57,7 @@ def init_db() -> None:
             updated_at TEXT
         )
         """)
+
         conn.execute("""
         CREATE TABLE IF NOT EXISTS catalog_suppliers (
             id INTEGER PRIMARY KEY,
@@ -57,6 +66,7 @@ def init_db() -> None:
             updated_at TEXT
         )
         """)
+
         conn.execute("""
         CREATE TABLE IF NOT EXISTS catalog_depreciations (
             id INTEGER PRIMARY KEY,
@@ -65,6 +75,7 @@ def init_db() -> None:
             updated_at TEXT
         )
         """)
+
         conn.execute("""
         CREATE TABLE IF NOT EXISTS catalog_categories (
             id INTEGER PRIMARY KEY,
@@ -89,6 +100,7 @@ def init_db() -> None:
             asset_tag TEXT,
             serial TEXT,
             name TEXT,
+            model_id INTEGER,
             model_name TEXT,
             category_name TEXT,
             status_name TEXT,
@@ -101,9 +113,14 @@ def init_db() -> None:
         )
         """)
 
+        if not _table_has_column(conn, "catalog_assets", "model_id"):
+            conn.execute("ALTER TABLE catalog_assets ADD COLUMN model_id INTEGER")
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_asset_tag ON catalog_assets(asset_tag)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_serial ON catalog_assets(serial)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_name ON catalog_assets(name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_model_id ON catalog_assets(model_id)")
+
         conn.commit()
 
 
@@ -136,9 +153,9 @@ def upsert_models(rows: list[dict]) -> int:
             mid = r.get("id")
             if mid is None:
                 continue
-            name = r.get("name")
-            manufacturer_name = (r.get("manufacturer") or {}).get("name") if isinstance(r.get("manufacturer"), dict) else None
-            model_number = r.get("model_number")
+
+            manufacturer = r.get("manufacturer") if isinstance(r.get("manufacturer"), dict) else {}
+
             conn.execute(
                 """
                 INSERT INTO catalog_models(id,name,manufacturer_name,model_number,raw_json,updated_at)
@@ -150,10 +167,16 @@ def upsert_models(rows: list[dict]) -> int:
                     raw_json=excluded.raw_json,
                     updated_at=excluded.updated_at
                 """,
-                (int(mid), name, manufacturer_name, model_number, json.dumps(r), now),
+                (
+                    int(mid),
+                    r.get("name"),
+                    manufacturer.get("name"),
+                    r.get("model_number"),
+                    json.dumps(r),
+                    now,
+                ),
             )
 
-        # delete anything no longer in Snipe
         if ids:
             qmarks = ",".join(["?"] * len(ids))
             conn.execute(f"DELETE FROM catalog_models WHERE id NOT IN ({qmarks})", ids)
@@ -161,6 +184,7 @@ def upsert_models(rows: list[dict]) -> int:
             conn.execute("DELETE FROM catalog_models")
 
         conn.commit()
+
     return len(ids)
 
 
@@ -173,7 +197,7 @@ def _upsert_simple(table: str, rows: list[dict]) -> int:
             rid = r.get("id")
             if rid is None:
                 continue
-            name = r.get("name")
+
             conn.execute(
                 f"""
                 INSERT INTO {table}(id,name,raw_json,updated_at)
@@ -183,7 +207,7 @@ def _upsert_simple(table: str, rows: list[dict]) -> int:
                     raw_json=excluded.raw_json,
                     updated_at=excluded.updated_at
                 """,
-                (int(rid), name, json.dumps(r), now),
+                (int(rid), r.get("name"), json.dumps(r), now),
             )
 
         if ids:
@@ -193,6 +217,7 @@ def _upsert_simple(table: str, rows: list[dict]) -> int:
             conn.execute(f"DELETE FROM {table}")
 
         conn.commit()
+
     return len(ids)
 
 
@@ -212,11 +237,6 @@ def upsert_depreciations(rows: list[dict]) -> int:
     return _upsert_simple("catalog_depreciations", rows)
 
 
-def list_table(table: str, limit: int = 5000) -> list[dict]:
-    with _connect() as conn:
-        rows = conn.execute(f"SELECT * FROM {table} ORDER BY name LIMIT ?", (limit,)).fetchall()
-        return [dict(r) for r in rows]
-    
 def upsert_categories(rows: list[dict]) -> int:
     return _upsert_simple("catalog_categories", rows)
 
@@ -224,10 +244,27 @@ def upsert_categories(rows: list[dict]) -> int:
 def upsert_manufacturers(rows: list[dict]) -> int:
     return _upsert_simple("catalog_manufacturers", rows)
 
+
+def list_table(table: str, limit: int = 5000) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM {table} ORDER BY name LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def _nested_name(row: dict, key: str) -> str | None:
     value = row.get(key)
     if isinstance(value, dict):
         return value.get("name")
+    return None
+
+
+def _nested_id(row: dict, key: str) -> int | None:
+    value = row.get(key)
+    if isinstance(value, dict) and value.get("id") is not None:
+        return int(value.get("id"))
     return None
 
 
@@ -250,6 +287,7 @@ def upsert_assets(rows: list[dict]) -> int:
                     asset_tag,
                     serial,
                     name,
+                    model_id,
                     model_name,
                     category_name,
                     status_name,
@@ -260,11 +298,12 @@ def upsert_assets(rows: list[dict]) -> int:
                     raw_json,
                     updated_at
                 )
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     asset_tag=excluded.asset_tag,
                     serial=excluded.serial,
                     name=excluded.name,
+                    model_id=excluded.model_id,
                     model_name=excluded.model_name,
                     category_name=excluded.category_name,
                     status_name=excluded.status_name,
@@ -280,6 +319,7 @@ def upsert_assets(rows: list[dict]) -> int:
                     str(r.get("asset_tag") or "").strip(),
                     str(r.get("serial") or "").strip(),
                     str(r.get("name") or "").strip(),
+                    _nested_id(r, "model"),
                     _nested_name(r, "model"),
                     _nested_name(r, "category"),
                     _nested_name(r, "status_label"),
@@ -344,7 +384,8 @@ def get_asset(asset_id: int) -> dict | None:
         ).fetchone()
 
         return dict(row) if row else None
-    
+
+
 def get_assets_assigned_to_asset(parent_asset_id: int) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
@@ -355,6 +396,27 @@ def get_assets_assigned_to_asset(parent_asset_id: int) -> list[dict]:
             ORDER BY asset_tag, name, serial
             """,
             (int(parent_asset_id),),
+        ).fetchall()
+
+        return [dict(r) for r in rows]
+
+
+def list_assets_by_model_ids(model_ids: list[int]) -> list[dict]:
+    ids = [int(mid) for mid in model_ids if mid]
+    if not ids:
+        return []
+
+    qmarks = ",".join(["?"] * len(ids))
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM catalog_assets
+            WHERE model_id IN ({qmarks})
+            ORDER BY model_name, asset_tag, serial, name
+            """,
+            ids,
         ).fetchall()
 
         return [dict(r) for r in rows]

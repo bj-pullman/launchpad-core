@@ -275,8 +275,13 @@ body[data-theme="light"] .mini-btn.remove {
   color: var(--muted);
   border-radius: 12px;
   padding: 11px 18px;
+  font-family: inherit;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   cursor: pointer;
   transition: background .15s ease, color .15s ease, border-color .15s ease;
   box-shadow: none;
@@ -288,11 +293,11 @@ body[data-theme="light"] .mini-btn.remove {
 }
 
 .media-catalog-tabs .settings-tab.active {
-  background: rgba(122,162,255,.16);
-  border-color: rgba(122,162,255,.42);
+  background: rgba(122,162,255,.14);
+  border-color: rgba(122,162,255,.28);
   color: var(--text);
-  font-weight: 800;
-  box-shadow: none;
+  box-shadow:
+    0 2px 6px rgba(15,23,42,.08);
 }
 
 body[data-theme="light"] .media-catalog-tabs {

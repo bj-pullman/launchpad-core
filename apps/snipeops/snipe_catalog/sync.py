@@ -25,45 +25,45 @@ from apps.snipeops.snipe_catalog.catalog_db import (
 )
 
 def run_full_sync() -> dict:
-    """
-    Pull reference data from Snipe-IT and store it in the local catalog DB.
-    Returns a summary dict.
-    """
+    counts = {}
+
     try:
         models = fetch_models()
+        counts["models"] = upsert_models(models)
+
         locations = fetch_locations()
+        counts["locations"] = upsert_locations(locations)
+
         statuslabels = fetch_statuslabels()
+        counts["statuslabels"] = upsert_statuslabels(statuslabels)
+
         suppliers = fetch_suppliers()
+        counts["suppliers"] = upsert_suppliers(suppliers)
+
         depreciations = fetch_depreciations()
+        counts["depreciations"] = upsert_depreciations(depreciations)
+
         categories = fetch_categories()
+        counts["categories"] = upsert_categories(categories)
+
         manufacturers = fetch_manufacturers()
+        counts["manufacturers"] = upsert_manufacturers(manufacturers)
+
         assets = fetch_assets()
+        counts["assets"] = upsert_assets(assets)
 
-        c_models = upsert_models(models)
-        c_locations = upsert_locations(locations)
-        c_status = upsert_statuslabels(statuslabels)
-        c_suppliers = upsert_suppliers(suppliers)
-        c_depr = upsert_depreciations(depreciations)
-
-        c_categories = upsert_categories(categories)
-        c_manufacturers = upsert_manufacturers(manufacturers)
-        c_assets = upsert_assets(assets)
-
-        set_meta("last_sync_utc", datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        set_meta("last_sync_utc", now)
 
         return {
             "ok": True,
-            "counts": {
-                "models": c_models,
-                "locations": c_locations,
-                "statuslabels": c_status,
-                "suppliers": c_suppliers,
-                "depreciations": c_depr,
-                "categories": c_categories,
-                "manufacturers": c_manufacturers,
-                "assets": c_assets,
-            }
+            "last_sync_utc": now,
+            "counts": counts,
         }
 
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {
+            "ok": False,
+            "error": str(e),
+            "counts": counts,
+        }

@@ -14,6 +14,12 @@ from apps.snipeops.snipe_catalog.snipe_api import create_model
 from apps.snipeops.mapping_service import list_mappings, upsert_mapping
 from apps.snipeops.connectors.intune_client import list_intune_devices
 from apps.snipeops.connectors.mosyle_client import list_mosyle_devices
+from apps.snipeops.snipe_catalog.cleanup_service import (
+    build_model_cleanup_queue,
+    preview_model_merge,
+    rename_model,
+    merge_models,
+)
 
 bp = Blueprint(
     "snipe_catalog",
@@ -130,7 +136,11 @@ def api_depreciations():
 def api_model_mappings():
     source = _norm(request.args.get("source")).lower() or "intune"
     limit_raw = _norm(request.args.get("limit")).lower()
-    limit = None if limit_raw in {"", "all"} else max(1, min(int(limit_raw), 5000))
+
+    try:
+        limit = None if limit_raw in {"", "all"} else max(1, min(int(limit_raw), 5000))
+    except ValueError:
+        return jsonify({"ok": False, "error": "Invalid discovery limit."}), 400
 
     if source not in {"intune", "mosyle"}:
         return jsonify({"ok": False, "error": "Invalid source."}), 400
@@ -264,3 +274,81 @@ def api_categories():
 @require_permission("snipeops.snipe_catalog.view")
 def api_manufacturers():
     return jsonify({"ok": True, "rows": list_table("catalog_manufacturers")})
+    
+@bp.get("/api/cleanup/models")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def api_cleanup_models():
+    try:
+        min_score = int(request.args.get("min_score") or 92)
+        return jsonify(build_model_cleanup_queue(min_score=min_score))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post("/api/cleanup/models/preview-merge")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def api_cleanup_models_preview_merge():
+    payload = request.get_json(silent=True) or {}
+
+    try:
+        result = preview_model_merge(
+            keeper_model_id=payload.get("keeper_model_id"),
+            source_model_ids=payload.get("source_model_ids") or [],
+        )
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@bp.post("/api/cleanup/models/rename")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def api_cleanup_models_rename():
+    payload = request.get_json(silent=True) or {}
+
+    try:
+        result = rename_model(
+            model_id=payload.get("model_id"),
+            name=payload.get("name"),
+            model_number=payload.get("model_number"),
+            manufacturer_id=payload.get("manufacturer_id"),
+            category_id=payload.get("category_id"),
+        )
+
+        run_full_sync()
+
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@bp.post("/api/cleanup/models/merge")
+@login_required
+@require_permission("snipeops.snipe_catalog.view")
+def api_cleanup_models_merge():
+    payload = request.get_json(silent=True) or {}
+
+    confirmation = _norm(payload.get("confirmation"))
+    delete_source_models = bool(payload.get("delete_source_models"))
+
+    if delete_source_models and confirmation != "DELETE SOURCE MODELS":
+        return jsonify({
+            "ok": False,
+            "error": "Deletion requires confirmation text: DELETE SOURCE MODELS",
+        }), 400
+
+    try:
+        result = merge_models(
+            keeper_model_id=payload.get("keeper_model_id"),
+            source_model_ids=payload.get("source_model_ids") or [],
+            keeper_updates=payload.get("keeper_updates") or {},
+            delete_source_models=delete_source_models,
+        )
+
+        run_full_sync()
+
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
