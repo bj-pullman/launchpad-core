@@ -88,7 +88,7 @@ def _request(method, endpoint, payload=None, timeout=30):
     return data
 
 
-def get_paginated(endpoint, limit=250):
+def get_paginated(endpoint, limit=100):
     import time
 
     settings = _get_snipeops_settings()
@@ -100,13 +100,14 @@ def get_paginated(endpoint, limit=250):
         payload = None
         last_error = None
 
-        for attempt in range(1, 4):
+        for attempt in range(1, 2):
             try:
+                print(f"Snipe-IT GET {endpoint} offset={offset} limit={limit}")
                 response = requests.get(
                     url,
                     headers=_headers(),
                     verify=settings["verify_ssl"],
-                    timeout=45,
+                    timeout=10,
                 )
 
                 response.raise_for_status()
@@ -124,6 +125,7 @@ def get_paginated(endpoint, limit=250):
         out.extend(rows)
 
         total = payload.get("total")
+        print(f"Snipe-IT {endpoint} returned {len(rows)} rows; total={total}")
 
         if total is not None and len(out) >= int(total):
             break
@@ -168,6 +170,9 @@ def fetch_manufacturers():
 def fetch_assets():
     return get_paginated("/api/v1/hardware", limit=250)
 
+def fetch_users():
+    return get_paginated("/api/v1/users", limit=250)
+
 def post_json(endpoint, payload):
     return _request("POST", endpoint, payload)
 
@@ -182,6 +187,35 @@ def put_json(endpoint, payload):
 
 def delete_json(endpoint):
     return _request("DELETE", endpoint)
+
+
+def fetch_assets_assigned_to_user(user_id):
+    return get_paginated(f"/api/v1/users/{int(user_id)}/assets", limit=250)
+
+
+def fetch_user_assets(user_id):
+    return get_paginated(f"/api/v1/users/{int(user_id)}/assets", limit=250)
+
+
+def fetch_user(user_id):
+    return _request("GET", f"/api/v1/users/{int(user_id)}")
+
+
+def delete_snipe_user(user_id):
+    return delete_json(f"/api/v1/users/{int(user_id)}")
+
+
+def checkin_asset(asset_id, note=None):
+    payload = {}
+
+    if note:
+        payload["note"] = note
+
+    return post_json(f"/api/v1/hardware/{int(asset_id)}/checkin", payload)
+
+
+def delete_user(user_id):
+    return delete_json(f"/api/v1/users/{int(user_id)}")
 
 
 def create_model(name, category_id, manufacturer_id=None, model_number=None):

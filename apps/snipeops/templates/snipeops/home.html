@@ -3,131 +3,139 @@
 
 {% block content %}
 
-  {% set perms = session.get("user_permissions", []) %}
+{% set perms = session.get("user_permissions", []) %}
 
-  {% if snipeops_admin_bypass_active %}
-  <div class="snipeops-warning-banner">
-    <div class="snipeops-warning-banner-copy">
-      <div class="snipeops-warning-banner-title">
-        Snipe-IT integration required
-      </div>
-      <div class="snipeops-warning-banner-text">
-        To use SnipeOps fully, you need to enable and configure the Snipe-IT integration.
-      </div>
+{% if snipeops_admin_bypass_active %}
+<div class="snipeops-warning-banner">
+  <div class="snipeops-warning-banner-copy">
+    <div class="snipeops-warning-banner-title">
+      Snipe-IT integration required
     </div>
+    <div class="snipeops-warning-banner-text">
+      To use SnipeOps fully, you need to enable and configure the Snipe-IT integration.
+    </div>
+  </div>
 
-    <div class="snipeops-warning-banner-actions">
-      <a href="{{ url_for('launchpad_ui.settings_integrations_snipeit') }}" class="snipeops-warning-button">
-        Open Snipe-IT Settings
-      </a>
+  <div class="snipeops-warning-banner-actions">
+    <a href="{{ url_for('launchpad_ui.settings_integrations_snipeit') }}" class="snipeops-warning-button">
+      Open Snipe-IT Settings
+    </a>
+  </div>
+</div>
+{% endif %}
+
+<div class="hero">
+  <h1>SnipeOps</h1>
+  <p class="muted">
+    SnipeIT webapp helper with integrated tools to help operations and automation workflows.
+  </p>
+</div>
+
+<div class="grid">
+
+  {% if "snipeops.import_by_scan.view" in perms %}
+  <a class="card" href="{{ url_for('import_by_scan.index') }}">
+    <div class="card-title">Import by Scan</div>
+    <div class="card-body muted">
+      Scan serials, create assets, keep a local log for audit and recovery.
     </div>
+    <div class="card-cta">Open →</div>
+  </a>
+  {% endif %}
+
+  {% if "snipeops.snipe_catalog.view" in perms %}
+  <a class="card" href="{{ url_for('snipe_catalog.index') }}">
+    <div class="card-title">Snipe Catalog</div>
+    <div class="card-body muted">
+      Cached Snipe reference data used by Import by Scan dropdowns.
+    </div>
+    <div class="card-cta">Open →</div>
+  </a>
+  {% endif %}
+
+  {% if "snipeops.checkout_assets.view" in perms %}
+  <a class="card" href="{{ url_for('checkout_assets.index') }}">
+    <div class="card-title">Checkout Assets</div>
+    <div class="card-body muted">
+      Checkout existing Snipe-IT assets to users, other assets, locations, and companies. Asset-to-asset checkout is
+      available now.
+    </div>
+    <div class="card-cta">Open →</div>
+  </a>
+  {% endif %}
+
+  {% if "snipeops.media_catalog.view" in perms %}
+  <a class="card" href="{{ url_for('media_catalog.index') }}">
+    <div class="card-title">Media Catalog</div>
+    <div class="card-body muted">
+      Spreadsheet-style cart and Chromebook management for media specialists. Move devices between carts and sync
+      changes back to Snipe-IT.
+    </div>
+    <div class="card-cta">Open →</div>
+  </a>
+  {% endif %}
+
+  {% if "snipeops.device_audit.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
+  <div class="card card-disabled">
+    <div class="card-title">Device Audit</div>
+    <div class="card-body muted">
+      Audit and reconcile devices by serial with assignment updates, cart-based Chromebook audits, condition notes, and
+      synced logs.
+    </div>
+    <div class="card-cta muted">Coming soon</div>
   </div>
   {% endif %}
 
-  <div class="hero">
-    <h1>SnipeOps</h1>
-    <p class="muted">
-      SnipeIT webapp helper with integrated tools to help operations and automation workflows.
-    </p>
+  {% if "snipeops.intune_sync.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
+  <a class="card" href="{{ url_for('snipeops.intune_sync') }}">
+    <div class="card-title">Intune Sync</div>
+    <div class="card-body">
+      Pull Windows device inventory from Microsoft Intune and compare it with Snipe-IT.
+    </div>
+    <div class="card-cta">Open →</div>
+  </a>
+  {% endif %}
+
+  {% if "snipeops.mosyle_sync.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
+  <a class="card" href="{{ url_for('snipeops.mosyle_sync') }}">
+    <div class="card-title">Mosyle Sync</div>
+    <div class="card-body">
+      Pull Apple device inventory from Mosyle and compare it with Snipe-IT.
+    </div>
+    <div class="card-cta">Open →</div>
+  </a>
+  {% endif %}
+
+  {% if "snipeops.secure_user_rostering.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
+  <a class="card feature-card feature-card-active" href="{{ url_for('secure_user_rostering.user_roster') }}">
+    <div class="card-title">Secure User Rostering</div>
+
+    <div class="card-body muted">
+      Audit Snipe-IT user accounts, compare against Launchpad identities,
+      find duplicate users, and prepare roster synchronization.
+    </div>
+
+    <div class="card-cta">Open →</div>
+  </a>
+  {% endif %}
+
+  {% if "snipeops.snipe_catalog.manage" in perms %}
+  <div class="card card-disabled">
+    <div class="card-title">Purchase History</div>
+    <div class="card-body muted">
+      Purchase history for devices, components, and other assets (coming next).
+    </div>
+    <div class="card-cta muted">Coming soon</div>
   </div>
 
-  <div class="grid">
-
-    {% if "snipeops.import_by_scan.view" in perms %}
-    <a class="card" href="{{ url_for('import_by_scan.index') }}">
-      <div class="card-title">Import by Scan</div>
-      <div class="card-body muted">
-        Scan serials, create assets, keep a local log for audit and recovery.
-      </div>
-      <div class="card-cta">Open →</div>
-    </a>
-    {% endif %}
-
-    {% if "snipeops.snipe_catalog.view" in perms %}
-    <a class="card" href="{{ url_for('snipe_catalog.index') }}">
-      <div class="card-title">Snipe Catalog</div>
-      <div class="card-body muted">
-        Cached Snipe reference data used by Import by Scan dropdowns.
-      </div>
-      <div class="card-cta">Open →</div>
-    </a>
-    {% endif %}
-
-    {% if "snipeops.checkout_assets.view" in perms %}
-    <a class="card" href="{{ url_for('checkout_assets.index') }}">
-      <div class="card-title">Checkout Assets</div>
-      <div class="card-body muted">
-        Checkout existing Snipe-IT assets to users, other assets, locations, and companies. Asset-to-asset checkout is available now.
-      </div>
-      <div class="card-cta">Open →</div>
-    </a>
-    {% endif %}
-
-    {% if "snipeops.media_catalog.view" in perms %}
-    <a class="card" href="{{ url_for('media_catalog.index') }}">
-      <div class="card-title">Media Catalog</div>
-      <div class="card-body muted">
-        Spreadsheet-style cart and Chromebook management for media specialists. Move devices between carts and sync changes back to Snipe-IT.
-      </div>
-      <div class="card-cta">Open →</div>
-    </a>
-    {% endif %}
-
-    {% if "snipeops.device_audit.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
-    <div class="card card-disabled">
-      <div class="card-title">Device Audit</div>
-      <div class="card-body muted">
-        Audit and reconcile devices by serial with assignment updates, cart-based Chromebook audits, condition notes, and synced logs.
-      </div>
-      <div class="card-cta muted">Coming soon</div>
+  <div class="card card-disabled">
+    <div class="card-title">Reports</div>
+    <div class="card-body muted">
+      Activity log, exports, and operational summaries (coming next).
     </div>
-    {% endif %}
-
-    {% if "snipeops.intune_sync.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
-    <a class="card" href="{{ url_for('snipeops.intune_sync') }}">
-      <div class="card-title">Intune Sync</div>
-      <div class="card-body">
-        Pull Windows device inventory from Microsoft Intune and compare it with Snipe-IT.
-      </div>
-      <div class="card-cta">Open →</div>
-    </a>
-    {% endif %}
-
-    {% if "snipeops.mosyle_sync.view" in perms or "snipeops.snipe_catalog.manage" in perms %}
-    <a class="card" href="{{ url_for('snipeops.mosyle_sync') }}">
-      <div class="card-title">Mosyle Sync</div>
-      <div class="card-body">
-        Pull Apple device inventory from Mosyle and compare it with Snipe-IT.
-      </div>
-      <div class="card-cta">Open →</div>
-    </a>
-    {% endif %}
-
-    {% if "snipeops.snipe_catalog.manage" in perms %}
-    <div class="card card-disabled">
-      <div class="card-title">Secure User Rostering</div>
-      <div class="card-body muted">
-        Using SnipeIT's API and Microsoft Graph, we will roster users from Entra ID into SnipeIT, bypassing the security risk of opening LDAP to the public (coming next).
-      </div>
-      <div class="card-cta muted">Coming soon</div>
-    </div>
-
-    <div class="card card-disabled">
-      <div class="card-title">Purchase History</div>
-      <div class="card-body muted">
-        Purchase history for devices, components, and other assets (coming next).
-      </div>
-      <div class="card-cta muted">Coming soon</div>
-    </div>
-
-    <div class="card card-disabled">
-      <div class="card-title">Reports</div>
-      <div class="card-body muted">
-        Activity log, exports, and operational summaries (coming next).
-      </div>
-      <div class="card-cta muted">Coming soon</div>
-    </div>
-    {% endif %}
-
+    <div class="card-cta muted">Coming soon</div>
   </div>
+  {% endif %}
+
+</div>
 {% endblock %}

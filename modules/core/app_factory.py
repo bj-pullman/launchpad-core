@@ -21,6 +21,8 @@ from apps.snipeops.checkout_assets.checkout_assets_db import init_db as checkout
 from apps.snipeops.snipe_catalog.catalog_db import init_db as snipe_catalog_init_db
 from apps.snipeops.media_catalog.blueprint import bp as media_catalog_bp
 from apps.snipeops.media_catalog.media_catalog_db import init_db as media_catalog_init_db
+from apps.snipeops.secure_user_rostering.routes import bp as secure_user_rostering_bp
+from apps.snipeops.secure_user_rostering.db import init_secure_user_rostering_db
 
 from apps.staff_status.blueprint import bp as staff_status_bp
 from apps.staff_status.db import init_staff_status_db
@@ -46,7 +48,6 @@ from modules.core.api_keys.service import init_api_keys_db
 from modules.core.bootstrap.finance_seed import ensure_efinance_daily_import_profile
 from modules.core.identity.user_service import get_user_by_id
 from modules.core.integrations.sync_db import init_sync_tables
-
 
 from tasks.scheduler import configure_jobs
 from tasks.job_runs import init_job_runs_db
@@ -159,6 +160,7 @@ def create_app() -> Flask:
     checkout_assets_init_db()
     media_catalog_init_db()
     init_sync_tables()
+    init_secure_user_rostering_db()
 
     # Seed Finance defaults (safe/idempotent)
     ensure_efinance_daily_import_profile()
@@ -333,6 +335,7 @@ def create_app() -> Flask:
     app.register_blueprint(finance_api_bp)
     app.register_blueprint(checkout_assets_bp)
     app.register_blueprint(media_catalog_bp)
+    app.register_blueprint(secure_user_rostering_bp)
 
     should_start_scheduler = True
 

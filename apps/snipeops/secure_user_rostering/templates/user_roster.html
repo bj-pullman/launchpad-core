@@ -1,0 +1,449 @@
+{% extends "snipeops/base.html" %}
+{% block title %}SnipeOps • Secure User Rostering{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('secure_user_rostering.static', filename='css/secure_user_rostering.css') }}">
+
+<div class="sur-hero">
+  <div>
+    <div class="sur-eyebrow">SnipeOps Identity Tools</div>
+    <h1>Secure User Rostering</h1>
+    <p>
+      Audit Snipe-IT users against Launchpad identities, find duplicate accounts,
+      purge student accounts safely, and merge user records.
+    </p>
+  </div>
+
+  <div class="sur-hero-actions">
+    <a id="surSyncBtn" class="catalog-sync-btn sur-sync-btn"
+      href="{{ url_for('secure_user_rostering.user_roster', preview=1) }}">
+      <span class="btn-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
+          <path d="M3 3v5h5" />
+          <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
+          <path d="M21 21v-5h-5" />
+        </svg>
+      </span>
+      <span>Run Roster Preview</span>
+    </a>
+  </div>
+</div>
+
+{% if error %}
+<div class="sur-alert sur-alert-error">
+  <strong>Roster preview failed.</strong>
+  <span>{{ error }}</span>
+</div>
+{% endif %}
+
+<div class="settings-tabs catalog-page-tabs sur-tabs" data-sur-tabs>
+  <button class="settings-tab active" type="button" data-sur-tab="overview">Overview</button>
+  <button class="settings-tab" type="button" data-sur-tab="mapping">Field Mapping</button>
+  <button class="settings-tab" type="button" data-sur-tab="duplicates">Merge Users</button>
+  <button class="settings-tab" type="button" data-sur-tab="students">Student Purge</button>
+  <button class="settings-tab" type="button" data-sur-tab="missing">Missing in Snipe-IT</button>
+  <button class="settings-tab" type="button" data-sur-tab="unmatched">Unmatched Snipe-IT</button>
+  <button class="settings-tab" type="button" data-sur-tab="matched">Matched Users</button>
+</div>
+
+<section class="sur-panel is-active" data-sur-panel="overview">
+  {% if preview %}
+  <div class="sur-summary-grid">
+    <div class="sur-summary-card">
+      <div class="sur-summary-value">{{ preview.counts.launchpad_users }}</div>
+      <div class="sur-summary-label">Launchpad Users</div>
+    </div>
+    <div class="sur-summary-card">
+      <div class="sur-summary-value">{{ preview.counts.snipe_users }}</div>
+      <div class="sur-summary-label">Snipe-IT Users</div>
+    </div>
+    <div class="sur-summary-card">
+      <div class="sur-summary-value">{{ preview.counts.matched }}</div>
+      <div class="sur-summary-label">Matched</div>
+    </div>
+    <div class="sur-summary-card">
+      <div class="sur-summary-value">{{ preview.counts.missing_in_snipe }}</div>
+      <div class="sur-summary-label">Missing</div>
+    </div>
+    <div class="sur-summary-card">
+      <div class="sur-summary-value">{{ preview.counts.duplicate_groups }}</div>
+      <div class="sur-summary-label">Duplicate Groups</div>
+    </div>
+    <div class="sur-summary-card">
+      <div class="sur-summary-value">{{ preview.counts.student_users or 0 }}</div>
+      <div class="sur-summary-label">Student Accounts</div>
+    </div>
+  </div>
+  {% else %}
+  <div class="sur-empty">
+    <h2>No preview loaded</h2>
+    <p>Run the roster preview to compare Launchpad users with Snipe-IT users.</p>
+  </div>
+  {% endif %}
+</section>
+
+<section class="sur-panel" data-sur-panel="mapping">
+  <div class="sur-card">
+    <h2>Default Snipe-IT User Mapping</h2>
+    <p class="muted">These mappings will be used when roster create/update actions are enabled.</p>
+
+    <div class="sur-table-wrap">
+      <table class="sur-table">
+        <thead>
+          <tr>
+            <th>Launchpad Field</th>
+            <th>Snipe-IT Field</th>
+            <th>Label</th>
+            <th>Required</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for field in field_mapping %}
+          <tr>
+            <td><code>{{ field.launchpad_field }}</code></td>
+            <td><code>{{ field.snipe_field }}</code></td>
+            <td>{{ field.label }}</td>
+            <td>
+              {% if field.required %}
+              <span class="sur-badge sur-badge-required">Required</span>
+              {% else %}
+              <span class="sur-badge sur-badge-optional">Optional</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="sur-panel" data-sur-panel="duplicates">
+  <div class="sur-card">
+    <h2>Merge Duplicate Snipe-IT Users</h2>
+    <p class="muted">
+      Move assets from a duplicate/source user to a canonical/target user. This requires typing <strong>MERGE
+        USERS</strong>.
+    </p>
+
+    {% if preview and preview.duplicate_groups %}
+    <div class="sur-table-wrap">
+      <table class="sur-table">
+        <thead>
+          <tr>
+            <th>Source / Possible Duplicate</th>
+            <th>Suggested Target</th>
+            <th>Reason</th>
+            <th>Merge Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for group in preview.duplicate_groups %}
+          {% for match in group.matches %}
+          <tr>
+            <td>
+              <strong>{{ match.user.name }}</strong>
+              <span>{{ match.user.email or "No email" }}</span>
+              <span>Username: {{ match.user.username or "—" }}</span>
+              <span>Snipe ID: {{ match.user.id }}</span>
+            </td>
+            <td>
+              <strong>{{ group.primary.name }}</strong>
+              <span>{{ group.primary.email or "No email" }}</span>
+              <span>Username: {{ group.primary.username or "—" }}</span>
+              <span>Snipe ID: {{ group.primary.id }}</span>
+            </td>
+            <td>
+              <span class="sur-score">{{ match.score }}%</span>
+              <span>{{ match.reasons | join(", ") }}</span>
+            </td>
+            <td>
+              <form id="mergeForm{{ match.user.id }}_{{ group.primary.id }}" class="sur-action-form sur-merge-form"
+                method="post" action="{{ url_for('secure_user_rostering.run_merge_users') }}">
+
+                <input type="hidden" name="source_user_id" value="{{ match.user.id }}">
+                <input type="hidden" name="target_user_id" value="{{ group.primary.id }}">
+
+                <label class="sur-check-row">
+                  <input type="checkbox" name="delete_source" value="1">
+                  Delete source after asset move
+                </label>
+
+                <button class="sur-danger-btn" type="button" data-open-confirm-modal data-modal-action="merge"
+                  data-target-form="mergeForm{{ match.user.id }}_{{ group.primary.id }}">
+                  Merge Users
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="sur-empty">
+      <p>No duplicate candidates found. Run preview first.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="sur-panel" data-sur-panel="students">
+  <div class="sur-card">
+    <div class="sur-card-head">
+      <div>
+        <h2>Student Account Purge</h2>
+        <p class="muted">
+          Student accounts are detected by numeric email format, such as <code>12345@sheridanschools.org</code>.
+          Selected users will have assigned assets checked in before deletion.
+        </p>
+      </div>
+
+      {% if preview and preview.student_users %}
+      <button class="snipeops-btn snipeops-btn-secondary" type="button" data-select-all-students>
+        Select All Visible
+      </button>
+      {% endif %}
+    </div>
+
+    {% if preview and preview.student_users %}
+    <form id="studentPurgeForm" method="post" action="{{ url_for('secure_user_rostering.run_student_purge') }}"
+      class="sur-student-purge-form">
+
+      <div class="sur-table-wrap">
+        <div class="sur-table-toolbar">
+          <div>
+            <strong>{{ preview.student_users|length }}</strong>
+            <span class="muted">student account candidates</span>
+          </div>
+
+          <div class="sur-table-toolbar-actions">
+            <label class="sync-field sur-page-size-field">
+              Rows
+              <select id="studentPageSize" class="snipeops-input">
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="250">250</option>
+              </select>
+            </label>
+
+            <button class="sur-pagination-btn" type="button" id="studentPrevPage">
+              Previous
+            </button>
+
+            <span class="sur-page-status" id="studentPageStatus"></span>
+
+            <button class="sur-pagination-btn" type="button" id="studentNextPage">
+              Next
+            </button>
+
+            <button class="snipeops-btn snipeops-btn-secondary" type="button" data-select-all-students>
+              Select Visible
+            </button>
+
+            <button class="sur-danger-btn" type="button" data-open-confirm-modal data-modal-action="student-purge"
+              data-target-form="studentPurgeForm">
+              Check In Assets and Purge Selected
+            </button>
+          </div>
+        </div>
+        <table class="sur-table">
+          <thead>
+            <tr>
+              <th>Select</th>
+              <th>Student User</th>
+              <th>Email</th>
+              <th>Username</th>
+              <th>Location</th>
+              <th>Snipe ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in preview.student_users %}
+            <tr data-student-row>
+              <td>
+                <input type="checkbox" name="user_ids" value="{{ user.id }}" data-student-checkbox>
+              </td>
+              <td><strong>{{ user.name }}</strong></td>
+              <td>{{ user.email or "—" }}</td>
+              <td>{{ user.username or "—" }}</td>
+              <td>{{ user.location or "—" }}</td>
+              <td>{{ user.id }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
+    {% else %}
+    <div class="sur-empty">
+      <p>No student accounts found. Run preview first.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="sur-panel" data-sur-panel="missing">
+  <div class="sur-card">
+    <h2>Missing in Snipe-IT</h2>
+    {% if preview and preview.missing_in_snipe %}
+    <div class="sur-table-wrap">
+      <table class="sur-table">
+        <thead>
+          <tr>
+            <th>Launchpad User</th>
+            <th>Email</th>
+            <th>Username</th>
+            <th>Department</th>
+            <th>Location</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in preview.missing_in_snipe %}
+          <tr>
+            <td><strong>{{ user.name }}</strong></td>
+            <td>{{ user.email or "—" }}</td>
+            <td>{{ user.username or "—" }}</td>
+            <td>{{ user.department or "—" }}</td>
+            <td>{{ user.location or "—" }}</td>
+            <td>
+              {% if user.is_active %}
+              <span class="sur-badge sur-badge-live">Active</span>
+              {% else %}
+              <span class="sur-badge sur-badge-muted">Inactive</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="sur-empty">
+      <p>No missing users found.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="sur-panel" data-sur-panel="unmatched">
+  <div class="sur-card">
+    <h2>Unmatched Snipe-IT Users</h2>
+    {% if preview and preview.unmatched_snipe %}
+    <div class="sur-table-wrap">
+      <table class="sur-table">
+        <thead>
+          <tr>
+            <th>Snipe-IT User</th>
+            <th>Email</th>
+            <th>Username</th>
+            <th>Department</th>
+            <th>Location</th>
+            <th>Snipe ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in preview.unmatched_snipe %}
+          <tr>
+            <td><strong>{{ user.name }}</strong></td>
+            <td>{{ user.email or "—" }}</td>
+            <td>{{ user.username or "—" }}</td>
+            <td>{{ user.department or "—" }}</td>
+            <td>{{ user.location or "—" }}</td>
+            <td>{{ user.id }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="sur-empty">
+      <p>No unmatched users found.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="sur-panel" data-sur-panel="matched">
+  <div class="sur-card">
+    <h2>Matched Users</h2>
+    {% if preview and preview.matched %}
+    <div class="sur-table-wrap">
+      <table class="sur-table">
+        <thead>
+          <tr>
+            <th>Launchpad User</th>
+            <th>Snipe-IT User</th>
+            <th>Match Reason</th>
+            <th>Snipe ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview.matched %}
+          <tr>
+            <td>
+              <strong>{{ row.launchpad.name }}</strong>
+              <span>{{ row.launchpad.email or "No email" }}</span>
+            </td>
+            <td>
+              <strong>{{ row.snipe.name }}</strong>
+              <span>{{ row.snipe.email or "No email" }}</span>
+            </td>
+            <td>{{ row.reason }}</td>
+            <td>{{ row.snipe.id }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="sur-empty">
+      <p>No matched users found.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<div class="sur-modal" id="surConfirmModal" hidden>
+  <div class="sur-modal-backdrop" data-close-confirm-modal></div>
+
+  <div class="sur-modal-card">
+    <div class="sur-modal-header">
+      <div>
+        <h2 id="surConfirmTitle">Confirm Action</h2>
+        <p id="surConfirmText" class="muted"></p>
+      </div>
+
+      <button class="sur-modal-close" type="button" data-close-confirm-modal>×</button>
+    </div>
+
+    <div class="sur-modal-body">
+      <div class="sur-danger-zone">
+        <strong>This action changes live Snipe-IT data.</strong>
+        <span id="surConfirmWarning"></span>
+      </div>
+
+      <label class="sync-field">
+        Confirmation
+        <input id="surConfirmInput" class="snipeops-input" type="text" autocomplete="off">
+      </label>
+    </div>
+
+    <div class="sur-modal-actions">
+      <button class="snipeops-btn snipeops-btn-secondary" type="button" data-close-confirm-modal>
+        Cancel
+      </button>
+
+      <button id="surConfirmSubmit" class="sur-danger-btn" type="button">
+        Confirm
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('secure_user_rostering.static', filename='js/secure_user_rostering.js') }}"></script>
+{% endblock %}
