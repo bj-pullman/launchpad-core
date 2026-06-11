@@ -393,6 +393,13 @@ def microsoft_integration_settings():
         "intune_has_client_secret": bool(
             (get_setting("integrations.microsoft.intune.client_secret", "") or "").strip()
         ),
+        "entra_user_sync_enabled": get_bool_setting("entra.user_sync.enabled", False),
+        "entra_user_sync_schedule_enabled": get_bool_setting("entra.user_sync.schedule_enabled", False),
+        "entra_user_sync_tenant_id": get_setting("entra.tenant_id", ""),
+        "entra_user_sync_client_id": get_setting("entra.client_id", ""),
+        "entra_user_sync_has_client_secret": bool((get_setting("entra.client_secret", "") or "").strip()),
+        "entra_user_sync_schedule_hours": get_setting("entra.user_sync.schedule_hours", "6,14"),
+        "entra_user_sync_group_id": get_setting("entra.user_sync.group_id", ""),
     }
 
 

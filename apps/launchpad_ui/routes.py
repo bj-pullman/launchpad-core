@@ -56,6 +56,7 @@ from apps.snipeops.mapping_service import (
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.auth.user_admin_service import (
     list_local_users,
+    count_local_users,
     get_local_user_by_user_id,
     create_local_user,
     create_sso_stub_user,
@@ -93,6 +94,8 @@ from modules.core.api_keys.service import (
     revoke_api_key,
     delete_api_key,
 )
+
+from modules.core.integrations.entra_roster_sync import sync_entra_users_to_launchpad
 
 from tasks.scheduler import configure_jobs
 
@@ -646,7 +649,24 @@ def settings_groups_delete(group_id: int):
 @login_required
 @require_permission("launchpad.settings.users.view")
 def settings_users():
-    users = list_local_users()
+    page = request.args.get("page", 1, type=int) or 1
+    per_page = request.args.get("per_page", 25, type=int) or 25
+
+    if page < 1:
+        page = 1
+
+    allowed_page_sizes = {25, 50, 100}
+    if per_page not in allowed_page_sizes:
+        per_page = 25
+
+    total_users = count_local_users()
+    total_pages = max(1, (total_users + per_page - 1) // per_page)
+
+    if page > total_pages:
+        page = total_pages
+
+    offset = (page - 1) * per_page
+    users = list_local_users(limit=per_page, offset=offset)
 
     for user in users:
         identity_user = get_user_by_id(user["user_id"]) or {}
@@ -658,11 +678,6 @@ def settings_users():
         user["job_title"] = identity_user.get("job_title")
         user["department"] = identity_user.get("department")
         user["office_location"] = identity_user.get("office_location")
-
-        user["sick_allowance_days"] = identity_user.get("sick_allowance_days", 12)
-        user["personal_allowance_days"] = identity_user.get("personal_allowance_days", 3)
-        user["vacation_allowance_days"] = identity_user.get("vacation_allowance_days", 10)
-        user["other_allowance_days"] = identity_user.get("other_allowance_days", 0)
 
         groups = get_user_roles(user["user_id"])
         user["roles"] = groups
@@ -680,11 +695,23 @@ def settings_users():
         if (user.get("department") or "").strip()
     })
 
+    pagination = {
+        "page": page,
+        "per_page": per_page,
+        "total_users": total_users,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+    }
+
     return render_template(
         "launchpad_ui/settings/users.html",
         active_section="users",
         users=users,
         departments=departments,
+        pagination=pagination,
     )
 
 
@@ -1116,6 +1143,40 @@ def settings_users_bulk_action():
         "message": f"{'Activated' if action == 'activate' else 'Disabled'} {updated_count} user(s).",
     })
 
+@launchpad_ui_bp.route("/settings/users/entra-sync/run", methods=["POST"])
+@login_required
+@require_permission("launchpad.settings.users.manage")
+def settings_users_entra_sync_run():
+    try:
+        result = sync_entra_users_to_launchpad(trigger_type="manual")
+
+        if result["ok"]:
+            flash(
+                (
+                    f"Entra sync complete. "
+                    f"Created {result['created']}, updated {result['updated']}, "
+                    f"unchanged {result['unchanged']}, skipped {result['skipped']}, "
+                    f"deactivated {result.get('deactivated', 0)}."
+                ),
+                "success",
+            )
+        else:
+            flash(
+                (
+                    f"Entra sync completed with errors. "
+                    f"Created {result['created']}, updated {result['updated']}, "
+                    f"unchanged {result['unchanged']}, skipped {result['skipped']}, "
+                    f"deactivated {result.get('deactivated', 0)}, errors {result['errors']}."
+                ),
+                "error",
+            )
+
+    except Exception as exc:
+        current_app.logger.exception("Manual Entra user sync failed")
+        flash(f"Entra sync failed: {exc}", "error")
+
+    return redirect(url_for("launchpad_ui.settings_users"))
+
 
 @launchpad_ui_bp.route("/settings/staff-status", methods=["GET", "POST"])
 @login_required
@@ -1285,7 +1346,7 @@ def settings_integrations_microsoft():
         or "signin"
     ).strip().lower()
 
-    if active_tab not in {"signin", "intune"}:
+    if active_tab not in {"signin", "intune", "users"}:
         active_tab = "signin"
 
     if request.method == "POST":
@@ -1357,6 +1418,41 @@ def settings_integrations_microsoft():
 
             flash("Microsoft Intune settings saved.", "success")
             return redirect(url_for("launchpad_ui.settings_integrations_microsoft", tab="intune"))
+        
+        if action == "save_user_sync":
+            set_setting(
+                "entra.user_sync.enabled",
+                1 if request.form.get("entra_user_sync_enabled") == "1" else 0,
+            )
+            set_setting(
+                "entra.user_sync.schedule_enabled",
+                1 if request.form.get("entra_user_sync_schedule_enabled") == "1" else 0,
+            )
+            set_setting(
+                "entra.tenant_id",
+                (request.form.get("entra_user_sync_tenant_id") or "").strip(),
+            )
+            set_setting(
+                "entra.client_id",
+                (request.form.get("entra_user_sync_client_id") or "").strip(),
+            )
+            set_setting(
+                "entra.user_sync.schedule_hours",
+                (request.form.get("entra_user_sync_schedule_hours") or "6,14").strip(),
+            )
+            set_setting(
+                "entra.user_sync.group_id",
+                (request.form.get("entra_user_sync_group_id") or "").strip(),
+            )
+
+            entra_client_secret = (request.form.get("entra_user_sync_client_secret") or "").strip()
+            if entra_client_secret:
+                set_setting("entra.client_secret", entra_client_secret, is_sensitive=1)
+
+            configure_jobs()
+
+            flash("Entra user sync settings saved.", "success")
+            return redirect(url_for("launchpad_ui.settings_integrations_microsoft", tab="users"))
 
         flash("Unsupported Microsoft integration action.", "error")
         return redirect(url_for("launchpad_ui.settings_integrations_microsoft", tab=active_tab))

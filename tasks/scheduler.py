@@ -42,6 +42,23 @@ def _parse_daily_time(value: str | None):
     except Exception:
         return 1, 0
 
+def _parse_hour_list(value: str | None) -> list[int]:
+    hours = []
+
+    for item in (value or "6,14").split(","):
+        item = item.strip()
+        if not item:
+            continue
+
+        try:
+            hour = int(item)
+        except ValueError:
+            continue
+
+        if 0 <= hour <= 23 and hour not in hours:
+            hours.append(hour)
+
+    return hours or [6, 14]
 
 def _run_job_with_tracking(job_def):
     timezone_value = (
@@ -126,16 +143,30 @@ def configure_jobs():
         if not enabled:
             continue
 
+        #
+        # Daily scheduled jobs
+        #
         if job_def.get("schedule_type") == "daily_time":
-            time_value = get_setting(job_def["time_setting"], "01:00") or "01:00"
+            time_value = get_setting(
+                job_def["time_setting"],
+                "01:00"
+            ) or "01:00"
+
             timezone_value = (
-                get_setting(job_def["timezone_setting"], "America/Chicago")
+                get_setting(
+                    job_def["timezone_setting"],
+                    "America/Chicago"
+                )
                 or "America/Chicago"
             )
 
             hour, minute = _parse_daily_time(time_value)
 
-            print(f"[tasks] scheduling {job_id} at {hour:02d}:{minute:02d} {timezone_value}")
+            print(
+                f"[tasks] scheduling {job_id} "
+                f"at {hour:02d}:{minute:02d} "
+                f"{timezone_value}"
+            )
 
             scheduler.add_job(
                 _run_job_with_tracking,
@@ -143,6 +174,48 @@ def configure_jobs():
                 trigger=CronTrigger(
                     hour=hour,
                     minute=minute,
+                    timezone=timezone_value,
+                ),
+                id=job_id,
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=3600,
+            )
+
+        #
+        # Multi-hour scheduled jobs
+        #
+        elif job_def.get("schedule_type") == "multi_hour":
+            hours_value = (
+                get_setting(
+                    job_def["hours_setting"],
+                    "6,14"
+                )
+                or "6,14"
+            )
+
+            timezone_value = (
+                get_setting(
+                    job_def["timezone_setting"],
+                    "America/Chicago"
+                )
+                or "America/Chicago"
+            )
+
+            hours = _parse_hour_list(hours_value)
+
+            print(
+                f"[tasks] scheduling {job_id} "
+                f"at hours {hours} "
+                f"{timezone_value}"
+            )
+
+            scheduler.add_job(
+                job_def["func"],
+                trigger=CronTrigger(
+                    hour=",".join(str(hour) for hour in hours),
+                    minute=0,
                     timezone=timezone_value,
                 ),
                 id=job_id,

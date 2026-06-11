@@ -42,7 +42,19 @@ def update_last_login_at(user_id: int):
         conn.commit()
 
 
-def list_local_users():
+def count_local_users() -> int:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM local_auth_accounts
+            """
+        ).fetchone()
+
+    return int(row[0] or 0)
+
+
+def list_local_users(limit: int = 50, offset: int = 0):
     with get_connection() as conn:
         rows = conn.execute(
             """
@@ -60,7 +72,9 @@ def list_local_users():
                 END AS account_type
             FROM local_auth_accounts la
             ORDER BY la.username
-            """
+            LIMIT ? OFFSET ?
+            """,
+            (int(limit), int(offset)),
         ).fetchall()
 
     return [dict(row) for row in rows]

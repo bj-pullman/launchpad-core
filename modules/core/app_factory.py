@@ -45,6 +45,8 @@ from modules.core.settings.settings_service import get_setting, get_bool_setting
 from modules.core.api_keys.service import init_api_keys_db
 from modules.core.bootstrap.finance_seed import ensure_efinance_daily_import_profile
 from modules.core.identity.user_service import get_user_by_id
+from modules.core.integrations.sync_db import init_sync_tables
+
 
 from tasks.scheduler import configure_jobs
 from tasks.job_runs import init_job_runs_db
@@ -156,6 +158,7 @@ def create_app() -> Flask:
     snipe_catalog_init_db()
     checkout_assets_init_db()
     media_catalog_init_db()
+    init_sync_tables()
 
     # Seed Finance defaults (safe/idempotent)
     ensure_efinance_daily_import_profile()

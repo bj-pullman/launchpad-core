@@ -2176,3 +2176,152 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.settings-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.users-results-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.users-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.users-results-summary {
+  margin: 0;
+  color: #475569;
+}
+
+.users-table-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.users-pagination-top,
+.users-pagination-bottom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.users-pagination-bottom {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.catalog-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid #dbe4ee;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.catalog-sync-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.catalog-sync-btn .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.catalog-sync-btn.is-syncing .btn-icon {
+  animation: users-sync-spin 1s linear infinite;
+}
+
+.catalog-sync-btn:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+@keyframes users-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.users-filter-toggle-btn {
+  margin: 0;
+}
+
+.users-filter-panel-inline {
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.users-bulk-actions {
+  margin-top: 16px;
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .users-table-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .users-table-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+.users-select-col {
+    width: 56px;
+    text-align: center;
+}
+
+.users-select-col input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    vertical-align: middle;
+}
+
+.users-page-size-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.users-page-size-form select {
+  min-height: 38px;
+  border: 1px solid #dbe4ee;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: #ffffff;
+}
