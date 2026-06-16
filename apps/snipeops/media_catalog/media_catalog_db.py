@@ -215,6 +215,81 @@ def list_owned_carts(owner_user_id: int) -> list[dict]:
 
     return [dict(row) for row in rows]
 
+def list_all_owned_carts() -> list[dict]:
+    init_db()
+
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM media_cart_ownership
+            WHERE owner_user_id IS NOT NULL
+            ORDER BY
+                owner_display_name,
+                owner_email,
+                COALESCE(display_order, 999999),
+                cart_asset_tag,
+                cart_name
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def list_cart_owners() -> list[dict]:
+    init_db()
+
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                owner_user_id,
+                owner_email,
+                owner_display_name,
+                COUNT(*) AS cart_count,
+                MAX(updated_at) AS last_updated_at
+            FROM media_cart_ownership
+            WHERE owner_user_id IS NOT NULL
+            GROUP BY owner_user_id, owner_email, owner_display_name
+            ORDER BY owner_display_name, owner_email
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def update_cart_metadata_admin(
+    *,
+    cart_asset_id: int,
+    media_specialist_owner: str | None,
+    teacher_name: str | None,
+    room_number: str | None,
+) -> dict:
+    init_db()
+
+    with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE media_cart_ownership
+            SET
+                media_specialist_owner = ?,
+                teacher_name = ?,
+                room_number = ?,
+                updated_at = ?
+            WHERE cart_asset_id = ?
+            """,
+            (
+                (media_specialist_owner or "").strip(),
+                (teacher_name or "").strip(),
+                (room_number or "").strip(),
+                _now_iso(),
+                int(cart_asset_id),
+            ),
+        )
+        conn.commit()
+
+    return get_cart_ownership(cart_asset_id)
+
 
 def claim_cart(*, cart_asset: dict, user: dict) -> dict:
     init_db()

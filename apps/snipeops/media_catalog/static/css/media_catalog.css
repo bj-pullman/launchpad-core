@@ -654,11 +654,12 @@ tr.dragging td {
   height: 34px;
   padding: 0 14px;
   border-radius: 10px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
   font-size: 1rem;
   font-weight: 900;
+
+  background: rgba(122,162,255,.12);
+  border: 1px solid rgba(122,162,255,.30);
+  color: #9db8ff;
 }
 
 body[data-theme="light"] .device-count-badge {
@@ -1386,4 +1387,174 @@ body[data-theme="light"] .owner-result-card:hover {
     grid-template-columns: 1fr;
     gap: 0.2rem;
   }
+}
+
+.ownership-user-carts {
+    margin-top: 1rem;
+}
+
+.media-subpanel {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem;
+    background: rgba(255,255,255,.04);
+    color: var(--text);
+}
+
+body[data-theme="light"] .media-subpanel {
+    background: #ffffff;
+    border-color: #dbe3ef;
+    color: #0f172a;
+}
+
+.ownership-table .mini-btn,
+.ownership-carts-table .mini-btn {
+    margin-right: 0.25rem;
+    margin-bottom: 0.25rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}
+
+.ownership-carts-table td {
+    vertical-align: top;
+}
+
+.ownership-user-carts {
+    margin-top: 1rem;
+    overflow: visible;
+}
+
+.ownership-user-carts .media-subpanel {
+    max-height: none;
+    overflow: visible;
+}
+
+.ownership-user-carts .sheet-wrap,
+.ownership-user-carts .sheet-wrap.compact {
+    max-height: none;
+    overflow: visible;
+}
+
+.ownership-user-carts .sheet-wrap {
+    background: rgba(255,255,255,.025);
+    border-color: var(--border);
+}
+
+body[data-theme="light"] .ownership-user-carts .sheet-wrap {
+    background: #ffffff;
+    border-color: #dbe3ef;
+}
+
+.ownership-user-carts .media-sheet thead th {
+    background: rgba(15, 26, 46, 0.96);
+    color: var(--muted);
+}
+
+body[data-theme="light"] .ownership-user-carts .media-sheet thead th {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+/* Cart Management: only narrow utility columns */
+.my-carts-table {
+    width: 100%;
+}
+
+.my-carts-table th:nth-child(1),
+.my-carts-table td:nth-child(1) {
+    width: 3rem;
+    text-align: center;
+}
+
+.my-carts-table th:nth-child(2),
+.my-carts-table td:nth-child(2) {
+    width: 4rem;
+}
+
+.my-carts-table th:nth-child(5),
+.my-carts-table td:nth-child(5) {
+    width: 7rem;
+}
+
+.my-carts-table th:nth-child(7),
+.my-carts-table td:nth-child(7) {
+    width: 5rem;
+    text-align: center;
+}
+
+.my-carts-table th:nth-child(8),
+.my-carts-table td:nth-child(8) {
+    width: 6rem;
+    text-align: center;
+}
+
+.my-carts-table .cart-index-input {
+    max-width: 3.25rem;
+}
+
+.my-carts-table .inline-edit-control {
+    min-width: 0;
+}
+
+.my-carts-table .inline-edit-value {
+    overflow-wrap: anywhere;
+}
+
+/* Ownership Management: only ensure room has enough width */
+.ownership-carts-table {
+    width: 100%;
+}
+
+.ownership-carts-table th:nth-child(3),
+.ownership-carts-table td:nth-child(3) {
+    width: 7rem;
+}
+
+.ownership-carts-table th:nth-child(5),
+.ownership-carts-table td:nth-child(5) {
+    width: 5rem;
+    text-align: center;
+}
+
+.ownership-carts-table th:nth-child(6),
+.ownership-carts-table td:nth-child(6) {
+    width: 13rem;
+}
+
+.ownership-carts-table .inline-edit-value {
+    overflow-wrap: anywhere;
+}
+
+/* Ownership Management owner rows */
+.ownership-owner-row {
+    cursor: pointer;
+}
+
+.ownership-owner-row td {
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ownership-owner-row:hover td {
+    background: rgba(122, 162, 255, 0.10) !important;
+}
+
+.ownership-owner-row.active td {
+    background: rgba(122, 162, 255, 0.14) !important;
+}
+
+.ownership-owner-row.active td:first-child {
+    box-shadow: inset 3px 0 0 #7aa2ff;
+}
+
+body[data-theme="light"] .ownership-owner-row:hover td {
+    background: #eff6ff !important;
+}
+
+body[data-theme="light"] .ownership-owner-row.active td {
+    background: #dbeafe !important;
+}
+
+body[data-theme="light"] .ownership-owner-row.active td:first-child {
+    box-shadow: inset 3px 0 0 #2563eb;
 }

@@ -9,7 +9,6 @@
 <div class="media-page">
     <div class="media-header">
         <div>
-            <p class="media-eyebrow">SnipeOps</p>
             <h1>Media Catalog</h1>
             <p class="muted">
                 Manage carts and devices in a friendly spreadsheet-style view. Warnings help with dirty data, but do not
@@ -35,6 +34,11 @@
         <button type="button" class="settings-tab active" data-tab="cart-management">
             Cart Management
         </button>
+        {% if 'snipeops.media_catalog.ownership.view' in session.get('user_permissions', []) %}
+        <button type="button" class="settings-tab" data-tab="ownership-management">
+            Ownership Management
+        </button>
+        {% endif %}
         <button type="button" class="settings-tab" data-tab="recent-activity">
             Recent Activity
         </button>
@@ -61,6 +65,10 @@
                                 </svg>
                             </span>
                             <span>Refresh</span>
+                        </button>
+
+                        <button id="exportMyCartsBtn" class="media-btn ghost" type="button">
+                            Export My Carts
                         </button>
 
                         <button id="toggleFindCartBtn" class="media-btn ghost icon-btn" type="button">
@@ -123,7 +131,8 @@
                 <div class="add-device-box">
                     <div>
                         <h3>Add Devices to Active Cart</h3>
-                        <p class="muted">Scan or enter a device serial number or asset tag to add it to the selected cart.</p>
+                        <p class="muted">Scan or enter a device serial number or asset tag to add it to the selected
+                            cart.</p>
                     </div>
 
                     <div class="media-row add-device-row">
@@ -137,6 +146,12 @@
                     <div class="sheet-title">
                         <strong>Cart Device Sheet</strong>
                         <span class="muted">Click a row to view more device details.</span>
+                    </div>
+
+                    <div class="media-section-actions">
+                        <button id="exportSelectedCartBtn" class="media-btn ghost" type="button">
+                            Export This Cart
+                        </button>
                     </div>
                 </div>
 
@@ -162,6 +177,30 @@
                 </div>
             </section>
         </div>
+
+        {% if 'snipeops.media_catalog.ownership.view' in session.get('user_permissions', []) %}
+        <div class="settings-tab-panel" data-panel="ownership-management">
+            <section class="media-panel media-wide">
+                <div class="media-section-head">
+                    <div>
+                        <h2>Assigned Cart Owners</h2>
+                        <p class="muted">Admin and tech view for seeing users with assigned carts and managing those
+                            carts.</p>
+                    </div>
+
+                    <div class="media-section-actions">
+                        <button id="exportAllAssignedCartsBtn" class="media-btn ghost" type="button">
+                            Export All Assigned Carts
+                        </button>
+                        <button id="refreshOwnershipBtn" class="media-btn ghost" type="button">Refresh</button>
+                    </div>
+                </div>
+
+                <div id="ownershipOwners"></div>
+                <div id="ownershipUserCarts" class="ownership-user-carts"></div>
+            </section>
+        </div>
+        {% endif %}
 
         <div class="settings-tab-panel" data-panel="recent-activity">
             <section id="recentActivityPanel" class="media-panel media-wide">
@@ -192,9 +231,11 @@
                                 <td class="mono">{{ r.created_at|localtime }}</td>
                                 <td>{{ r.action.replace('_', ' ')|title }}</td>
                                 <td>{{ r.actor_display_name or r.actor_email or '—' }}</td>
-                                <td class="mono">{{ r.device_asset_tag or r.device_name or r.device_asset_id or '' }}</td>
+                                <td class="mono">{{ r.device_asset_tag or r.device_name or r.device_asset_id or '' }}
+                                </td>
                                 <td class="mono">{{ r.device_serial or '' }}</td>
-                                <td class="mono">{{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '' }}</td>
+                                <td class="mono">{{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '' }}
+                                </td>
                                 <td>{{ 'Success' if r.ok else 'Error' }}</td>
                                 <td class="muted">{{ r.message or '' }}</td>
                             </tr>
@@ -283,8 +324,13 @@
 
 {% block scripts %}
 <script>
-  window.MEDIA_CATALOG_CAN_MANAGE_OWNERSHIP =
-    {{ 'true' if 'snipeops.media_catalog.ownership.manage' in session.get('user_permissions', []) else 'false' }};
+    window.MEDIA_CATALOG_TIMEZONE = {{ system_timezone | tojson }};
+
+    window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP =
+        {{ 'true' if 'snipeops.media_catalog.ownership.view' in session.get('user_permissions', []) else 'false' }};
+
+    window.MEDIA_CATALOG_CAN_MANAGE_OWNERSHIP =
+        {{ 'true' if 'snipeops.media_catalog.ownership.manage' in session.get('user_permissions', []) else 'false' }};
 </script>
 <script defer src="{{ url_for('media_catalog.static', filename='js/media_catalog.js') }}"></script>
 {% endblock %}

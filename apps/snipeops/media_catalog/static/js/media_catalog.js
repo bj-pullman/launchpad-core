@@ -12,6 +12,9 @@ let myCartsCache = [];
 let myCartsPage = 1;
 let myCartsPageSize = 25;
 let myCartsSearchQuery = "";
+let ownershipOwnersCache = [];
+let ownershipSelectedUser = null;
+let locationOptionsCache = null;
 
 const sheetDevices = new Map();
 
@@ -110,6 +113,8 @@ async function initMediaCatalog() {
     bindMoveDeviceModal();
     bindAssignOwnerModal();
     bindMediaTabs();
+    bindOwnershipManagement();
+    bindExportButtons();
 
     renderSheetEmpty("Select a cart to load assigned devices.");
     setDeviceCount("—");
@@ -118,6 +123,7 @@ async function initMediaCatalog() {
     try {
         await loadCurrentUser();
         await loadMyCarts();
+        preloadLocationOptions();
         setStatus("Media Catalog loaded.", true);
     } catch (err) {
         setStatus(err.message || "Media Catalog failed to load.", false);
@@ -257,9 +263,9 @@ function renderMyCartsTable(carts) {
                             <th>Move</th>
                             <th>Index</th>
                             <th>Cart</th>
-                            <th>Media Specialist Owner</th>
                             <th>Teacher Name</th>
                             <th>Room Number</th>
+                            <th>Location</th>
                             <th>Devices</th>
                             <th>Actions</th>
                         </tr>
@@ -1410,6 +1416,8 @@ function friendlyAction(action) {
         assigned_cart_owner: "Assigned Cart Owner",
         updated_cart_metadata: "Updated Cart Fields",
         reordered_cart: "Reordered Cart",
+        admin_updated_cart_metadata: "Admin Updated Cart Fields",
+        updated_cart_location: "Updated Cart Location",
     };
 
     return labels[action] || String(action || "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -1561,6 +1569,11 @@ async function assignCartOwner(cart, user) {
 
         await loadMyCarts();
 
+        if (ownershipSelectedUser) {
+            await loadOwnershipOwners();
+            await loadOwnershipUserCarts(ownershipSelectedUser);
+}
+
         const cartResults = $("cartResults");
         if (cartResults) {
             cartResults.innerHTML = "";
@@ -1627,6 +1640,407 @@ function bindMediaTabs() {
     });
 }
 
+function bindExportButtons() {
+    document.addEventListener("click", event => {
+        const exportMyCartsBtn = event.target.closest("#exportMyCartsBtn");
+        const exportSelectedCartBtn = event.target.closest("#exportSelectedCartBtn");
+        const exportAllAssignedCartsBtn = event.target.closest("#exportAllAssignedCartsBtn");
+
+        if (exportMyCartsBtn) {
+            event.preventDefault();
+            window.location.href = `${MEDIA_CATALOG_BASE}/export/my-carts.pdf`;
+            return;
+        }
+
+        if (exportSelectedCartBtn) {
+            event.preventDefault();
+
+            if (!selectedCart || !selectedCart.id) {
+                setStatus("Select a cart before exporting.", false);
+                return;
+            }
+
+            window.location.href =
+                `${MEDIA_CATALOG_BASE}/export/cart/${encodeURIComponent(selectedCart.id)}.pdf`;
+            return;
+        }
+
+        if (exportAllAssignedCartsBtn) {
+            event.preventDefault();
+            window.location.href =
+                `${MEDIA_CATALOG_BASE}/export/all-assigned-carts.pdf`;
+        }
+    });
+}
+
+
+function bindOwnershipManagement() {
+    if (!window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP) return;
+
+    $("refreshOwnershipBtn")?.addEventListener("click", loadOwnershipOwners);
+
+    document.querySelectorAll('[data-tab="ownership-management"]').forEach(tab => {
+        tab.addEventListener("click", loadOwnershipOwners);
+    });
+}
+
+
+async function loadOwnershipOwners() {
+    const el = $("ownershipOwners");
+    const cartsEl = $("ownershipUserCarts");
+
+    if (!el) return;
+
+    el.innerHTML = `<div class="muted">Loading assigned cart owners...</div>`;
+
+    if (cartsEl && !ownershipSelectedUser) {
+        cartsEl.innerHTML = "";
+    }
+
+    try {
+        const data = await apiGet("/api/ownership/owners", "Unable to load assigned cart owners.");
+        ownershipOwnersCache = data.owners || [];
+        renderOwnershipOwners(ownershipOwnersCache);
+        setStatus(`Loaded ${ownershipOwnersCache.length} assigned cart owner(s).`, true);
+    } catch (err) {
+        el.innerHTML = `<div class="muted">${escapeHtml(err.message || "Unable to load assigned cart owners.")}</div>`;
+        setStatus(err.message || "Unable to load assigned cart owners.", false);
+    }
+}
+
+
+function renderOwnershipOwners(owners) {
+    const el = $("ownershipOwners");
+    if (!el) return;
+
+    if (!owners.length) {
+        el.innerHTML = `<div class="muted">No assigned cart owners found.</div>`;
+        return;
+    }
+
+    el.innerHTML = `
+        <div class="sheet-wrap compact">
+            <table class="media-sheet ownership-table">
+                <thead>
+                        <th>User</th>
+                        <th>Email</th>
+                        <th>Carts</th>
+                        <th>Last Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${owners.map(owner => `
+                        <tr class="ownership-owner-row"
+                            data-owner-id="${escapeHtml(owner.owner_user_id)}">
+                            <td>${escapeHtml(owner.owner_display_name || owner.owner_email || "Unknown User")}</td>
+                            <td class="mono">${escapeHtml(owner.owner_email || "")}</td>
+                            <td>${escapeHtml(owner.cart_count || 0)}</td>
+                            <td>${escapeHtml(formatFriendlyDateTime(owner.last_updated_at))}</td>
+                            <td>
+                                <button class="mini-btn" type="button" data-view-owner-id="${escapeHtml(owner.owner_user_id)}">
+                                    View Carts
+                                </button>
+                                <a class="mini-btn" href="${MEDIA_CATALOG_BASE}/export/user/${encodeURIComponent(owner.owner_user_id)}/carts.pdf">
+                                    Export
+                                </a>
+                            </td>
+                        </tr>
+                    `).join("")}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    el.querySelectorAll(".ownership-owner-row").forEach(row => {
+        row.addEventListener("click", event => {
+            if (
+                event.target.closest("button") ||
+                event.target.closest("a")
+            ) {
+                return;
+            }
+
+            const owner = owners.find(
+                item => String(item.owner_user_id) === String(row.dataset.ownerId)
+            );
+
+            if (!owner) return;
+
+            el.querySelectorAll(".ownership-owner-row").forEach(item => {
+                item.classList.remove("active");
+            });
+
+            row.classList.add("active");
+            loadOwnershipUserCarts(owner);
+        });
+    });
+
+    el.querySelectorAll("[data-view-owner-id]").forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const owner = owners.find(
+                item => String(item.owner_user_id) === String(btn.dataset.viewOwnerId)
+            );
+
+            if (!owner) return;
+
+            el.querySelectorAll(".ownership-owner-row").forEach(item => {
+                item.classList.toggle(
+                    "active",
+                    String(item.dataset.ownerId) === String(owner.owner_user_id)
+                );
+            });
+
+            loadOwnershipUserCarts(owner);
+        });
+    });
+}
+
+
+async function loadOwnershipUserCarts(owner) {
+    const el = $("ownershipUserCarts");
+    if (!el) return;
+
+    ownershipSelectedUser = owner;
+
+    el.innerHTML = `<div class="muted">Loading carts for ${escapeHtml(owner.owner_display_name || owner.owner_email || "selected user")}...</div>`;
+
+    try {
+        const data = await apiGet(
+            `/api/ownership/users/${encodeURIComponent(owner.owner_user_id)}/carts`,
+            "Unable to load user carts."
+        );
+
+        renderOwnershipUserCarts(owner, data.carts || []);
+    } catch (err) {
+        el.innerHTML = `<div class="muted">${escapeHtml(err.message || "Unable to load user carts.")}</div>`;
+        setStatus(err.message || "Unable to load user carts.", false);
+    }
+}
+
+
+function renderOwnershipUserCarts(owner, carts) {
+    const el = $("ownershipUserCarts");
+    if (!el) return;
+
+    const ownerName = owner.owner_display_name || owner.owner_email || "Selected User";
+
+    if (!carts.length) {
+        el.innerHTML = `
+            <section class="media-subpanel">
+                <h3>${escapeHtml(ownerName)} Carts</h3>
+                <div class="muted">No carts assigned to this user.</div>
+            </section>
+        `;
+        return;
+    }
+
+    el.innerHTML = `
+        <section class="media-subpanel">
+            <div class="media-section-head">
+                <div>
+                    <h3>${escapeHtml(ownerName)} Carts</h3>
+                    <p class="muted">${escapeHtml(carts.length)} assigned cart(s).</p>
+                </div>
+
+                <div class="media-section-actions">
+                    <a class="media-btn ghost" href="${MEDIA_CATALOG_BASE}/export/user/${encodeURIComponent(owner.owner_user_id)}/carts.pdf">
+                        Export User Carts
+                    </a>
+                </div>
+            </div>
+
+            <div class="sheet-wrap compact">
+                <table class="media-sheet ownership-carts-table">
+                    <thead>
+                        <tr>
+                            <th>Cart</th>
+                            <th>Teacher</th>
+                            <th>Room</th>
+                            <th>Location</th>
+                            <th>Devices</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ownershipUserCartsBody">
+                        ${carts.map(cart => {
+                            const ownership = cart.ownership || {};
+                            return `
+                                <tr data-admin-cart-id="${escapeHtml(cart.id)}">
+                                    <td>
+                                        <button class="link-button" type="button" data-admin-open-cart-id="${escapeHtml(cart.id)}">
+                                            ${escapeHtml(cartDisplayName(cart))}
+                                        </button>
+                                        <div class="muted">${escapeHtml(cart.model_name || "")}</div>
+                                    </td>
+                                    <td>${renderAdminInlineEditField(cart.id, "teacher_name", ownership.teacher_name || "—")}</td>
+                                    <td>${renderAdminInlineEditField(cart.id, "room_number", ownership.room_number || "—")}</td>
+                                    <td>${renderLocationEditField(cart)}</td>
+                                    <td>
+                                        <span class="device-count-badge" data-admin-device-count-cart-id="${escapeHtml(cart.id)}">...</span>
+                                    </td>
+                                    <td>
+                                        <button class="mini-btn" type="button" data-admin-assign-owner-id="${escapeHtml(cart.id)}">
+                                            Assign Owner
+                                        </button>
+                                        <a class="mini-btn" href="${MEDIA_CATALOG_BASE}/export/cart/${encodeURIComponent(cart.id)}.pdf">
+                                            Export
+                                        </a>
+                                        ${cart.asset_url ? `<a class="mini-btn" href="${escapeHtml(cart.asset_url)}" target="_blank" rel="noopener">Snipe-IT</a>` : ""}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join("")}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    `;
+
+    bindOwnershipUserCartEvents(carts);
+    loadAdminVisibleCartDeviceCounts(carts);
+}
+
+
+function bindOwnershipUserCartEvents(carts) {
+    document.querySelectorAll("[data-admin-open-cart-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const cart = carts.find(item => String(item.id) === String(btn.dataset.adminOpenCartId));
+            if (cart) {
+                selectCart(cart);
+                document.querySelector('[data-tab="cart-management"]')?.click();
+            }
+        });
+    });
+
+    bindLocationEditButtons(carts, "#ownershipUserCartsBody [data-location-cart-id]");
+
+    document.querySelectorAll("[data-admin-assign-owner-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const cart = carts.find(item => String(item.id) === String(btn.dataset.adminAssignOwnerId));
+            if (cart) openAssignOwnerModal(cart);
+        });
+    });
+
+    document.querySelectorAll("#ownershipUserCartsBody .inline-edit-btn").forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const wrapper = btn.closest(".inline-edit-control");
+            if (!wrapper) return;
+
+            activateAdminInlineEdit(wrapper, carts);
+        });
+    });
+}
+
+
+async function loadAdminVisibleCartDeviceCounts(carts) {
+    await Promise.allSettled(carts.map(async cart => {
+        const cell = document.querySelector(`[data-admin-device-count-cart-id="${CSS.escape(String(cart.id))}"]`);
+        if (!cell) return;
+
+        try {
+            const data = await apiGet(`/api/carts/${cart.id}/devices`, "Unable to load device count.");
+            cell.textContent = String((data.devices || []).length);
+        } catch {
+            cell.textContent = "—";
+        }
+    }));
+}
+
+
+function renderAdminInlineEditField(cartId, field, value) {
+    const canManage = Boolean(window.MEDIA_CATALOG_CAN_MANAGE_OWNERSHIP);
+
+    if (!canManage) {
+        return `<span>${escapeHtml(value || "—")}</span>`;
+    }
+
+    return renderInlineEditField(cartId, field, value);
+}
+
+
+function activateAdminInlineEdit(wrapper, carts) {
+    const input = wrapper.querySelector(".inline-cart-field");
+    if (!input) return;
+
+    wrapper.classList.add("is-editing");
+    input.classList.remove("hidden");
+    input.classList.add("inline-edit-active");
+
+    input.focus();
+    input.select();
+
+    const finish = async () => {
+        await saveAdminInlineEdit(input, wrapper, carts);
+    };
+
+    input.addEventListener("keydown", async event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            await finish();
+        }
+
+        if (event.key === "Escape") {
+            event.preventDefault();
+            cancelInlineEdit(wrapper);
+        }
+    }, { once: false });
+
+    input.addEventListener("blur", finish, { once: true });
+}
+
+
+async function saveAdminInlineEdit(input, wrapper, carts) {
+    if (!input || input.dataset.saving === "1") return;
+
+    const row = input.closest("tr");
+    const cartId = input.dataset.cartId;
+    const cart = carts.find(c => String(c.id) === String(cartId));
+
+    if (!row || !cart) {
+        cancelInlineEdit(wrapper);
+        return;
+    }
+
+    input.dataset.saving = "1";
+
+    const body = {
+        teacher_name: row.querySelector('[data-field="teacher_name"]')?.value || "",
+        room_number: row.querySelector('[data-field="room_number"]')?.value || "",
+    };
+
+    try {
+        const data = await apiPost(
+            `/api/admin/carts/${cart.id}/metadata`,
+            body,
+            "Unable to update cart fields."
+        );
+
+        const updatedCart = data.cart || null;
+
+        if (updatedCart && ownershipSelectedUser) {
+            await loadOwnershipUserCarts(ownershipSelectedUser);
+        }
+
+        setStatus("Cart fields updated.", true);
+    } catch (err) {
+        setStatus(err.message || "Unable to update cart fields.", false);
+
+        if (ownershipSelectedUser) {
+            await loadOwnershipUserCarts(ownershipSelectedUser);
+        }
+    } finally {
+        delete input.dataset.saving;
+        cancelInlineEdit(wrapper);
+    }
+}
+
 function drawMyCartsRows(rows) {
     const tbody = $("myCartsBody");
     if (!tbody) return;
@@ -1647,12 +2061,14 @@ function drawMyCartsRows(rows) {
                     </button>
                     <div class="muted">${escapeHtml(cart.model_name || "")}</div>
                 </td>
-                <td><span class="readonly-owner">${escapeHtml(ownership.owner_display_name || ownership.owner_email || "Unassigned")}</span></td>
                 <td>
                     ${renderInlineEditField(cart.id, "teacher_name", ownership.teacher_name || "—")}
                 </td>
                 <td>
                     ${renderInlineEditField(cart.id, "room_number", ownership.room_number || "—")}
+                </td>
+                <td>
+                    ${renderLocationEditField(cart)}
                 </td>
                 <td>
                     <span
@@ -1668,6 +2084,7 @@ function drawMyCartsRows(rows) {
     }).join("");
 
     bindMyCartTableEvents(rows);
+    bindLocationEditButtons(rows);
     loadVisibleCartDeviceCounts(rows);
 }
 
@@ -1876,5 +2293,180 @@ async function saveInlineEdit(input, wrapper, carts) {
     } finally {
         delete input.dataset.saving;
         cancelInlineEdit(wrapper);
+    }
+}
+
+function renderLocationEditField(cart) {
+    return `
+        <div class="inline-edit-control location-edit-control" data-cart-id="${escapeHtml(cart.id)}">
+            <span class="inline-edit-value">${escapeHtml(cart.location_name || "—")}</span>
+            <button class="inline-edit-btn location-edit-btn"
+                    type="button"
+                    data-location-cart-id="${escapeHtml(cart.id)}"
+                    title="Update Location">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+                     stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <path d="M12 20h9"/>
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                </svg>
+            </button>
+        </div>
+    `;
+}
+
+function bindLocationEditButtons(carts, selector = "[data-location-cart-id]") {
+    document.querySelectorAll(selector).forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cart = carts.find(item => String(item.id) === String(btn.dataset.locationCartId));
+            if (!cart) return;
+
+            openLocationPicker(cart);
+        });
+    });
+}
+
+async function getLocationOptions() {
+    if (locationOptionsCache) {
+        return locationOptionsCache;
+    }
+
+    const data = await apiGet("/api/locations", "Unable to load Snipe-IT locations.");
+    locationOptionsCache = data.locations || [];
+    return locationOptionsCache;
+}
+
+async function openLocationPicker(cart) {
+    setStatus("Loading locations...", true);
+
+    try {
+        const locations = await getLocationOptions();
+
+        if (!locations.length) {
+            setStatus("No Snipe-IT locations found.", false);
+            return;
+        }
+
+        const options = locations.map(location => `
+            <option value="${escapeHtml(location.id)}">
+                ${escapeHtml(location.name)}
+            </option>
+        `).join("");
+
+        openConfirmModal({
+            title: "Update Cart Location",
+            messageHtml: `
+                <p class="confirm-copy">
+                    Update location for <strong>${escapeHtml(cart.asset_tag || cart.name || "this cart")}</strong>.
+                </p>
+
+                <div class="form-card">
+                    <label class="media-label" for="cartLocationSelect">Location</label>
+                    <select id="cartLocationSelect" class="media-input">
+                        <option value="">Select location...</option>
+                        ${options}
+                    </select>
+                </div>
+
+                <p class="muted">
+                    This updates the cart asset location in Snipe-IT.
+                </p>
+            `,
+            buttonText: "Update Location",
+            action: async () => {
+                const locationId = $("cartLocationSelect")?.value || "";
+                await updateCartLocation(cart, locationId);
+            }
+        });
+
+        setStatus("Locations loaded.", true);
+    } catch (err) {
+        setStatus(err.message || "Unable to load locations.", false);
+    }
+}
+
+
+async function updateCartLocation(cart, locationId) {
+    if (!locationId) {
+        setStatus("Select a location first.", false);
+        return;
+    }
+
+    setStatus("Updating cart location...", true);
+
+    try {
+        const data = await apiPost(
+            `/api/carts/${cart.id}/location`,
+            { location_id: locationId },
+            "Unable to update cart location."
+        );
+
+        setStatus(data.message || "Cart location updated.", true);
+
+        await loadMyCarts();
+
+        if (ownershipSelectedUser) {
+            await loadOwnershipUserCarts(ownershipSelectedUser);
+        }
+
+        if (data.cart) {
+            selectedCart = data.cart;
+        }
+
+        if (
+            selectedCart &&
+            String(selectedCart.id) === String(cart.id)
+        ) {
+            await selectCart(selectedCart);
+        }
+    } catch (err) {
+        setStatus(err.message || "Unable to update cart location.", false);
+    }
+}
+
+async function preloadLocationOptions() {
+    try {
+        await getLocationOptions();
+    } catch {
+        // Do not block Media Catalog load if Snipe-IT locations fail.
+    }
+}
+
+function formatFriendlyDateTime(value) {
+    if (!value) return "—";
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+        return value;
+    }
+
+    const options = {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    };
+
+    if (window.MEDIA_CATALOG_TIMEZONE) {
+        options.timeZone = window.MEDIA_CATALOG_TIMEZONE;
+        options.timeZoneName = "short";
+    }
+
+    try {
+        return parsed.toLocaleString(undefined, options);
+    } catch {
+        return parsed.toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+        });
     }
 }
