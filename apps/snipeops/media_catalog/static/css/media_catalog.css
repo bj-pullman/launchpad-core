@@ -1558,3 +1558,50 @@ body[data-theme="light"] .ownership-owner-row.active td {
 body[data-theme="light"] .ownership-owner-row.active td:first-child {
     box-shadow: inset 3px 0 0 #2563eb;
 }
+
+/* Ownership Management email pill */
+.email-pill {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid rgba(122, 162, 255, 0.30);
+    background: rgba(122, 162, 255, 0.12);
+    color: #9db8ff;
+    font-size: 0.82rem;
+    font-weight: 850;
+    line-height: 1.2;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+body[data-theme="light"] .email-pill {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+/* Ownership Management cart count pill */
+.cart-count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.30);
+    color: #6ee7b7;
+
+    font-size: 0.85rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+body[data-theme="light"] .cart-count-pill {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #166534;
+}

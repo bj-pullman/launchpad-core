@@ -1734,8 +1734,16 @@ function renderOwnershipOwners(owners) {
                         <tr class="ownership-owner-row"
                             data-owner-id="${escapeHtml(owner.owner_user_id)}">
                             <td>${escapeHtml(owner.owner_display_name || owner.owner_email || "Unknown User")}</td>
-                            <td class="mono">${escapeHtml(owner.owner_email || "")}</td>
-                            <td>${escapeHtml(owner.cart_count || 0)}</td>
+                            <td>
+                                <span class="email-pill">
+                                    ${escapeHtml(owner.owner_email || "No email")}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="cart-count-pill">
+                                    ${escapeHtml(owner.cart_count || 0)}
+                                </span>
+                            </td>
                             <td>${escapeHtml(formatFriendlyDateTime(owner.last_updated_at))}</td>
                             <td>
                                 <button class="mini-btn" type="button" data-view-owner-id="${escapeHtml(owner.owner_user_id)}">
