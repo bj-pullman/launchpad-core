@@ -73,6 +73,24 @@ const TAB_CONFIG = {
   },
 };
 
+async function parseJsonResponse(response, fallbackMessage = "Request failed.") {
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+
+  if (!contentType.includes("application/json")) {
+    console.error("Expected JSON but received:", text);
+    throw new Error("Server returned a non-JSON response. Please refresh and sign in again.");
+  }
+
+  const data = text ? JSON.parse(text) : {};
+
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || data.message || fallbackMessage);
+  }
+
+  return data;
+}
+
 let activeTab = "models";
 let activeRows = [];
 let mappingRows = [];
@@ -81,13 +99,14 @@ let mappingCategories = [];
 let mappingManufacturers = [];
 
 async function fetchRows(endpoint) {
-  const res = await fetch(endpoint);
-  const data = await res.json();
+  const res = await fetch(endpoint, {
+    headers: {
+      "Accept": "application/json",
+      "X-Requested-With": "fetch"
+    }
+  });
 
-  if (!res.ok || data.ok === false) {
-    throw new Error(data.error || "Request failed");
-  }
-
+  const data = await parseJsonResponse(res, "Request failed.");
   return data.rows || [];
 }
 
@@ -221,12 +240,15 @@ async function runSync() {
   status.textContent = "Syncing Snipe-IT catalog...";
 
   try {
-    const res = await fetch("/snipe-catalog/sync", { method: "POST" });
-    const data = await res.json();
+    const res = await fetch("/snipe-catalog/sync", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "X-Requested-With": "fetch"
+      }
+    });
 
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || "Sync failed.");
-    }
+    const data = await parseJsonResponse(res, "Sync failed.");
 
     status.textContent = "Sync complete.";
 
@@ -362,13 +384,16 @@ async function loadModelMappings() {
 
   try {
     const res = await fetch(
-      `/snipe-catalog/api/model-mappings?source=${encodeURIComponent(source)}&limit=${encodeURIComponent(limit)}`
+      `/snipe-catalog/api/model-mappings?source=${encodeURIComponent(source)}&limit=${encodeURIComponent(limit)}`,
+      {
+        headers: {
+          "Accept": "application/json",
+          "X-Requested-With": "fetch"
+        }
+      }
     );
-    const data = await res.json();
 
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || "Failed to load model mappings.");
-    }
+    const data = await parseJsonResponse(res, "Failed to load model mappings.");
 
     mappingRows = data.rows || [];
     mappingModels = data.models || [];
@@ -407,6 +432,8 @@ async function saveModelMappings() {
     const res = await fetch("/snipe-catalog/api/model-mappings", {
       method: "POST",
       headers: {
+        "Accept": "application/json",
+        "X-Requested-With": "fetch",
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -415,11 +442,7 @@ async function saveModelMappings() {
       })
     });
 
-    const data = await res.json();
-
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || "Failed to save mappings.");
-    }
+    const data = await parseJsonResponse(res, "Failed to save mappings.");
 
     status.textContent = data.message || "Mappings saved.";
     await loadModelMappings();
@@ -504,7 +527,9 @@ async function createSnipeModel() {
     const res = await fetch("/snipe-catalog/api/models", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+          "Accept": "application/json",
+          "X-Requested-With": "fetch",
+          "Content-Type": "application/json"
       },
       body: JSON.stringify({
         name,
@@ -514,11 +539,7 @@ async function createSnipeModel() {
       })
     });
 
-    const data = await res.json();
-
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || "Failed to create model.");
-    }
+    const data = await parseJsonResponse(res, "Some message.");
 
     status.textContent = data.message || "Model created.";
 
@@ -564,7 +585,8 @@ async function createAndMapModelFromModal() {
   const source = document.getElementById("mappingSource").value;
 
   if (!rawValue || !name || !categoryId) {
-    status.textContent = "Raw model, friendly model name, and category ID are required.";
+    status.textContent =
+      "Raw model, friendly model name, and category ID are required.";
     return;
   }
 
@@ -572,9 +594,12 @@ async function createAndMapModelFromModal() {
   status.textContent = "Creating model...";
 
   try {
+
     const createRes = await fetch("/snipe-catalog/api/models", {
       method: "POST",
       headers: {
+        "Accept": "application/json",
+        "X-Requested-With": "fetch",
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -585,17 +610,15 @@ async function createAndMapModelFromModal() {
       })
     });
 
-    const createData = await createRes.json();
-
-    if (!createRes.ok || createData.ok === false) {
-      throw new Error(createData.error || "Failed to create model.");
-    }
+    await parseJsonResponse(createRes, "Failed to create model.");
 
     status.textContent = "Model created. Saving mapping...";
 
     const mapRes = await fetch("/snipe-catalog/api/model-mappings", {
       method: "POST",
       headers: {
+        "Accept": "application/json",
+        "X-Requested-With": "fetch",
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -609,15 +632,14 @@ async function createAndMapModelFromModal() {
       })
     });
 
-    const mapData = await mapRes.json();
-
-    if (!mapRes.ok || mapData.ok === false) {
-      throw new Error(mapData.error || "Model created, but mapping failed.");
-    }
+    await parseJsonResponse(mapRes, "Model created, but mapping failed.");
 
     status.textContent = "Model created and mapped.";
+
     closeCreateModelModal();
+
     await loadModelMappings();
+
   } catch (err) {
     status.textContent = err.message || "Failed to create and map model.";
   } finally {
@@ -686,12 +708,13 @@ async function runModelCleanup() {
   status.textContent = "Scanning Snipe-IT catalog data...";
 
   try {
-    const res = await fetch(`/snipe-catalog/api/cleanup/models?min_score=${encodeURIComponent(minScore)}`);
-    const data = await res.json();
-
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || "Cleanup scan failed.");
-    }
+    const res = await fetch(`/snipe-catalog/api/cleanup/models?min_score=${encodeURIComponent(minScore)}`, {
+      headers: {
+        "Accept": "application/json",
+        "X-Requested-With": "fetch"
+      }
+    });
+    const data = await parseJsonResponse(res, "Some message.");
 
     cleanupReport = data;
 
@@ -905,7 +928,9 @@ async function previewCleanupMerge() {
     const res = await fetch("/snipe-catalog/api/cleanup/models/preview-merge", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+          "Accept": "application/json",
+          "X-Requested-With": "fetch",
+          "Content-Type": "application/json"
       },
       body: JSON.stringify({
         keeper_model_id: keeperModelId,
@@ -913,11 +938,7 @@ async function previewCleanupMerge() {
       })
     });
 
-    const data = await res.json();
-
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || "Preview failed.");
-    }
+    const data = await parseJsonResponse(res, "Some message.");
 
     preview.innerHTML = `
       <div class="cleanup-warning-box">
@@ -961,7 +982,9 @@ async function submitCleanupMerge() {
     const res = await fetch("/snipe-catalog/api/cleanup/models/merge", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+          "Accept": "application/json",
+          "X-Requested-With": "fetch",
+          "Content-Type": "application/json"
       },
       body: JSON.stringify({
         keeper_model_id: keeperModelId,
@@ -975,11 +998,7 @@ async function submitCleanupMerge() {
       })
     });
 
-    const data = await res.json();
-
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || "Model merge failed.");
-    }
+    const data = await parseJsonResponse(res, "Some message.");
 
     status.textContent = data.message || "Model merge complete.";
 
@@ -1017,7 +1036,9 @@ async function renameModel(modelId, name, modelNumber) {
     const res = await fetch("/snipe-catalog/api/cleanup/models/rename", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+          "Accept": "application/json",
+          "X-Requested-With": "fetch",
+          "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model_id: Number(modelId),
@@ -1026,11 +1047,7 @@ async function renameModel(modelId, name, modelNumber) {
       })
     });
 
-    const data = await res.json();
-
-    if (!res.ok || data.ok === false) {
-      throw new Error(data.error || "Rename failed.");
-    }
+    const data = await parseJsonResponse(res, "Some message.");
 
     status.textContent = data.message || "Model renamed.";
     await runModelCleanup();

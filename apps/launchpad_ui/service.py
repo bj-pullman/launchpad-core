@@ -381,7 +381,7 @@ def microsoft_integration_settings():
         "microsoft_client_id": settings["microsoft_client_id"],
         "microsoft_tenant_id": settings["microsoft_tenant_id"],
         "microsoft_redirect_uri": settings["microsoft_redirect_uri"],
-
+        
         # Microsoft Intune / Graph
         "intune_enabled": get_bool_setting("integrations.microsoft.intune.enabled", False),
         "intune_tenant_id": get_setting("integrations.microsoft.intune.tenant_id", ""),

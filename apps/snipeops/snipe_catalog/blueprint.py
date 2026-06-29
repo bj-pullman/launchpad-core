@@ -317,8 +317,6 @@ def api_cleanup_models_rename():
             category_id=payload.get("category_id"),
         )
 
-        run_full_sync()
-
         return jsonify(result)
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
@@ -346,8 +344,6 @@ def api_cleanup_models_merge():
             keeper_updates=payload.get("keeper_updates") or {},
             delete_source_models=delete_source_models,
         )
-
-        run_full_sync()
 
         return jsonify(result)
     except Exception as exc:
