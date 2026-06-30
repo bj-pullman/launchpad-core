@@ -91,8 +91,14 @@ def budget_accounts(department_name: str):
         abort(403)
     if not has_budget_view(user_id):
         abort(403)
-    list_budget_accounts(department_name=department_name, page=request.args.get("page", default=1, type=int), per_page=100)
-    return redirect(url_for("finance.budget_loading", department_name=department_name))
+
+    account_page = list_budget_accounts(
+        department_name=department_name,
+        page=request.args.get("page", default=1, type=int),
+        per_page=100,
+    )
+
+    return f"{department_name} Budget Accounts route is active. Rows found: {account_page['total']}."
 
 
 @bp.route("/budget-accounts/<int:budget_account_id>")
