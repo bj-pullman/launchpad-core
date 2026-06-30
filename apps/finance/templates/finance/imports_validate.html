@@ -1,331 +1,65 @@
 {% extends "launchpad_ui/base.html" %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
-{% endblock %}
-
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">{% endblock %}
 {% block content %}
 <div class="page-shell finance-shell">
-  <div class="finance-back-row">
-    <a href="{{ url_for('finance.imports_mapping', department_name=department_name, run_id=run.id) }}" class="finance-back-link">
-      <span class="finance-back-link-icon" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M15 18l-6-6 6-6"/>
-        </svg>
-      </span>
-      <span>Mapping</span>
-    </a>
-  </div>
-
-  <div class="page-header">
-    <div>
-      <h1>{{ department_name }} Import Validation</h1>
-      <p class="page-subtitle">{{ run.original_filename }} • {{ run.import_type|replace("_", " ")|title }}</p>
-    </div>
-  </div>
+  <div class="finance-back-row"><a href="{{ url_for('finance.imports_mapping', department_name=department_name, run_id=run.id) }}" class="finance-back-link">Mapping</a></div>
+  <div class="page-header"><div><h1>{{ department_name }} Import Validation</h1><p class="page-subtitle">{{ run.original_filename }} - {% if run.import_type == "transactions" %}Ledger Transactions{% else %}{{ run.import_type|replace("_", " ")|title }}{% endif %}</p></div></div>
 
   <div class="form-actions" style="margin-top: 12px; margin-bottom: 16px;">
-    <a
-      href="{{ url_for('finance.imports', department_name=department_name) }}"
-      class="btn btn-secondary"
-    >
-      Cancel
-    </a>
-
-    <a
-      href="{{ url_for('finance.imports_mapping', department_name=department_name, run_id=run.id) }}"
-      class="btn btn-secondary"
-    >
-      Back to Mapping
-    </a>
-
+    <a href="{{ url_for('finance.imports', department_name=department_name) }}" class="btn btn-secondary">Cancel</a>
+    <a href="{{ url_for('finance.imports_mapping', department_name=department_name, run_id=run.id) }}" class="btn btn-secondary">Back to Mapping</a>
     {% if validation.errors %}
-      <a
-        href="{{ url_for('finance.imports', department_name=department_name) }}"
-        class="btn finance-import-btn"
-      >
-        Upload Corrected File
-      </a>
+      <a href="{{ url_for('finance.imports', department_name=department_name) }}" class="btn finance-import-btn">Upload Corrected File</a>
     {% elif can_manage and validation.valid_rows > 0 %}
-      <form method="post" class="finance-inline-form" data-confirm="Run this import now?" data-confirm-action="confirm">
-        <button type="submit" class="btn finance-import-btn">Run Import</button>
-      </form>
+      <form method="post" class="finance-inline-form"><button type="submit" class="btn finance-import-btn">{% if run.import_type == "transactions" %}Import Ledger{% else %}Run Import{% endif %}</button></form>
     {% endif %}
   </div>
 
   <div class="content-card">
-    <div class="table-wrap">
-      <table class="data-table">
-        <tbody>
-          <tr><th>Total Rows Read</th><td>{{ validation.total_rows }}</td></tr>
-          <tr><th>Ready to Import</th><td>{{ validation.ready_to_import_rows or validation.valid_rows }}</td></tr>
-          <tr><th>Will Create Records</th><td>{{ validation.create_rows or 0 }}</td></tr>
-          <tr><th>Will Update Existing Records</th><td>{{ validation.update_rows or 0 }}</td></tr>
-          <tr><th>Duplicate Rows</th><td>{{ validation.duplicate_rows or 0 }}</td></tr>
-          <tr><th>Ignored System / Total Rows</th><td>{{ validation.ignored_rows or 0 }}</td></tr>
-          <tr><th>Rows With Errors</th><td>{{ validation.error_rows or validation.errors|length }}</td></tr>
-          <tr><th>Vendors To Create</th><td>{{ validation.vendors_to_create }}</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="content-card">
-    <div class="finance-section-header">
-      <div>
-        <h2>Mapped Row Preview</h2>
-        <p class="page-subtitle">First {{ validation.preview_rows|length }} mapped rows before import.</p>
-      </div>
-    </div>
-
-{% if validation.preview_rows %}
-  <div class="table-wrap">
-    <table class="data-table finance-preview-table">
-      <thead>
-
-        {% if run.import_type == "transactions" %}
-
-        <tr>
-          <th>Action</th>
-          <th>Date</th>
-          <th>Description</th>
-          <th>Vendor</th>
-          <th>Type</th>
-          <th class="text-right">Spent</th>
-          <th class="text-right">Encumbered</th>
-          <th>Suggested</th>
-        </tr>
-
-        {% elif run.import_type == "vendors" %}
-
-          <tr>
-            <th>Vendor Name</th>
-            <th>Vendor Code</th>
-            <th>Website</th>
-            <th>Main Phone</th>
-            <th>Billing Email</th>
-            <th>Import Action</th>
-          </tr>
-
-        {% else %}
-
-          <tr>
-            <th>Title</th>
-            <th>Vendor</th>
-            <th>Account</th>
-            <th>PO</th>
-            <th class="text-right">Cost</th>
-            <th>Status</th>
-          </tr>
-
-        {% endif %}
-
-      </thead>
-
-      <tbody>
-
-        {% for row in validation.preview_rows %}
-
-          {% if run.import_type == "transactions" %}
-
-            <tr>
-              <td>
-                <div class="finance-record-title">
-                  {{ row._import_action_label or "Ready to Import" }}
-                </div>
-                <div class="finance-meta">
-                  {{ row._import_action_reason or "Row passed validation." }}
-                </div>
-              </td>
-
-              <td class="finance-nowrap">
-                {{ row.purchase_date or "—" }}
-              </td>
-
-              <td>
-                <div class="finance-record-title">
-                  {{ row.title or row.description or "Untitled Transaction" }}
-                </div>
-
-                {% if row.account_code or row.po_number %}
-                  <div class="finance-meta">
-                    {% if row.account_code %}
-                      Acct {{ row.account_code }}
-                    {% endif %}
-
-                    {% if row.account_code and row.po_number %}
-                      ·
-                    {% endif %}
-
-                    {% if row.po_number %}
-                      PO {{ row.po_number }}
-                    {% endif %}
-                  </div>
-                {% endif %}
-              </td>
-
-              <td>{{ row.vendor_name or "—" }}</td>
-
-              <td>
-                <span class="finance-pill">
-                  {{ row.transaction_type or "other" }}
-                </span>
-              </td>
-
-              <td class="text-right">
-                {{ row.expenditure_amount or "0.00" }}
-              </td>
-
-              <td class="text-right">
-                {{ row.encumbrance_amount or "0.00" }}
-              </td>
-
-              <td>{{ row.suggested_record_type or "—" }}</td>
-            </tr>
-
-          {% elif run.import_type == "vendors" %}
-
-            <tr>
-              <td>{{ row.vendor_name or "—" }}</td>
-              <td>{{ row.vendor_code or "—" }}</td>
-              <td>{{ row.website or "—" }}</td>
-              <td>{{ row.main_phone or "—" }}</td>
-              <td>{{ row.billing_email or "—" }}</td>
-              <td>{{ row._import_action or "—" }}</td>
-            </tr>
-
-          {% else %}
-
-            <tr>
-              <td>{{ row.title or "—" }}</td>
-              <td>{{ row.vendor_name or "—" }}</td>
-              <td>{{ row.account_code or "—" }}</td>
-              <td>{{ row.po_number or "—" }}</td>
-              <td class="text-right">{{ row.cost or "—" }}</td>
-              <td>{{ row.status or "—" }}</td>
-            </tr>
-
-          {% endif %}
-
-        {% endfor %}
-
-      </tbody>
-    </table>
-  </div>
-
-{% else %}
-
-      <div class="finance-empty">
-        <h3>No preview rows</h3>
-        <p>No rows were available for preview.</p>
-      </div>
-    {% endif %}
-  </div>
-
-{% if validation.category_suggestions %}
-  <div class="content-card">
-    <div class="finance-section-header">
-      <div>
-        <h3 class="finance-section-title">Category Suggestions</h3>
-        <p class="page-subtitle">
-          Approve suggested category matches so these imported category names resolve automatically.
-        </p>
-      </div>
-    </div>
-
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Imported Category</th>
-            <th>Suggested Match</th>
-            <th>Confidence</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {% for suggestion in validation.category_suggestions %}
-            <tr>
-              <td>{{ suggestion.imported_category_name }}</td>
-              <td>{{ suggestion.suggested_category_name or "—" }}</td>
-              <td>{{ (suggestion.confidence_score * 100)|round(0) }}%</td>
-              <td>
-                {% if suggestion.suggested_category_id %}
-                  <form
-                    method="post"
-                    action="{{ url_for(
-                      'finance.imports_category_suggestion_approve',
-                      department_name=department_name,
-                      run_id=run.id,
-                      suggestion_id=suggestion.id
-                    ) }}"
-                    class="finance-inline-form"
-                    data-confirm="Approve this category match?"
-                    data-confirm-action="confirm"
-                  >
-                    <button type="submit" class="btn btn-primary">
-                      Use Suggested Category
-                    </button>
-                  </form>
-                {% else %}
-                  <span class="muted">No suggestion</span>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-{% endif %}
-
-  <div class="content-card">
-    <div class="finance-section-header">
-      <div>
-        <h3 class="finance-section-title">Validation Errors</h3>
-        <p class="page-subtitle">These rows will be skipped unless corrected.</p>
-      </div>
-
-      {% if validation.errors %}
-        <div class="page-header-actions">
-          <a
-            href="{{ url_for('finance.export_import_errors', run_id=run.id) }}"
-            class="btn finance-import-btn"
-          >
-            Export Errors CSV
-          </a>
-        </div>
+    <div class="finance-section-header"><div><h2 class="finance-section-title">{% if run.import_type == "transactions" %}Ledger Import Summary{% else %}Import Summary{% endif %}</h2><p class="finance-section-subtitle">Review the mapped data before running the import.</p></div></div>
+    <div class="table-wrap"><table class="data-table"><tbody>
+      <tr><th>Total Rows Read</th><td>{{ validation.total_rows }}</td></tr>
+      <tr><th>Ready to Import</th><td>{{ validation.ready_to_import_rows or validation.valid_rows }}</td></tr>
+      {% if run.import_type == "transactions" %}
+        <tr><th>Ledger Classification</th><td>T/C values will classify rows as budget, encumbrance, expenditure, journal, transfer, or other.</td></tr>
+        <tr><th>Fiscal Year Mapping</th><td>Mapped dates will be matched to Launchpad Fiscal Year settings.</td></tr>
+        <tr><th>Linked Objects</th><td>Ledger rows will build Budget Accounts, Purchase Orders, Vendors, and Record links.</td></tr>
+      {% else %}
+        <tr><th>Will Create Records</th><td>{{ validation.create_rows or 0 }}</td></tr>
+        <tr><th>Will Update Existing Records</th><td>{{ validation.update_rows or 0 }}</td></tr>
       {% endif %}
-    </div>
+      <tr><th>Duplicate Rows</th><td>{{ validation.duplicate_rows or 0 }}</td></tr>
+      <tr><th>Rows With Errors</th><td>{{ validation.error_rows or validation.errors|length }}</td></tr>
+      <tr><th>Vendors To Create</th><td>{{ validation.vendors_to_create }}</td></tr>
+    </tbody></table></div>
+  </div>
 
-    {% if validation.errors %}
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Row</th>
-              <th>Source Identifier</th>
-              <th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for error in validation.errors %}
-              <tr>
-                <td>{{ error.row_number }}</td>
-                <td>{{ error.source_identifier or "—" }}</td>
-                <td>{{ error.error_message }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+  <div class="content-card">
+    <div class="finance-section-header"><div><h2>Mapped Row Preview</h2><p class="page-subtitle">First {{ validation.preview_rows|length }} mapped rows before import.</p></div></div>
+    {% if validation.preview_rows %}
+      <div class="table-wrap"><table class="data-table finance-preview-table"><thead>
+        {% if run.import_type == "transactions" %}
+          <tr><th>Date</th><th>T/C</th><th>Type</th><th>Description</th><th>Vendor</th><th>PO</th><th>Account</th><th>Budget</th><th>Spent</th><th>Encumbered</th></tr>
+        {% elif run.import_type == "vendors" %}
+          <tr><th>Vendor Name</th><th>Vendor Code</th><th>Website</th><th>Main Phone</th><th>Billing Email</th><th>Import Action</th></tr>
+        {% else %}
+          <tr><th>Title</th><th>Vendor</th><th>Account</th><th>PO</th><th>Cost</th><th>Status</th></tr>
+        {% endif %}
+      </thead><tbody>
+        {% for row in validation.preview_rows %}
+          {% if run.import_type == "transactions" %}
+            <tr><td>{{ row.purchase_date or "-" }}</td><td>{{ row.transaction_code or row.tc or "-" }}</td><td>{{ row.transaction_type or row.ledger_kind or "auto" }}</td><td>{{ row.title or row.description or "Untitled Ledger Row" }}</td><td>{{ row.vendor_name or "-" }}</td><td>{{ row.po_number or "-" }}</td><td>{{ row.account_code or "-" }}</td><td>{{ row.budget_amount or "0.00" }}</td><td>{{ row.expenditure_amount or "0.00" }}</td><td>{{ row.encumbrance_amount or "0.00" }}</td></tr>
+          {% elif run.import_type == "vendors" %}
+            <tr><td>{{ row.vendor_name or "-" }}</td><td>{{ row.vendor_code or "-" }}</td><td>{{ row.website or "-" }}</td><td>{{ row.main_phone or "-" }}</td><td>{{ row.billing_email or "-" }}</td><td>{{ row._import_action or "-" }}</td></tr>
+          {% else %}
+            <tr><td>{{ row.title or "-" }}</td><td>{{ row.vendor_name or "-" }}</td><td>{{ row.account_code or "-" }}</td><td>{{ row.po_number or "-" }}</td><td>{{ row.cost or "-" }}</td><td>{{ row.status or "-" }}</td></tr>
+          {% endif %}
+        {% endfor %}
+      </tbody></table></div>
     {% else %}
-      <div class="finance-empty">
-        <h3>No validation errors</h3>
-        <p>The file passed validation and is ready to import.</p>
-      </div>
+      <div class="finance-empty"><h3>No preview rows</h3><p>No rows were available for preview.</p></div>
     {% endif %}
   </div>
 </div>
 {% endblock %}
+{% block extra_js %}<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>{% endblock %}
