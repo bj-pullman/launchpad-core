@@ -1,1 +1,117 @@
-Hello Budget Accounts
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
+{% set totals = namespace(current_budget=0, spent=0, encumbered=0, available=0) %}
+{% for account in budget_accounts %}
+  {% set totals.current_budget = totals.current_budget + (account.current_budget|float) %}
+  {% set totals.spent = totals.spent + (account.spent_amount|float) %}
+  {% set totals.encumbered = totals.encumbered + (account.encumbered_amount|float) %}
+  {% set totals.available = totals.available + (account.available_amount|float) %}
+{% endfor %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Budget Accounts</h1>
+      <p class="page-subtitle">Budget accounts calculated from ledger activity. These accounts reconcile budget, spending, encumbrances, and available balance by fiscal year.</p>
+    </div>
+  </div>
+
+  <div class="finance-stats finance-stats-wide">
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Current Budget</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.current_budget) }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Spent</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.spent) }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Encumbered</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.encumbered) }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Available</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.available) }}</div>
+    </div>
+  </div>
+
+  <div class="content-card finance-filter-card">
+    <form method="get" class="finance-record-filters">
+      <div class="form-field">
+        <label>Fiscal Year</label>
+        <input type="text" name="fiscal_year_code" value="{{ selected_fiscal_year_code or '' }}" placeholder="FY26">
+      </div>
+      <div class="form-field">
+        <label>Search Account</label>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="Fund, budget unit, account, title...">
+      </div>
+      <div class="finance-filter-actions">
+        <button class="btn btn-primary">Filter</button>
+        <a class="btn btn-ghost" href="{{ url_for('finance.budget_accounts', department_name=department_name) }}">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h2 class="finance-section-title">Accounts</h2>
+        <p class="finance-section-subtitle">Showing page {{ account_page.page }} of {{ account_page.total_pages }} · {{ account_page.total }} account(s)</p>
+      </div>
+    </div>
+
+    {% if budget_accounts %}
+    <div class="table-wrap">
+      <table class="data-table finance-money-table">
+        <thead>
+          <tr>
+            <th>FY</th>
+            <th>Fund</th>
+            <th>Budget Unit</th>
+            <th>Account</th>
+            <th>Title</th>
+            <th>Budget</th>
+            <th>Spent</th>
+            <th>Encumbered</th>
+            <th>Available</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for account in budget_accounts %}
+          <tr class="finance-row-link" data-href="{{ url_for('finance.budget_account_detail', budget_account_id=account.id) }}">
+            <td>{{ account.fiscal_year_code or "—" }}</td>
+            <td>{{ account.fund or "—" }}</td>
+            <td>
+              <div class="finance-record-title">{{ account.budget_unit or "—" }}</div>
+            </td>
+            <td><span class="finance-pill">{{ account.account_code or "—" }}</span></td>
+            <td>{{ account.account_title or "—" }}</td>
+            <td>${{ "{:,.2f}".format(account.current_budget|float) }}</td>
+            <td>${{ "{:,.2f}".format(account.spent_amount|float) }}</td>
+            <td>${{ "{:,.2f}".format(account.encumbered_amount|float) }}</td>
+            <td class="{% if account.available_amount|float < 0 %}finance-negative{% endif %}">${{ "{:,.2f}".format(account.available_amount|float) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="finance-empty">
+      <h3>No budget accounts found</h3>
+      <p>Import an eFinance Expenditure Audit Trail with budget/account fields to populate Budget Accounts.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}
