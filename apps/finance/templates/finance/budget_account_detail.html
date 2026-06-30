@@ -1,0 +1,179 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+
+  <div class="finance-back-row">
+    <a class="finance-back-link" href="{{ url_for('finance.budget_accounts', department_name=department_name) }}">
+      <span class="finance-back-link-icon">←</span>
+      Back to Budget Accounts
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>Budget Account {{ budget_account.account_code or "—" }}</h1>
+      <p class="page-subtitle">
+        {{ budget_account.account_title or "Budget account rollup" }} · {{ budget_account.fiscal_year_code or "No fiscal year" }}
+      </p>
+    </div>
+  </div>
+
+  <div class="finance-stats finance-stats-wide">
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Current Budget</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(budget_account.current_budget|float) }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Spent</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(budget_account.spent_amount|float) }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Encumbered</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(budget_account.encumbered_amount|float) }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Available</div>
+      <div class="finance-stat-value {% if budget_account.available_amount|float < 0 %}finance-negative{% endif %}">${{ "{:,.2f}".format(budget_account.available_amount|float) }}</div>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h2 class="finance-section-title">Account Details</h2>
+        <p class="finance-section-subtitle">Fund, budget unit, and budget totals derived from ledger activity.</p>
+      </div>
+    </div>
+
+    <div class="finance-detail-grid">
+      <div>
+        <div class="finance-detail-label">Fiscal Year</div>
+        <div class="finance-detail-value">{{ budget_account.fiscal_year_code or "—" }}</div>
+      </div>
+      <div>
+        <div class="finance-detail-label">Fund</div>
+        <div class="finance-detail-value">{{ budget_account.fund or "—" }}</div>
+      </div>
+      <div>
+        <div class="finance-detail-label">Budget Unit</div>
+        <div class="finance-detail-value">{{ budget_account.budget_unit or "—" }}</div>
+      </div>
+      <div>
+        <div class="finance-detail-label">Account</div>
+        <div class="finance-detail-value">{{ budget_account.account_code or "—" }}</div>
+      </div>
+      <div>
+        <div class="finance-detail-label">Original Budget</div>
+        <div class="finance-detail-value">${{ "{:,.2f}".format(budget_account.original_budget|float) }}</div>
+      </div>
+      <div>
+        <div class="finance-detail-label">Adjustments / Transfers</div>
+        <div class="finance-detail-value">${{ "{:,.2f}".format((budget_account.budget_adjustments|float) + (budget_account.budget_transfers|float)) }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h2 class="finance-section-title">Purchase Orders</h2>
+        <p class="finance-section-subtitle">POs tied to this budget account.</p>
+      </div>
+    </div>
+
+    {% if budget_account.purchase_orders %}
+    <div class="table-wrap">
+      <table class="data-table finance-money-table">
+        <thead>
+          <tr>
+            <th>PO</th>
+            <th>Vendor</th>
+            <th>Encumbered</th>
+            <th>Paid</th>
+            <th>Remaining</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for po in budget_account.purchase_orders %}
+          <tr class="finance-row-link" data-href="{{ url_for('finance.purchase_order_detail', purchase_order_id=po.id) }}">
+            <td><span class="finance-pill">{{ po.po_number or "—" }}</span></td>
+            <td>{{ po.vendor_name or "—" }}</td>
+            <td>${{ "{:,.2f}".format(po.current_encumbrance|float) }}</td>
+            <td>${{ "{:,.2f}".format(po.paid_amount|float) }}</td>
+            <td>${{ "{:,.2f}".format(po.remaining_encumbrance|float) }}</td>
+            <td><span class="finance-status-chip" data-status="{{ po.status or 'open' }}">{{ (po.status or 'open')|replace('_', ' ')|title }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="finance-empty">
+      <h3>No purchase orders tied to this account</h3>
+      <p>POs will appear here after ledger rows with PO numbers are imported and matched to this account.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h2 class="finance-section-title">Ledger Activity</h2>
+        <p class="finance-section-subtitle">Budget, encumbrance, and expenditure transactions for this account.</p>
+      </div>
+    </div>
+
+    {% if budget_account.activity %}
+    <div class="table-wrap">
+      <table class="data-table finance-money-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>T/C</th>
+            <th>Kind</th>
+            <th>Vendor / Description</th>
+            <th>PO</th>
+            <th>Budget</th>
+            <th>Paid</th>
+            <th>Encumbered</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in budget_account.activity %}
+          <tr class="finance-row-link" data-href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">
+            <td>{{ item.purchase_date or "—" }}</td>
+            <td><span class="finance-pill">{{ item.transaction_code or "—" }}</span></td>
+            <td>{{ (item.ledger_kind or "other")|replace("_", " ")|title }}</td>
+            <td>
+              <div class="finance-record-title">{{ item.vendor_name or "—" }}</div>
+              <div class="finance-meta">{{ item.description or item.title or "No description" }}</div>
+            </td>
+            <td>{{ item.po_number or "—" }}</td>
+            <td>${{ "{:,.2f}".format(item.budget_amount|float) }}</td>
+            <td>${{ "{:,.2f}".format(item.expenditure_amount|float) }}</td>
+            <td>${{ "{:,.2f}".format(item.encumbrance_amount|float) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="finance-empty">
+      <h3>No ledger activity found</h3>
+      <p>Activity will appear here after budget/account rows are imported.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}
