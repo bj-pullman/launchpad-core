@@ -1,10 +1,7 @@
 {% extends "launchpad_ui/base.html" %}
 
 {% block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
->
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -12,11 +9,6 @@
 
   <div class="finance-back-row">
     <a href="{{ url_for('finance.department_overview', department_name=department_name) }}" class="finance-back-link">
-      <span class="finance-back-link-icon" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M15 18l-6-6 6-6"/>
-        </svg>
-      </span>
       <span>Overview</span>
     </a>
   </div>
@@ -24,7 +16,7 @@
   <div class="page-header">
     <div>
       <h1>{{ department_name }} Import</h1>
-      <p class="page-subtitle">Upload, map, and manage Finance imports.</p>
+      <p class="page-subtitle">Import ERP ledger activity, managed records, vendors, and supporting Finance reference files.</p>
     </div>
   </div>
 
@@ -33,58 +25,25 @@
   <div class="content-card">
     <div class="finance-section-header">
       <div>
-        <h3 class="finance-section-title">What should I import?</h3>
-        <p class="finance-section-subtitle">Use this quick guide if you have not worked in Finance imports recently.</p>
+        <h3 class="finance-section-title">Import Workflow</h3>
+        <p class="finance-section-subtitle">Finance now uses a ledger-first model. ERP audit trail files should be imported as Ledger Transactions, then linked to Records, Budget Accounts, and Purchase Orders.</p>
       </div>
     </div>
 
     <div class="finance-import-help-grid">
-      <div
-        class="finance-import-help-card"
-        data-import-help-card="records"
-        role="button"
-        tabindex="0"
-        aria-label="Choose Records import type"
-      >
-        <h4>Records</h4>
-
-        <p>
-          Use records for tracked finance items such as renewals, purchases,
-          subscriptions, service contracts, assets, and operational expenses
-          that should remain visible in the Finance module.
-        </p>
+      <div class="finance-import-help-card finance-import-help-card-primary" data-import-help-card="transactions" role="button" tabindex="0" aria-label="Choose Ledger Transactions import type">
+        <h4>Ledger Transactions</h4>
+        <p>Use this for eFinance Expenditure Audit Trail exports and other raw ERP activity. These rows become the accounting source of truth for Budget Accounts, Purchase Orders, spending, encumbrances, and Record matching.</p>
       </div>
 
-      <div
-        class="finance-import-help-card"
-        data-import-help-card="transactions"
-        role="button"
-        tabindex="0"
-        aria-label="Choose Transactions import type"
-      >
-        <h4>Transactions</h4>
-
-        <p>
-          Use transactions for raw ERP, accounting, purchasing, or ledger
-          activity rows imported for review, reconciliation, reporting,
-          or later promotion into tracked finance records.
-        </p>
+      <div class="finance-import-help-card" data-import-help-card="records" role="button" tabindex="0" aria-label="Choose Managed Records import type">
+        <h4>Managed Records</h4>
+        <p>Use this only for curated Finance items you already manage outside the ERP, such as known renewals, subscriptions, service contracts, and manually tracked operational items.</p>
       </div>
 
-      <div
-        class="finance-import-help-card"
-        data-import-help-card="vendors"
-        role="button"
-        tabindex="0"
-        aria-label="Choose Vendors import type"
-      >
+      <div class="finance-import-help-card" data-import-help-card="vendors" role="button" tabindex="0" aria-label="Choose Vendors import type">
         <h4>Vendors</h4>
-
-        <p>
-          Use vendors to create or update supplier, provider, reseller,
-          or contractor contact information including websites, phone numbers,
-          billing contacts, support contacts, and sales representatives.
-        </p>
+        <p>Use vendors to create or update supplier, provider, reseller, or contractor contact information.</p>
       </div>
     </div>
   </div>
@@ -93,7 +52,7 @@
     <div class="finance-section-header">
       <div>
         <h3 class="finance-section-title">Upload</h3>
-        <p class="finance-section-subtitle">Start a manual import for records, vendors, or transactions.</p>
+        <p class="finance-section-subtitle">Start a manual import. For ERP exports, choose Ledger Transactions.</p>
       </div>
     </div>
 
@@ -104,8 +63,8 @@
             <label for="import_type">Import Type</label>
             <select id="import_type" name="import_type" data-import-type-select>
               <option value="" {% if not selected_import_type %}selected{% endif %}>Choose a type</option>
-              <option value="records" {% if selected_import_type == "records" %}selected{% endif %}>Records</option>
-              <option value="transactions" {% if selected_import_type == "transactions" %}selected{% endif %}>Transactions</option>
+              <option value="transactions" {% if selected_import_type == "transactions" %}selected{% endif %}>Ledger Transactions</option>
+              <option value="records" {% if selected_import_type == "records" %}selected{% endif %}>Managed Records</option>
               <option value="vendors" {% if selected_import_type == "vendors" %}selected{% endif %}>Vendors</option>
             </select>
           </div>
@@ -126,21 +85,14 @@
               <label class="finance-file-label">
                 <span class="finance-file-button">Choose CSV/XLSX</span>
                 <span class="finance-file-name" id="finance-file-name">No file selected</span>
-                <input
-                  type="file"
-                  id="import_file"
-                  name="import_file"
-                  accept=".csv,.xlsx"
-                >
+                <input type="file" id="import_file" name="import_file" accept=".csv,.xlsx">
               </label>
             </div>
           </div>
         </div>
 
         <div class="finance-form-actions">
-          <button type="submit" class="btn btn-primary finance-action-button">
-            Continue to Mapping
-          </button>
+          <button type="submit" class="btn btn-primary finance-action-button">Continue to Mapping</button>
         </div>
       </form>
     {% else %}
