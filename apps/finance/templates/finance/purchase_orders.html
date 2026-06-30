@@ -1,0 +1,127 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
+{% set totals = namespace(encumbered=0, paid=0, remaining=0, open_count=0) %}
+{% for po in purchase_orders %}
+  {% set totals.encumbered = totals.encumbered + (po.current_encumbrance|float) %}
+  {% set totals.paid = totals.paid + (po.paid_amount|float) %}
+  {% set totals.remaining = totals.remaining + (po.remaining_encumbrance|float) %}
+  {% if po.status == "open" %}{% set totals.open_count = totals.open_count + 1 %}{% endif %}
+{% endfor %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Purchase Orders</h1>
+      <p class="page-subtitle">Purchase orders calculated from encumbrance and payment ledger activity.</p>
+    </div>
+  </div>
+
+  <div class="finance-stats finance-stats-wide">
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Purchase Orders</div>
+      <div class="finance-stat-value">{{ po_page.total }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Encumbered</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.encumbered) }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Paid</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.paid) }}</div>
+    </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Remaining</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.remaining) }}</div>
+    </div>
+  </div>
+
+  <div class="content-card finance-filter-card">
+    <form method="get" class="finance-record-filters">
+      <div class="form-field">
+        <label>Fiscal Year</label>
+        <input type="text" name="fiscal_year_code" value="{{ selected_fiscal_year_code or '' }}" placeholder="FY26">
+      </div>
+      <div class="form-field">
+        <label>Status</label>
+        <select name="status">
+          <option value="">All</option>
+          <option value="open" {% if selected_status == 'open' %}selected{% endif %}>Open</option>
+          <option value="closed" {% if selected_status == 'closed' %}selected{% endif %}>Closed</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Vendor</label>
+        <input type="text" name="vendor_q" value="{{ vendor_q or '' }}" placeholder="Vendor name...">
+      </div>
+      <div class="form-field">
+        <label>Search</label>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="PO, vendor, account, record...">
+      </div>
+      <div class="finance-filter-actions">
+        <button class="btn btn-primary">Filter</button>
+        <a class="btn btn-ghost" href="{{ url_for('finance.purchase_orders', department_name=department_name) }}">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h2 class="finance-section-title">Purchase Orders</h2>
+        <p class="finance-section-subtitle">Showing page {{ po_page.page }} of {{ po_page.total_pages }} · {{ po_page.total }} purchase order(s)</p>
+      </div>
+    </div>
+
+    {% if purchase_orders %}
+    <div class="table-wrap">
+      <table class="data-table finance-money-table">
+        <thead>
+          <tr>
+            <th>FY</th>
+            <th>PO</th>
+            <th>Vendor</th>
+            <th>Budget Account</th>
+            <th>Encumbered</th>
+            <th>Paid</th>
+            <th>Remaining</th>
+            <th>Record</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for po in purchase_orders %}
+          <tr class="finance-row-link" data-href="{{ url_for('finance.purchase_order_detail', purchase_order_id=po.id) }}">
+            <td>{{ po.fiscal_year_code or "—" }}</td>
+            <td><span class="finance-pill">{{ po.po_number or "—" }}</span></td>
+            <td>{{ po.vendor_name or "—" }}</td>
+            <td>{{ po.account_code or "—" }}<div class="finance-meta">{{ po.budget_account_title or po.budget_unit or "" }}</div></td>
+            <td>${{ "{:,.2f}".format(po.current_encumbrance|float) }}</td>
+            <td>${{ "{:,.2f}".format(po.paid_amount|float) }}</td>
+            <td class="{% if po.remaining_encumbrance|float < 0 %}finance-negative{% endif %}">${{ "{:,.2f}".format(po.remaining_encumbrance|float) }}</td>
+            <td>{{ po.linked_record_title or "Unlinked" }}</td>
+            <td><span class="finance-pill">{{ po.status|replace("_", " ")|title }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="finance-empty">
+      <h3>No purchase orders found</h3>
+      <p>Import ledger activity with PO numbers to build Purchase Orders.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}
