@@ -1,0 +1,23 @@
+{% extends "launchpad_ui/base.html" %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">{% endblock %}
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+  <div class="finance-back-row"><a class="finance-back-link" href="{{ url_for('finance.ledger', department_name=department_name) }}">Back to Ledger</a></div>
+  <div class="page-header"><div><h1>Ledger Transaction</h1><p class="page-subtitle">{{ ledger_transaction.description or ledger_transaction.title or "ERP ledger row" }}</p></div></div>
+  <div class="content-card">
+    <div class="finance-section-header"><div><h2 class="finance-section-title">Details</h2><p class="finance-section-subtitle">Accounting identity for this ledger row.</p></div></div>
+    <div class="finance-detail-grid">
+      <div><span>Fiscal Year</span><strong>{{ ledger_transaction.fiscal_year_code or "-" }}</strong></div>
+      <div><span>Date</span><strong>{{ ledger_transaction.purchase_date or "-" }}</strong></div>
+      <div><span>T/C</span><strong>{{ ledger_transaction.transaction_code or "-" }}</strong></div>
+      <div><span>Type</span><strong>{{ ledger_transaction.ledger_kind|replace("_", " ")|title }}</strong></div>
+      <div><span>Vendor</span><strong>{{ ledger_transaction.vendor_friendly_name or ledger_transaction.vendor_name or ledger_transaction.matched_vendor_name or "-" }}</strong></div>
+      <div><span>PO</span><strong>{{ ledger_transaction.po_number or "-" }}</strong></div>
+      <div><span>Account</span><strong>{{ ledger_transaction.account_code or "-" }}</strong></div>
+      <div><span>Record</span><strong>{{ ledger_transaction.linked_record_title or "Unlinked" }}</strong></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>{% endblock %}
