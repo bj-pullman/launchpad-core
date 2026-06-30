@@ -1,0 +1,117 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+
+  <div class="page-header">
+    <div>
+      <h1>{{ department_name }} Ledger</h1>
+      <p class="page-subtitle">ERP audit trail activity grouped by fiscal year, transaction code, purchase order, budget account, and linked Finance Record.</p>
+    </div>
+    {% if can_manage %}
+    <div class="page-header-actions">
+      <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name, import_type='transactions') }}">Import Ledger</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="content-card finance-filter-card">
+    <form method="get" class="finance-record-filters">
+      <div class="form-field">
+        <label>Fiscal Year</label>
+        <input type="text" name="fiscal_year_code" value="{{ selected_fiscal_year_code or '' }}" placeholder="FY26">
+      </div>
+      <div class="form-field">
+        <label>Ledger Kind</label>
+        <select name="ledger_kind">
+          <option value="">All</option>
+          <option value="budget" {% if selected_ledger_kind == 'budget' %}selected{% endif %}>Budget</option>
+          <option value="encumbrance" {% if selected_ledger_kind == 'encumbrance' %}selected{% endif %}>Encumbrance</option>
+          <option value="expenditure" {% if selected_ledger_kind == 'expenditure' %}selected{% endif %}>Expenditure</option>
+          <option value="other" {% if selected_ledger_kind == 'other' %}selected{% endif %}>Other</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>T/C</label>
+        <input type="text" name="transaction_code" value="{{ selected_transaction_code or '' }}" placeholder="21">
+      </div>
+      <div class="form-field">
+        <label>Vendor</label>
+        <input type="text" name="vendor_q" value="{{ vendor_q or '' }}" placeholder="Vendor name...">
+      </div>
+      <div class="form-field">
+        <label>PO</label>
+        <input type="text" name="po_number" value="{{ po_number or '' }}" placeholder="PO number...">
+      </div>
+      <div class="form-field">
+        <label>Search</label>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="Description, account, record...">
+      </div>
+      <div class="finance-filter-actions">
+        <button class="btn btn-primary">Filter</button>
+        <a class="btn btn-ghost" href="{{ url_for('finance.ledger', department_name=department_name) }}">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h2 class="finance-section-title">Ledger Transactions</h2>
+        <p class="finance-section-subtitle">Showing page {{ ledger_page.page }} of {{ ledger_page.total_pages }} · {{ ledger_page.total }} transaction(s)</p>
+      </div>
+    </div>
+
+    {% if ledgers %}
+    <div class="table-wrap">
+      <table class="data-table finance-money-table">
+        <thead>
+          <tr>
+            <th>FY</th>
+            <th>Date</th>
+            <th>T/C</th>
+            <th>Vendor / Description</th>
+            <th>PO</th>
+            <th>Account</th>
+            <th>Paid</th>
+            <th>Encumbered</th>
+            <th>Record</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in ledgers %}
+          <tr class="finance-row-link" data-href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">
+            <td>{{ item.fiscal_year_code or "—" }}</td>
+            <td>{{ item.purchase_date or "—" }}</td>
+            <td><span class="finance-pill">{{ item.transaction_code or "—" }}</span><div class="finance-meta">{{ item.ledger_kind|replace("_", " ")|title }}</div></td>
+            <td><div class="finance-record-title">{{ item.vendor_friendly_name or item.vendor_name or item.matched_vendor_name or "—" }}</div><div class="finance-meta">{{ item.description or item.title or "No description" }}</div></td>
+            <td>{{ item.po_number or "—" }}</td>
+            <td>{{ item.account_code or "—" }}<div class="finance-meta">{{ item.budget_unit or "" }}</div></td>
+            <td>${{ "{:,.2f}".format(item.expenditure_amount|float) }}</td>
+            <td>${{ "{:,.2f}".format(item.encumbrance_amount|float) }}</td>
+            <td>{{ item.linked_record_title or "Unlinked" }}</td>
+            <td><span class="finance-pill">{{ item.review_status|replace("_", " ")|title }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="finance-empty">
+      <h3>No ledger transactions found</h3>
+      <p>Import an eFinance Expenditure Audit Trail to populate the Ledger.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}
