@@ -37,6 +37,7 @@ function initFinanceUI() {
   initFinanceTransactionBulkSelection();
   initFinanceSettingsModal();
   initializeFinanceImportTypeHelp();
+  initFinanceLoadingOverlay();
 }
 
 function initVendorFormToggle() {
@@ -936,4 +937,34 @@ function initializeFinanceImportTypeHelp() {
   select.addEventListener("change", updateImportHelp);
 
   updateImportHelp();
+}
+
+function initFinanceLoadingOverlay() {
+  const overlay = document.getElementById("finance-loading-overlay");
+
+  if (!overlay) {
+    return;
+  }
+
+  function showLoading() {
+    overlay.hidden = false;
+  }
+
+  document.querySelectorAll("a[href*='/budget']").forEach((link) => {
+    link.addEventListener("click", showLoading);
+  });
+
+  document.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", showLoading);
+  });
+
+  document.querySelectorAll("[data-finance-loading-submit]").forEach((field) => {
+    field.addEventListener("change", function () {
+      showLoading();
+
+      if (field.form) {
+        field.form.requestSubmit();
+      }
+    });
+  });
 }

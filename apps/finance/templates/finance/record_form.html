@@ -58,10 +58,69 @@
       <div class="finance-form-grid">
         <div class="finance-field">
           <label for="record_type">Record Type</label>
-          <select id="record_type" name="record_type" required>
-            <option value="renewal" {% if form_mode == "edit" and record.record_type == "renewal" %}selected{% endif %}>Renewal</option>
-            <option value="purchase" {% if form_mode == "edit" and record.record_type == "purchase" %}selected{% endif %}>Purchase</option>
-          </select>
+              <select id="record_type" name="record_type">
+                {% set selected_type = record.record_type if form_mode == "edit" else "" %}
+
+                <option value="one_time_purchase" {% if selected_type == "one_time_purchase" or selected_type == "purchase" %}selected{% endif %}>
+                  One-Time Purchase
+                </option>
+
+                <option value="renewal" {% if selected_type == "renewal" %}selected{% endif %}>
+                  Renewal
+                </option>
+
+                <option value="blanket_po" {% if selected_type == "blanket_po" %}selected{% endif %}>
+                  Blanket PO
+                </option>
+
+                <option value="subscription" {% if selected_type == "subscription" %}selected{% endif %}>
+                  Subscription
+                </option>
+
+                <option value="service_agreement" {% if selected_type == "service_agreement" %}selected{% endif %}>
+                  Service Agreement
+                </option>
+
+                <option value="maintenance_agreement" {% if selected_type == "maintenance_agreement" %}selected{% endif %}>
+                  Maintenance Agreement
+                </option>
+
+                <option value="software_license" {% if selected_type == "software_license" %}selected{% endif %}>
+                  Software License
+                </option>
+
+                <option value="hardware" {% if selected_type == "hardware" %}selected{% endif %}>
+                  Hardware
+                </option>
+
+                <option value="professional_services" {% if selected_type == "professional_services" %}selected{% endif %}>
+                  Professional Services
+                </option>
+
+                <option value="utilities" {% if selected_type == "utilities" %}selected{% endif %}>
+                  Utilities
+                </option>
+
+                <option value="membership" {% if selected_type == "membership" %}selected{% endif %}>
+                  Membership
+                </option>
+
+                <option value="training_conference" {% if selected_type == "training_conference" %}selected{% endif %}>
+                  Training / Conference
+                </option>
+
+                <option value="lease" {% if selected_type == "lease" %}selected{% endif %}>
+                  Lease
+                </option>
+
+                <option value="insurance" {% if selected_type == "insurance" %}selected{% endif %}>
+                  Insurance
+                </option>
+
+                <option value="other" {% if selected_type == "other" %}selected{% endif %}>
+                  Other
+                </option>
+              </select>
         </div>
 
         <div class="finance-field finance-field-span-2">

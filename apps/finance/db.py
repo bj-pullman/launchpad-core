@@ -44,6 +44,7 @@ def init_finance_db():
             CREATE TABLE IF NOT EXISTS finance_vendors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 vendor_name TEXT NOT NULL UNIQUE,
+                friendly_name TEXT NULL,
                 vendor_code TEXT NULL,
                 website TEXT NULL,
                 main_phone TEXT NULL,
@@ -479,6 +480,11 @@ def init_finance_db():
         if "deleted_at" not in finance_vendor_columns:
             conn.execute(
                 "ALTER TABLE finance_vendors ADD COLUMN deleted_at TEXT NULL"
+            )
+
+        if "friendly_name" not in finance_vendor_columns:
+            conn.execute(
+                "ALTER TABLE finance_vendors ADD COLUMN friendly_name TEXT NULL"
             )
 
         import_profile_field_columns = conn.execute(

@@ -31,14 +31,36 @@
   <div class="content-card">
     <form method="post" class="finance-form">
       <div class="finance-form-grid">
-        <div class="finance-field finance-field-span-2">
-          <label for="vendor_name">Vendor Name</label>
-          <input type="text" id="vendor_name" name="vendor_name" required value="{{ vendor.vendor_name if form_mode == 'edit' else '' }}">
+        <div class="form-field">
+          <label>Friendly Name</label>
+          <input
+            type="text"
+            name="friendly_name"
+            value="{{ vendor.friendly_name if vendor else '' }}"
+            placeholder="Display name shown throughout Finance"
+          >
+        </div>
+        
+        <div class="form-field">
+          <label>ERP Vendor Name</label>
+          <input
+            type="text"
+            value="{{ vendor.vendor_name if vendor else '' }}"
+            disabled
+            class="finance-readonly-field"
+            title="This value is synchronized from the ERP and cannot be edited."
+          >
         </div>
 
-        <div class="finance-field">
-          <label for="vendor_code">Vendor Code</label>
-          <input type="text" id="vendor_code" name="vendor_code" value="{{ vendor.vendor_code if form_mode == 'edit' else '' }}">
+        <div class="form-field">
+          <label>ERP Vendor Code</label>
+          <input
+            type="text"
+            value="{{ vendor.vendor_code if vendor else '' }}"
+            disabled
+            class="finance-readonly-field"
+            title="This value is synchronized from the ERP and cannot be edited."
+          >
         </div>
 
         <div class="finance-field">
@@ -53,12 +75,12 @@
 
         <div class="finance-field">
           <label for="billing_email">Billing Email</label>
-          <input type="email" id="billing_email" name="billing_email" value="{{ vendor.billing_email if form_mode == 'edit' else '' }}">
+          <input type="text" id="billing_email" name="billing_email" value="{{ vendor.billing_email if form_mode == 'edit' else '' }}">
         </div>
 
         <div class="finance-field">
           <label for="support_email">Support Email</label>
-          <input type="email" id="support_email" name="support_email" value="{{ vendor.support_email if form_mode == 'edit' else '' }}">
+          <input type="text" id="support_email" name="support_email" value="{{ vendor.support_email if form_mode == 'edit' else '' }}">
         </div>
 
         <div class="finance-field">
@@ -68,7 +90,7 @@
 
         <div class="finance-field">
           <label for="sales_contact_email">Sales Contact Email</label>
-          <input type="email" id="sales_contact_email" name="sales_contact_email" value="{{ vendor.sales_contact_email if form_mode == 'edit' else '' }}">
+          <input type="text" id="sales_contact_email" name="sales_contact_email" value="{{ vendor.sales_contact_email if form_mode == 'edit' else '' }}">
         </div>
 
         {% if form_mode == "edit" %}

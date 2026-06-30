@@ -23,7 +23,7 @@
 
   <div class="page-header">
     <div>
-      <h1>{{ vendor.vendor_name }}</h1>
+      <h1>{{ vendor.friendly_name or vendor.vendor_name }}</h1>
       <p class="page-subtitle">Vendor detail.</p>
     </div>
     <div class="page-header-actions">
@@ -71,8 +71,9 @@
     <div class="table-wrap">
       <table class="data-table">
         <tbody>
-          <tr><th>Vendor Name</th><td>{{ vendor.vendor_name }}</td></tr>
-          <tr><th>Vendor Code</th><td>{{ vendor.vendor_code or "—" }}</td></tr>
+          <tr><th>Friendly Name</th><td>{{ vendor.friendly_name or "—" }}</td></tr>
+          <tr><th>ERP Vendor Name</th><td>{{ vendor.vendor_name }}</td></tr>
+          <tr><th>ERP Vendor Code</th><td>{{ vendor.vendor_code or "—" }}</td></tr>
           <tr><th>Website</th><td>{{ vendor.website or "—" }}</td></tr>
           <tr><th>Main Phone</th><td>{{ vendor.main_phone or "—" }}</td></tr>
           <tr><th>Billing Email</th><td>{{ vendor.billing_email or "—" }}</td></tr>

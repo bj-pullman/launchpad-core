@@ -26,7 +26,7 @@
 
   {% if can_view_budget %}
     <a
-      href="{{ url_for('finance.budget', department_name=department_name) }}"
+      href="{{ url_for('finance.budget_loading', department_name=department_name) }}"
       class="{% if active_tab == 'budget' %}active{% endif %}"
     >Budget</a>
   {% endif %}

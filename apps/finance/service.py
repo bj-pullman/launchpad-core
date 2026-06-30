@@ -13,6 +13,7 @@ from openpyxl import load_workbook
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
+import hashlib
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FINANCE_UPLOADS_DIR = BASE_DIR / "instance" / "finance" / "uploads"
@@ -929,6 +930,7 @@ def log_renewal_notification_sent(
 def create_vendor(
     vendor_name: str,
     vendor_code: str | None = None,
+    friendly_name: str | None = None,
     website: str | None = None,
     main_phone: str | None = None,
     billing_email: str | None = None,
@@ -948,6 +950,7 @@ def create_vendor(
             """
             INSERT INTO finance_vendors (
                 vendor_name,
+                friendly_name,
                 vendor_code,
                 website,
                 main_phone,
@@ -961,10 +964,11 @@ def create_vendor(
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?)
             """,
             (
                 vendor_name,
+                normalize_text(friendly_name) or suggest_vendor_friendly_name(vendor_name),
                 normalize_text(vendor_code),
                 normalize_text(website),
                 normalize_text(main_phone),
@@ -985,6 +989,7 @@ def update_vendor(
     vendor_id: int,
     vendor_name: str,
     vendor_code: str | None = None,
+    friendly_name: str | None = None,
     website: str | None = None,
     main_phone: str | None = None,
     billing_email: str | None = None,
@@ -1006,6 +1011,7 @@ def update_vendor(
             UPDATE finance_vendors
             SET
                 vendor_name = ?,
+                friendly_name = ?,
                 vendor_code = ?,
                 website = ?,
                 main_phone = ?,
@@ -1021,6 +1027,7 @@ def update_vendor(
             """,
             (
                 vendor_name,
+                normalize_text(friendly_name) or suggest_vendor_friendly_name(vendor_name),
                 normalize_text(vendor_code),
                 normalize_text(website),
                 normalize_text(main_phone),
@@ -1081,6 +1088,37 @@ def normalize_vendor_name(value: str | None) -> str | None:
 
     # normal title case
     return " ".join(word.capitalize() for word in v.split())
+
+def build_vendor_display_name(vendor: dict | None) -> str:
+    if not vendor:
+        return ""
+
+    return (
+        normalize_text(vendor.get("friendly_name"))
+        or normalize_text(vendor.get("vendor_name"))
+        or ""
+    )
+
+
+def suggest_vendor_friendly_name(vendor_name: str | None) -> str | None:
+    vendor_name = normalize_text(vendor_name)
+    if not vendor_name:
+        return None
+
+    name = vendor_name
+
+    use_tax_suffixes = [
+        " - USE TAX",
+        " USE TAX",
+    ]
+
+    upper_name = name.upper()
+    for suffix in use_tax_suffixes:
+        if upper_name.endswith(suffix):
+            name = name[: -len(suffix)].strip()
+            break
+
+    return normalize_vendor_name(name)
 
 def update_record(
     *,
@@ -2125,6 +2163,28 @@ def build_friendly_import_title(source_row: dict, row_number: int | None = None)
 
     return "Imported Finance Item"
 
+def normalize_import_vendor_fields(mapped: dict) -> dict:
+    vendor_name = normalize_text(mapped.get("vendor_name"))
+    vendor_code = normalize_text(mapped.get("vendor_code"))
+
+    if vendor_name:
+        parsed_name, parsed_code = split_efinance_vendor(vendor_name)
+
+        if parsed_code:
+            mapped["vendor_name"] = parsed_name
+            mapped["vendor_code"] = parsed_code
+        else:
+            mapped["vendor_name"] = parsed_name
+
+    if vendor_code and not str(vendor_code).isdigit():
+        parsed_name, parsed_code = split_efinance_vendor(vendor_code)
+
+        if parsed_code:
+            mapped["vendor_name"] = mapped.get("vendor_name") or parsed_name
+            mapped["vendor_code"] = parsed_code
+
+    return mapped
+
 def split_efinance_vendor(value: str | None) -> tuple[str | None, str | None]:
     value = normalize_text(value)
     if not value:
@@ -2133,7 +2193,9 @@ def split_efinance_vendor(value: str | None) -> tuple[str | None, str | None]:
     parts = value.split(maxsplit=1)
 
     if len(parts) == 2 and parts[0].isdigit():
-        return normalize_vendor_name(parts[1]), parts[0]
+        vendor_code = parts[0]
+        vendor_name = normalize_vendor_name(parts[1])
+        return vendor_name, vendor_code
 
     return normalize_vendor_name(value), None
 
@@ -2226,14 +2288,29 @@ def suggest_record_type_for_transaction(mapped: dict) -> str | None:
     if any(word in description for word in renewal_words):
         return "renewal"
 
-    if "COPIER SERVICE AGREEMENT" in description:
-        return "service_contract"
-
     if "BLANKET PO" in description:
         return "blanket_po"
 
-    if "CHANGE ORDER" in description:
-        return "change_order"
+    if "SUBSCRIPTION" in description:
+        return "subscription"
+
+    if "LICENSE" in description or "LICENCE" in description:
+        return "software_license"
+
+    if "SERVICE AGREEMENT" in description:
+        return "service_agreement"
+
+    if "MAINTENANCE" in description:
+        return "maintenance_agreement"
+
+    if "CONFERENCE" in description or "TRAINING" in description:
+        return "training_conference"
+
+    if "LEASE" in description:
+        return "lease"
+
+    if "INSURANCE" in description:
+        return "insurance"
 
     return None
 
@@ -2368,20 +2445,30 @@ def list_transactions_for_department(
     per_page = max(min(int(per_page or 100), 250), 25)
     offset = (page - 1) * per_page
 
-    where = ["department_name = ?"]
+    where = ["t.department_name = ?"]
     params = [department_name]
 
     if review_status:
-        where.append("review_status = ?")
+        where.append("t.review_status = ?")
         params.append(review_status)
 
     if transaction_type:
-        where.append("transaction_type = ?")
+        where.append("t.transaction_type = ?")
         params.append(transaction_type)
 
     if vendor_q:
-        where.append("LOWER(vendor_name) LIKE LOWER(?)")
-        params.append(f"%{vendor_q}%")
+        where.append(
+            """
+            (
+                LOWER(COALESCE(t.vendor_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(t.vendor_code, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(v.vendor_name, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(v.friendly_name, '')) LIKE LOWER(?)
+            )
+            """
+        )
+        term = f"%{vendor_q}%"
+        params.extend([term, term, term, term])
 
     where_sql = " AND ".join(where)
 
@@ -2389,7 +2476,8 @@ def list_transactions_for_department(
         total = conn.execute(
             f"""
             SELECT COUNT(*) AS count
-            FROM finance_transactions
+            FROM finance_transactions t
+            LEFT JOIN finance_vendors v ON v.id = t.vendor_id
             WHERE {where_sql}
             """,
             params,
@@ -2397,13 +2485,18 @@ def list_transactions_for_department(
 
         rows = conn.execute(
             f"""
-            SELECT *
-            FROM finance_transactions
+            SELECT
+                t.*,
+                v.friendly_name AS friendly_name,
+                v.vendor_name AS matched_vendor_name,
+                v.vendor_code AS matched_vendor_code
+            FROM finance_transactions t
+            LEFT JOIN finance_vendors v ON v.id = t.vendor_id
             WHERE {where_sql}
             ORDER BY
-                CASE WHEN purchase_date IS NULL OR purchase_date = '' THEN 1 ELSE 0 END,
-                purchase_date DESC,
-                id DESC
+                CASE WHEN t.purchase_date IS NULL OR t.purchase_date = '' THEN 1 ELSE 0 END,
+                t.purchase_date DESC,
+                t.id DESC
             LIMIT ? OFFSET ?
             """,
             [*params, per_page, offset],
@@ -2422,6 +2515,7 @@ def list_transactions_for_department(
         "prev_page": page - 1,
         "next_page": page + 1,
     }
+
 
 def get_transaction_by_id(transaction_id: int) -> dict | None:
     with get_connection() as conn:
@@ -2507,7 +2601,9 @@ def bulk_promote_transactions_to_records(
             transaction_type = (transaction.get("transaction_type") or "").strip().lower()
 
             if transaction_type in {"purchase", "credit_refund", "tax_fee"}:
-                record_type = "purchase"
+                record_type = "one_time_purchase"
+            elif transaction_type == "blanket_po":
+                record_type = "blanket_po"
             else:
                 record_type = transaction.get("suggested_record_type") or "renewal"
 
@@ -2939,10 +3035,162 @@ def get_or_create_vendor_for_import(
         vendor_id = create_vendor(
             vendor_name=vendor_name,
             vendor_code=vendor_code,
+            friendly_name=suggest_vendor_friendly_name(vendor_name),
         )
         return vendor_id, True
 
     return None, False
+
+def build_import_duplicate_key(mapped: dict) -> str:
+    parts = [
+        normalize_text(mapped.get("department_name")) or "",
+        normalize_text(mapped.get("po_number")) or "",
+        normalize_text(mapped.get("vendor_name")) or "",
+        normalize_text(mapped.get("vendor_code")) or "",
+        normalize_text(mapped.get("purchase_date")) or "",
+        normalize_text(mapped.get("cost")) or "",
+        normalize_text(mapped.get("title")) or "",
+    ]
+
+    raw_key = "|".join(part.strip().lower() for part in parts)
+    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+
+def find_existing_record_for_import(
+    *,
+    department_name: str | None,
+    po_number: str | None,
+    vendor_id: int | None,
+    title: str | None,
+) -> dict | None:
+    department_name = normalize_text(department_name)
+    po_number = normalize_text(po_number)
+    title = normalize_text(title)
+
+    if not department_name:
+        return None
+
+    with get_connection() as conn:
+        if po_number:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM finance_records
+                WHERE department_name = ?
+                  AND LOWER(TRIM(COALESCE(po_number, ''))) = LOWER(TRIM(?))
+                  AND status NOT IN ('archived', 'deleted')
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 1
+                """,
+                (department_name, po_number),
+            ).fetchone()
+
+            if row:
+                return dict(row)
+
+        if vendor_id and title:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM finance_records
+                WHERE department_name = ?
+                  AND vendor_id = ?
+                  AND LOWER(TRIM(title)) = LOWER(TRIM(?))
+                  AND status NOT IN ('archived', 'deleted')
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 1
+                """,
+                (department_name, vendor_id, title),
+            ).fetchone()
+
+            if row:
+                return dict(row)
+
+    return None
+
+
+def append_import_note(existing_notes: str | None, new_note: str | None) -> str | None:
+    existing_notes = normalize_text(existing_notes)
+    new_note = normalize_text(new_note)
+
+    if existing_notes and new_note:
+        return f"{existing_notes}\n\nImport update:\n{new_note}"
+
+    return existing_notes or new_note
+
+
+def upsert_record_from_import(
+    *,
+    mapped: dict,
+    vendor_id: int | None,
+    category_id: int | None,
+    title: str,
+    term_length: int | None,
+    notify_days_before: int,
+    created_by_user_id: int | None = None,
+) -> tuple[int, str]:
+    existing = find_existing_record_for_import(
+        department_name=mapped.get("department_name"),
+        po_number=mapped.get("po_number"),
+        vendor_id=vendor_id,
+        title=title,
+    )
+
+    if existing:
+        existing_cost = parse_cost_to_decimal(existing.get("cost"))
+        imported_cost = parse_cost_to_decimal(mapped.get("cost"))
+        new_cost = existing_cost + imported_cost
+
+        update_record(
+            record_id=existing["id"],
+            record_type=mapped.get("record_type") or existing.get("record_type") or "renewal",
+            title=existing.get("title") or title,
+            department_name=existing.get("department_name"),
+            vendor_id=vendor_id or existing.get("vendor_id"),
+            category_id=category_id or existing.get("category_id"),
+            account_code=mapped.get("account_code") or existing.get("account_code"),
+            po_number=mapped.get("po_number") or existing.get("po_number"),
+            purchase_date=mapped.get("purchase_date") or existing.get("purchase_date"),
+            service_start_date=mapped.get("service_start_date") or existing.get("service_start_date"),
+            use_purchase_date_as_start=not bool(mapped.get("service_start_date")),
+            term_length=term_length or existing.get("term_length"),
+            term_unit=mapped.get("term_unit") or existing.get("term_unit"),
+            expiration_date=mapped.get("expiration_date") or existing.get("expiration_date"),
+            renewal_date=mapped.get("renewal_date") or existing.get("renewal_date"),
+            notify_days_before=notify_days_before or existing.get("notify_days_before") or 30,
+            notification_recipients=mapped.get("notification_recipients") or existing.get("notification_recipients"),
+            status=mapped.get("status") or existing.get("status") or "active",
+            cost=str(new_cost.quantize(Decimal("0.01"))),
+            notes=append_import_note(existing.get("notes"), mapped.get("notes")),
+            changed_by_user_id=created_by_user_id,
+        )
+
+        return existing["id"], "updated"
+
+    record_id = create_record(
+        record_type=mapped.get("record_type") or "renewal",
+        title=title,
+        department_name=mapped.get("department_name") or "",
+        vendor_id=vendor_id,
+        category_id=category_id,
+        account_code=mapped.get("account_code"),
+        po_number=mapped.get("po_number"),
+        purchase_date=mapped.get("purchase_date"),
+        service_start_date=mapped.get("service_start_date"),
+        use_purchase_date_as_start=not bool(mapped.get("service_start_date")),
+        term_length=term_length,
+        term_unit=mapped.get("term_unit"),
+        expiration_date=mapped.get("expiration_date"),
+        renewal_date=mapped.get("renewal_date"),
+        notify_days_before=notify_days_before,
+        notification_recipients=mapped.get("notification_recipients"),
+        status=mapped.get("status") or "active",
+        cost=mapped.get("cost"),
+        notes=mapped.get("notes"),
+        created_by_user_id=created_by_user_id,
+    )
+
+    return record_id, "created"
 
 
 def execute_records_import(
@@ -2961,6 +3209,7 @@ def execute_records_import(
 
     total_rows = len(rows)
     created_rows = 0
+    updated_rows = 0
     skipped_rows = 0
     error_rows = 0
     vendors_created = 0
@@ -2981,6 +3230,7 @@ def execute_records_import(
     for index, row in enumerate(rows, start=2):
         try:
             mapped = apply_import_mapping(row, mappings, index)
+            mapped = normalize_import_vendor_fields(mapped)
 
             if default_department_name:
                 mapped["department_name"] = normalize_text(default_department_name)
@@ -3055,26 +3305,13 @@ def execute_records_import(
 
             title = normalize_text(mapped.get("title")) or "Imported Finance Item"
 
-            record_id = create_record(
-                record_type=mapped.get("record_type") or "renewal",
-                title=title,
-                department_name=mapped.get("department_name") or "",
+            record_id, import_action = upsert_record_from_import(
+                mapped=mapped,
                 vendor_id=vendor_id,
                 category_id=category_id,
-                account_code=mapped.get("account_code"),
-                po_number=mapped.get("po_number"),
-                purchase_date=mapped.get("purchase_date"),
-                service_start_date=mapped.get("service_start_date"),
-                use_purchase_date_as_start=not bool(mapped.get("service_start_date")),
+                title=title,
                 term_length=term_length,
-                term_unit=mapped.get("term_unit"),
-                expiration_date=mapped.get("expiration_date"),
-                renewal_date=mapped.get("renewal_date"),
                 notify_days_before=notify_days_before,
-                notification_recipients=mapped.get("notification_recipients"),
-                status=mapped.get("status") or "active",
-                cost=mapped.get("cost"),
-                notes=mapped.get("notes"),
                 created_by_user_id=created_by_user_id,
             )
 
@@ -3085,7 +3322,10 @@ def execute_records_import(
             if sent_now:
                 notifications_sent += 1
 
-            created_rows += 1
+            if import_action == "updated":
+                updated_rows += 1
+            else:
+                created_rows += 1
 
         except Exception as exc:
             error_rows += 1
@@ -3097,14 +3337,14 @@ def execute_records_import(
             )
 
     run_notes = (
-        f"Import completed. Created records: {created_rows}, "
+        f"Import completed. Created records: {created_rows}, Updated records: {updated_rows}, "
         f"Created vendors: {vendors_created}, "
         f"Notifications sent: {notifications_sent}, "
         f"Skipped: {skipped_rows}, Errors: {error_rows}."
     )
 
     final_status = "completed"
-    if error_rows and not created_rows:
+    if error_rows and not created_rows and not updated_rows:
         final_status = "completed_with_errors"
     elif error_rows:
         final_status = "completed_with_warnings"
@@ -3114,7 +3354,7 @@ def execute_records_import(
         status=final_status,
         total_rows=total_rows,
         created_rows=created_rows,
-        updated_rows=0,
+        updated_rows=updated_rows,
         skipped_rows=skipped_rows,
         error_rows=error_rows,
         run_notes=run_notes,
@@ -3124,7 +3364,7 @@ def execute_records_import(
     return {
         "total_rows": total_rows,
         "created_rows": created_rows,
-        "updated_rows": 0,
+        "updated_rows": updated_rows,
         "skipped_rows": skipped_rows,
         "error_rows": error_rows,
         "vendors_created": vendors_created,
@@ -3204,10 +3444,11 @@ def validate_records_import(
     category_suggestions = {}
     valid_rows = 0
     skipped_rows = 0
-    vendors_to_create = 0
+    vendors_to_create_keys = set()
 
     for index, row in enumerate(rows, start=2):
         mapped = apply_import_mapping(row, mappings, index)
+        mapped = normalize_import_vendor_fields(mapped)
 
         if default_department_name:
             mapped["department_name"] = normalize_text(default_department_name)
@@ -3236,7 +3477,9 @@ def validate_records_import(
             )
 
             if not existing_vendor and vendor_name:
-                vendors_to_create += 1
+                vendor_key = vendor_code or vendor_name
+                if vendor_key:
+                    vendors_to_create_keys.add(vendor_key.strip().lower())
 
         category_name = normalize_text(mapped.get("category_name"))
 
@@ -3326,7 +3569,7 @@ def validate_records_import(
         "total_rows": len(rows),
         "valid_rows": valid_rows,
         "skipped_rows": skipped_rows,
-        "vendors_to_create": vendors_to_create,
+        "vendors_to_create": len(vendors_to_create_keys),
         "preview_rows": preview_rows,
         "errors": errors,
         "category_suggestions": list(category_suggestions.values()),
@@ -3351,11 +3594,12 @@ def validate_vendors_import(
     errors = []
     valid_rows = 0
     skipped_rows = 0
-    vendors_to_create = 0
+    vendors_to_create_keys = set()
     vendors_to_update = 0
 
     for index, row in enumerate(rows, start=2):
         mapped = apply_import_mapping(row, mappings, index)
+        mapped = normalize_import_vendor_fields(mapped)
         row_errors = []
 
         vendor_name = normalize_vendor_name(mapped.get("vendor_name"))
@@ -3399,10 +3643,12 @@ def validate_vendors_import(
         else:
             valid_rows += 1
 
-            if existing_vendor:
-                vendors_to_update += 1
-            else:
-                vendors_to_create += 1
+        if existing_vendor:
+            vendors_to_update += 1
+        else:
+            vendor_key = vendor_code or vendor_name
+            if vendor_key:
+                vendors_to_create_keys.add(vendor_key.strip().lower())
 
         if len(preview_rows) < preview_limit:
             preview_rows.append(
@@ -3424,7 +3670,7 @@ def validate_vendors_import(
         "total_rows": len(rows),
         "valid_rows": valid_rows,
         "skipped_rows": skipped_rows,
-        "vendors_to_create": vendors_to_create,
+        "vendors_to_create": len(vendors_to_create_keys),
         "vendors_to_update": vendors_to_update,
         "preview_rows": preview_rows,
         "errors": errors,
@@ -3465,6 +3711,7 @@ def execute_vendors_import(
     for index, row in enumerate(rows, start=2):
         try:
             mapped = apply_import_mapping(row, mappings, index)
+            mapped = normalize_import_vendor_fields(mapped)
 
             vendor_name = normalize_vendor_name(mapped.get("vendor_name"))
             vendor_code = normalize_text(mapped.get("vendor_code"))
@@ -3744,6 +3991,177 @@ def parse_cost_to_decimal(value) -> Decimal:
         return Decimal(cleaned)
     except (InvalidOperation, ValueError):
         return Decimal("0")
+    
+def get_budget_page_context(
+    department_name: str,
+    year: int | None = None,
+    q: str | None = None,
+) -> dict:
+    rows = list_budget_records_for_department(department_name, year=year, q=q)
+
+    budget_summary = build_budget_summary_from_rows(
+        department_name=department_name,
+        fiscal_year=year,
+        rows=rows,
+    )
+
+    budget_dashboard = {
+        "category": build_budget_breakdown_from_rows(rows, group_by="category"),
+        "vendor": build_budget_breakdown_from_rows(rows, group_by="vendor"),
+        "month": build_budget_breakdown_from_rows(rows, group_by="month"),
+        "record_type": build_budget_breakdown_from_rows(rows, group_by="record_type"),
+        "status": build_budget_breakdown_from_rows(rows, group_by="status"),
+    }
+
+    return {
+        "rows": rows,
+        "summary": budget_summary,
+        "dashboard": budget_dashboard,
+    }
+
+def build_budget_summary_from_rows(
+    *,
+    department_name: str,
+    fiscal_year: int | None,
+    rows: list[dict],
+) -> dict:
+    total_spent = sum((row["_budget_cost"] for row in rows), Decimal("0"))
+    record_count = len(rows)
+    average_spend = (total_spent / record_count) if record_count else Decimal("0")
+
+    renewals_total = sum(
+        (
+            row["_budget_cost"]
+            for row in rows
+            if (row.get("record_type") or "").lower() == "renewal"
+        ),
+        Decimal("0"),
+    )
+
+    purchases_total = sum(
+        (
+            row["_budget_cost"]
+            for row in rows
+            if (row.get("record_type") or "").lower() == "purchase"
+        ),
+        Decimal("0"),
+    )
+
+    active_total = sum(
+        (
+            row["_budget_cost"]
+            for row in rows
+            if (row.get("status") or "").lower() == "active"
+        ),
+        Decimal("0"),
+    )
+
+    encumbrance_total = sum(
+        (
+            row["_budget_cost"]
+            for row in rows
+            if (row.get("status") or "").lower()
+            in {"encumbered", "encumbrance", "pending", "pending_approval"}
+        ),
+        Decimal("0"),
+    )
+
+    budget_target = get_budget_target_for_department(department_name, fiscal_year)
+    total_budget = budget_target["total_budget"]
+    remaining_budget = total_budget - total_spent
+
+    percent_used = Decimal("0")
+    if total_budget > 0:
+        percent_used = (total_spent / total_budget) * Decimal("100")
+    elif total_spent > 0:
+        percent_used = Decimal("100")
+
+    return {
+        "total_budget": total_budget,
+        "total_spent": total_spent,
+        "remaining_budget": remaining_budget,
+        "percent_used": percent_used.quantize(Decimal("0.1")),
+        "record_count": record_count,
+        "average_spend": average_spend,
+        "renewals_total": renewals_total,
+        "purchases_total": purchases_total,
+        "active_total": active_total,
+        "encumbrance_total": encumbrance_total,
+        "budget_target": budget_target,
+    }
+
+def build_budget_breakdown_from_rows(
+    rows: list[dict],
+    group_by: str = "category",
+) -> dict:
+    buckets = defaultdict(
+        lambda: {
+            "label": "",
+            "total_spent": Decimal("0"),
+            "record_count": 0,
+            "records": [],
+        }
+    )
+
+    for row in rows:
+        if group_by == "vendor":
+            label = row.get("friendly_name") or row.get("vendor_name") or "Unassigned Vendor"
+        elif group_by == "month":
+            anchor = row.get("_budget_anchor_date")
+            label = anchor.strftime("%Y-%m") if anchor else "No Date"
+        elif group_by == "record_type":
+            label = (row.get("record_type") or "Unassigned Type").replace("_", " ").title()
+        elif group_by == "status":
+            label = (row.get("status") or "Unassigned Status").replace("_", " ").title()
+        else:
+            label = row.get("category_name") or "Unassigned Category"
+
+        bucket = buckets[label]
+        bucket["label"] = label
+        bucket["total_spent"] += row["_budget_cost"]
+        bucket["record_count"] += 1
+        bucket["records"].append(row)
+
+    total_spent = sum((item["total_spent"] for item in buckets.values()), Decimal("0"))
+
+    sorted_bucket_items = sorted(
+        buckets.items(),
+        key=lambda kv: kv[0] if group_by == "month" else (kv[1]["total_spent"], kv[0]),
+        reverse=False if group_by == "month" else True,
+    )
+
+    results = []
+
+    for label, item in sorted_bucket_items:
+        average_spend = (
+            item["total_spent"] / item["record_count"]
+            if item["record_count"]
+            else Decimal("0")
+        )
+
+        percent_of_total = (
+            (item["total_spent"] / total_spent) * Decimal("100")
+            if total_spent
+            else Decimal("0")
+        )
+
+        results.append(
+            {
+                "label": item["label"],
+                "total_spent": item["total_spent"],
+                "record_count": item["record_count"],
+                "average_spend": average_spend,
+                "percent_of_total": percent_of_total,
+            }
+        )
+
+    return {
+        "rows": results,
+        "chart_labels": [item["label"] for item in results],
+        "chart_values": [float(item["total_spent"]) for item in results],
+        "top_bucket": results[0] if results else None,
+        "group_by": group_by,
+    }
 
 def list_active_budget_record_rows_for_department(department_name: str) -> list[dict]:
     department_name = normalize_text(department_name)
@@ -3844,6 +4262,35 @@ def list_budget_records_for_department(
 
     return filtered
 
+def get_current_budget_year_number() -> int | None:
+    today = date.today().isoformat()
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT year_number
+            FROM finance_fiscal_years
+            WHERE DATE(?) BETWEEN DATE(start_date) AND DATE(end_date)
+            ORDER BY year_number DESC
+            LIMIT 1
+            """,
+            (today,),
+        ).fetchone()
+
+        if row:
+            return int(row["year_number"])
+
+        row = conn.execute(
+            """
+            SELECT year_number
+            FROM finance_fiscal_years
+            WHERE is_current = 1
+            ORDER BY year_number DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    return int(row["year_number"]) if row else None
 
 def get_configured_budget_fiscal_years() -> list[dict]:
     with get_connection() as conn:
@@ -3899,7 +4346,23 @@ def get_budget_fiscal_year_for_date(anchor_date: date | None) -> dict | None:
 
 def get_budget_year_options_for_department(department_name: str) -> list[int]:
     fiscal_years = get_configured_budget_fiscal_years()
-    return [int(item["year_number"]) for item in fiscal_years]
+    current_year = get_current_budget_year_number()
+
+    if current_year:
+        allowed_years = {
+            current_year - 1,
+            current_year,
+            current_year + 1,
+        }
+
+        return [
+            int(item["year_number"])
+            for item in fiscal_years
+            if int(item["year_number"]) in allowed_years
+        ]
+
+    return [int(item["year_number"]) for item in fiscal_years[:3]]
+
 
 def get_budget_summary_for_department(
     department_name: str,
@@ -4198,6 +4661,62 @@ def save_budget_target_for_department(
         )
         conn.commit()
 
+def build_transaction_duplicate_key(mapped: dict) -> str:
+    parts = [
+        normalize_text(mapped.get("department_name")) or "",
+        normalize_text(mapped.get("po_number")) or "",
+        normalize_text(mapped.get("vendor_name")) or "",
+        normalize_text(mapped.get("vendor_code")) or "",
+        normalize_text(mapped.get("purchase_date")) or "",
+        normalize_text(mapped.get("description")) or "",
+        normalize_text(mapped.get("expenditure_amount")) or "",
+        normalize_text(mapped.get("encumbrance_amount")) or "",
+        normalize_text(mapped.get("account_code")) or "",
+    ]
+
+    raw_key = "|".join(part.strip().lower() for part in parts)
+    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+
+def find_existing_transaction_for_import(mapped: dict) -> dict | None:
+    department_name = normalize_text(mapped.get("department_name"))
+    po_number = normalize_text(mapped.get("po_number"))
+    purchase_date = normalize_text(mapped.get("purchase_date"))
+    description = normalize_text(mapped.get("description"))
+    expenditure_amount = normalize_text(mapped.get("expenditure_amount"))
+    encumbrance_amount = normalize_text(mapped.get("encumbrance_amount"))
+    account_code = normalize_text(mapped.get("account_code"))
+
+    if not department_name:
+        return None
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM finance_transactions
+            WHERE department_name = ?
+              AND LOWER(TRIM(COALESCE(po_number, ''))) = LOWER(TRIM(COALESCE(?, '')))
+              AND LOWER(TRIM(COALESCE(purchase_date, ''))) = LOWER(TRIM(COALESCE(?, '')))
+              AND LOWER(TRIM(COALESCE(description, ''))) = LOWER(TRIM(COALESCE(?, '')))
+              AND LOWER(TRIM(COALESCE(expenditure_amount, ''))) = LOWER(TRIM(COALESCE(?, '')))
+              AND LOWER(TRIM(COALESCE(encumbrance_amount, ''))) = LOWER(TRIM(COALESCE(?, '')))
+              AND LOWER(TRIM(COALESCE(account_code, ''))) = LOWER(TRIM(COALESCE(?, '')))
+            LIMIT 1
+            """,
+            (
+                department_name,
+                po_number,
+                purchase_date,
+                description,
+                expenditure_amount,
+                encumbrance_amount,
+                account_code,
+            ),
+        ).fetchone()
+
+    return dict(row) if row else None
+
 def validate_transactions_import(
     *,
     run_id: int,
@@ -4216,48 +4735,160 @@ def validate_transactions_import(
 
     preview_rows = []
     errors = []
-    valid_rows = 0
-    skipped_rows = 0
-    vendors_to_create = 0
+
+    ready_to_import_rows = 0
+    create_rows = 0
+    update_rows = 0
+    duplicate_rows = 0
+    ignored_rows = 0
+    error_rows = 0
+    vendors_to_create_keys = set()
+
+    seen_duplicate_keys = set()
 
     for index, row in enumerate(rows, start=2):
         mapped = apply_import_mapping(row, mappings, index)
+        mapped = normalize_import_vendor_fields(mapped)
 
         if default_department_name:
             mapped["department_name"] = normalize_text(default_department_name)
-
-        if should_skip_efinance_transaction(mapped, row):
-            skipped_rows += 1
-            continue
 
         mapped["transaction_type"] = classify_transaction_type(mapped)
         mapped["suggested_record_type"] = suggest_record_type_for_transaction(mapped)
         mapped["title"] = build_transaction_title(mapped, row, index)
         mapped["is_promotable"] = 1 if mapped.get("suggested_record_type") else 0
 
-        vendor_name = normalize_text(mapped.get("vendor_name"))
-        vendor_code = normalize_text(mapped.get("vendor_code"))
+        row_errors = []
 
-        if vendor_name or vendor_code:
-            existing_vendor = find_vendor_for_import(
-                vendor_name=vendor_name,
-                vendor_code=vendor_code,
+        for mapping in mappings:
+            if not mapping["required"]:
+                continue
+
+            if mapping["ignore_field"]:
+                continue
+
+            target_field = mapping["target_field_name"]
+
+            if not normalize_text(mapped.get(target_field)):
+                row_errors.append(f"Missing required field: {target_field}")
+
+        source_identifier = (
+            mapped.get("title")
+            or mapped.get("description")
+            or mapped.get("po_number")
+            or row.get(next(iter(row.keys()), ""), "")
+            or f"Row {index}"
+        )
+
+        action = "ready"
+        action_label = "Ready to Import"
+        action_reason = "Row passed validation."
+
+        if should_skip_efinance_transaction(mapped, row):
+            ignored_rows += 1
+            action = "ignored"
+            action_label = "Ignored"
+            action_reason = "System, total, subtotal, beginning balance, or blank transaction row."
+
+        elif row_errors:
+            error_rows += 1
+            action = "error"
+            action_label = "Error"
+            action_reason = "; ".join(row_errors)
+
+            errors.append(
+                {
+                    "row_number": index,
+                    "source_identifier": source_identifier,
+                    "error_message": action_reason,
+                }
             )
-            if not existing_vendor and vendor_name:
-                vendors_to_create += 1
 
-        valid_rows += 1
+            log_import_run_error(
+                run_id=run_id,
+                row_number=index,
+                source_identifier=source_identifier,
+                error_message=action_reason,
+            )
+
+        else:
+            duplicate_key = build_transaction_duplicate_key(mapped)
+            existing_transaction = find_existing_transaction_for_import(mapped)
+
+            if duplicate_key in seen_duplicate_keys:
+                duplicate_rows += 1
+                action = "duplicate"
+                action_label = "Duplicate"
+                action_reason = "Duplicate found within this import file."
+
+            elif existing_transaction:
+                duplicate_rows += 1
+                action = "duplicate"
+                action_label = "Duplicate"
+                action_reason = f"Transaction already imported as transaction #{existing_transaction['id']}."
+
+            else:
+                seen_duplicate_keys.add(duplicate_key)
+
+                vendor_name = normalize_text(mapped.get("vendor_name"))
+                vendor_code = normalize_text(mapped.get("vendor_code"))
+                vendor_id = None
+
+                if vendor_name or vendor_code:
+                    existing_vendor = find_vendor_for_import(
+                        vendor_name=vendor_name,
+                        vendor_code=vendor_code,
+                    )
+
+                    if existing_vendor:
+                        vendor_id = existing_vendor["id"]
+                    elif vendor_name:
+                        vendor_key = vendor_code or vendor_name
+                        vendors_to_create_keys.add(vendor_key.strip().lower())
+
+                existing_record = find_existing_record_for_import(
+                    department_name=mapped.get("department_name"),
+                    po_number=mapped.get("po_number"),
+                    vendor_id=vendor_id,
+                    title=mapped.get("title"),
+                )
+
+                ready_to_import_rows += 1
+
+                if existing_record:
+                    update_rows += 1
+                    action = "update"
+                    action_label = "Update Existing Record"
+                    action_reason = f"Existing PO/record found: record #{existing_record['id']}."
+                else:
+                    create_rows += 1
+                    action = "create"
+                    action_label = "Create New Record"
+                    action_reason = "No matching active PO/record found."
+
+        mapped["_import_action"] = action
+        mapped["_import_action_label"] = action_label
+        mapped["_import_action_reason"] = action_reason
+        mapped["_row_number"] = index
 
         if len(preview_rows) < preview_limit:
             preview_rows.append(mapped)
 
     return {
         "total_rows": len(rows),
-        "valid_rows": valid_rows,
-        "skipped_rows": skipped_rows,
-        "vendors_to_create": vendors_to_create,
+        "ready_to_import_rows": ready_to_import_rows,
+        "create_rows": create_rows,
+        "update_rows": update_rows,
+        "duplicate_rows": duplicate_rows,
+        "ignored_rows": ignored_rows,
+        "error_rows": error_rows,
+        "vendors_to_create": len(vendors_to_create_keys),
         "preview_rows": preview_rows,
         "errors": errors,
+
+        # temporary backward-compatible names in case your route/template still expects these
+        "valid_rows": ready_to_import_rows,
+        "skipped_rows": ignored_rows + duplicate_rows,
     }
 
 
@@ -4281,6 +4912,8 @@ def execute_transactions_import(
     error_rows = 0
     vendors_created = 0
 
+    seen_duplicate_keys = set()
+
     update_import_run_results(
         run_id,
         status="running",
@@ -4296,6 +4929,7 @@ def execute_transactions_import(
     for index, row in enumerate(rows, start=2):
         try:
             mapped = apply_import_mapping(row, mappings, index)
+            mapped = normalize_import_vendor_fields(mapped)
 
             if default_department_name:
                 mapped["department_name"] = normalize_text(default_department_name)
@@ -4303,6 +4937,18 @@ def execute_transactions_import(
             if should_skip_efinance_transaction(mapped, row):
                 skipped_rows += 1
                 continue
+
+            if find_existing_transaction_for_import(mapped):
+                skipped_rows += 1
+                continue
+
+            duplicate_key = build_transaction_duplicate_key(mapped)
+
+            if duplicate_key in seen_duplicate_keys:
+                skipped_rows += 1
+                continue
+
+            seen_duplicate_keys.add(duplicate_key)
 
             transaction_type = classify_transaction_type(mapped)
             suggested_record_type = suggest_record_type_for_transaction(mapped)

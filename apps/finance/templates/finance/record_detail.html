@@ -83,7 +83,7 @@
       <table class="data-table">
         <tbody>
           <tr><th>Type</th><td>{{ record.record_type|title }}</td></tr>
-          <tr><th>Vendor</th><td>{{ record.vendor_name or "—" }}</td></tr>
+          <tr><th>Vendor</th><td>{{ record.friendly_name or record.vendor_name or "—" }}</td></tr>
           <tr><th>Category</th><td>{{ record.category_name or "—" }}</td></tr>
           <tr><th>PO Number</th><td>{{ record.po_number or "—" }}</td></tr>
           <tr><th>Purchase Date</th><td>{{ record.purchase_date|localdate if record.purchase_date else "—" }}</td></tr>

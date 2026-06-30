@@ -57,9 +57,13 @@
     <div class="table-wrap">
       <table class="data-table">
         <tbody>
-          <tr><th>Total Rows</th><td>{{ validation.total_rows }}</td></tr>
-          <tr><th>Valid Rows</th><td>{{ validation.valid_rows }}</td></tr>
-          <tr><th>Skipped Rows</th><td>{{ validation.skipped_rows }}</td></tr>
+          <tr><th>Total Rows Read</th><td>{{ validation.total_rows }}</td></tr>
+          <tr><th>Ready to Import</th><td>{{ validation.ready_to_import_rows or validation.valid_rows }}</td></tr>
+          <tr><th>Will Create Records</th><td>{{ validation.create_rows or 0 }}</td></tr>
+          <tr><th>Will Update Existing Records</th><td>{{ validation.update_rows or 0 }}</td></tr>
+          <tr><th>Duplicate Rows</th><td>{{ validation.duplicate_rows or 0 }}</td></tr>
+          <tr><th>Ignored System / Total Rows</th><td>{{ validation.ignored_rows or 0 }}</td></tr>
+          <tr><th>Rows With Errors</th><td>{{ validation.error_rows or validation.errors|length }}</td></tr>
           <tr><th>Vendors To Create</th><td>{{ validation.vendors_to_create }}</td></tr>
         </tbody>
       </table>
@@ -81,15 +85,16 @@
 
         {% if run.import_type == "transactions" %}
 
-          <tr>
-            <th>Date</th>
-            <th>Description</th>
-            <th>Vendor</th>
-            <th>Type</th>
-            <th class="text-right">Spent</th>
-            <th class="text-right">Encumbered</th>
-            <th>Suggested</th>
-          </tr>
+        <tr>
+          <th>Action</th>
+          <th>Date</th>
+          <th>Description</th>
+          <th>Vendor</th>
+          <th>Type</th>
+          <th class="text-right">Spent</th>
+          <th class="text-right">Encumbered</th>
+          <th>Suggested</th>
+        </tr>
 
         {% elif run.import_type == "vendors" %}
 
@@ -124,6 +129,15 @@
           {% if run.import_type == "transactions" %}
 
             <tr>
+              <td>
+                <div class="finance-record-title">
+                  {{ row._import_action_label or "Ready to Import" }}
+                </div>
+                <div class="finance-meta">
+                  {{ row._import_action_reason or "Row passed validation." }}
+                </div>
+              </td>
+
               <td class="finance-nowrap">
                 {{ row.purchase_date or "—" }}
               </td>

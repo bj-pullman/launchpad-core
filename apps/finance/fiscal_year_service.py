@@ -33,14 +33,14 @@ START_CHECKLIST_TEMPLATE = [
         "is_skippable": 0,
         "auto_complete": False,
     },
-    {
-        "item_key": "verify_building_aliases",
-        "label": "Verify building aliases",
-        "description": "Review building mappings and aliases, including legacy names.",
-        "is_required": 1,
-        "is_skippable": 0,
-        "auto_complete": False,
-    },
+    # {
+    #     "item_key": "verify_department_aliases",
+    #     "label": "Verify department aliases",
+    #     "description": "Review department mappings and aliases, including legacy names.",
+    #     "is_required": 1,
+    #     "is_skippable": 0,
+    #     "auto_complete": False,
+    # },
     {
         "item_key": "import_opening_transactions",
         "label": "Import current/opening transactions",
@@ -320,8 +320,8 @@ def create_fiscal_year(
             (code,),
         ).fetchone()
 
-        if not existing and active_open_count >= 2:
-            raise ValueError("Only two open fiscal years are allowed.")
+        if not existing and active_open_count >= 3:
+            raise ValueError("Only three open fiscal years are allowed: previous, current, and next.")
 
         if make_current:
             conn.execute(
@@ -441,8 +441,8 @@ def update_fiscal_year_status(
                 (fiscal_year_id,),
             ).fetchone()["count"]
 
-            if open_count >= 2:
-                raise ValueError("Only two open fiscal years are allowed.")
+            if open_count >= 3:
+                raise ValueError("Only three open fiscal years are allowed: previous, current, and next.")
 
         if is_current:
             conn.execute(

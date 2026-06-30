@@ -104,8 +104,8 @@
                   <input type="checkbox" id="finance-vendors-select-all">
                 </th>
               {% endif %}
-              <th>Vendor</th>
-              <th>Vendor Code</th>
+              <th>Friendly Name</th>
+              <th>ERP Vendor</th>
               <th>Billing Email</th>
               <th>Support Email</th>
               <th>Status</th>
@@ -123,8 +123,12 @@
                     >
                   </td>
                 {% endif %}
-                <td class="finance-record-title">{{ vendor.vendor_name }}</td>
-                <td>{{ vendor.vendor_code or "—" }}</td>
+                <td>{{ vendor.friendly_name or vendor.vendor_name }}</td>
+                <td>
+                  <div class="finance-meta">
+                    {{ vendor.vendor_code or "—" }} · {{ vendor.vendor_name }}
+                  </div>
+                </td>
                 <td>{{ vendor.billing_email or "—" }}</td>
                 <td>{{ vendor.support_email or "—" }}</td>
                 <td>{{ (vendor.status or 'active')|replace("_", " ")|title }}</td>

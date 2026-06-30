@@ -6,6 +6,15 @@
 
 {% block content %}
 <div class="page-shell finance-shell">
+
+<div id="finance-loading-overlay" class="finance-loading-overlay" hidden>
+  <div class="finance-loading-card">
+    <div class="finance-loading-spinner"></div>
+    <h3>Loading Budget</h3>
+    <p>Building fiscal year totals and breakdowns...</p>
+  </div>
+</div>
+
   {% include "finance/_finance_tabs.html" %}
 
   <div class="page-header">
@@ -20,7 +29,7 @@
   <div class="page-header-actions finance-budget-header-actions">
     <form method="get" class="finance-budget-year-inline">
       <label for="year">Fiscal Year</label>
-      <select id="year" name="year" onchange="this.form.submit()">
+      <select id="year" name="year" data-finance-loading-submit>
         {% for year in year_options %}
           <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
         {% endfor %}

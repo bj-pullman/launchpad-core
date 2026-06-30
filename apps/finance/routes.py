@@ -87,6 +87,8 @@ from .service import (
     get_budget_dashboard_for_department,
     save_budget_target_for_department,
     bulk_promote_transactions_to_records,
+    get_current_budget_year_number,
+    get_budget_page_context,
 )
 
 from .budget_service import (
@@ -936,8 +938,9 @@ def vendor_edit(vendor_id: int):
     if request.method == "POST":
         update_vendor(
             vendor_id=vendor_id,
-            vendor_name=(request.form.get("vendor_name") or "").strip(),
-            vendor_code=(request.form.get("vendor_code") or "").strip(),
+            vendor_name=vendor["vendor_name"],
+            vendor_code=vendor.get("vendor_code"),
+            friendly_name=(request.form.get("friendly_name") or "").strip(),
             website=(request.form.get("website") or "").strip(),
             main_phone=(request.form.get("main_phone") or "").strip(),
             billing_email=(request.form.get("billing_email") or "").strip(),
@@ -2150,6 +2153,22 @@ def fiscal_year_close(department_name: str, fiscal_year_id: int):
         )
     )
 
+@bp.route("/<department_name>/budget/loading")
+@login_required
+def budget_loading(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    return render_template(
+        "finance/budget_loading.html",
+        department_name=department_name,
+        active_tab="budget",
+        can_view_budget=has_budget_view(user_id),
+    )
 
 @bp.route("/<department_name>/budget", methods=["GET", "POST"])
 @login_required
@@ -2199,8 +2218,12 @@ def budget(department_name: str):
     year_options = get_budget_year_options_for_department(department_name)
 
     selected_year = request.args.get("year", type=int)
+
     if not selected_year:
-        selected_year = year_options[0] if year_options else None
+        selected_year = get_current_budget_year_number()
+
+    if selected_year not in year_options:
+        selected_year = year_options[0] if year_options else selected_year
 
     selected_group_by = (request.args.get("group_by") or "category").strip().lower()
 
@@ -2217,24 +2240,15 @@ def budget(department_name: str):
 
     q = (request.args.get("q") or "").strip()
 
-    budget_summary = get_budget_summary_for_department(
+    budget_context = get_budget_page_context(
         department_name=department_name,
         year=selected_year,
         q=q,
     )
 
-    budget_breakdown = get_budget_breakdown_for_department(
-        department_name=department_name,
-        year=selected_year,
-        group_by=selected_group_by,
-        q=q,
-    )
-
-    budget_dashboard = get_budget_dashboard_for_department(
-        department_name=department_name,
-        year=selected_year,
-        q=q,
-    )
+    budget_summary = budget_context["summary"]
+    budget_dashboard = budget_context["dashboard"]
+    budget_breakdown = budget_dashboard[selected_group_by]
 
     return render_template(
         "finance/budget.html",
@@ -2261,16 +2275,34 @@ def transactions(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
-    review_status = (request.args.get("review_status") or "").strip() or None
-    transaction_type = (request.args.get("transaction_type") or "").strip() or None
-    vendor_q = (request.args.get("vendor_q") or "").strip() or None
+    selected_review_status = (request.args.get("review_status") or "needs_review").strip().lower()
+    selected_transaction_type = (request.args.get("transaction_type") or "").strip().lower()
+    vendor_q = (request.args.get("vendor_q") or "").strip()
     page = request.args.get("page", default=1, type=int)
 
+    if selected_review_status not in {"needs_review", "promoted", "ignored", "all"}:
+        selected_review_status = "needs_review"
+
+    review_status_filter = None if selected_review_status == "all" else selected_review_status
+
+    if selected_transaction_type not in {
+        "",
+        "purchase",
+        "encumbrance",
+        "encumbrance_release",
+        "blanket_po",
+        "change_order",
+        "credit_refund",
+        "tax_fee",
+        "other",
+    }:
+        selected_transaction_type = ""
+
     transaction_page = list_transactions_for_department(
-        department_name,
-        review_status=review_status,
-        transaction_type=transaction_type,
-        vendor_q=vendor_q,
+        department_name=department_name,
+        review_status=review_status_filter,
+        transaction_type=selected_transaction_type or None,
+        vendor_q=vendor_q or None,
         page=page,
         per_page=100,
     )
@@ -2281,9 +2313,9 @@ def transactions(department_name: str):
         active_tab="transactions",
         transactions=transaction_page["rows"],
         transaction_page=transaction_page,
-        selected_review_status=review_status,
-        selected_transaction_type=transaction_type,
-        vendor_q=vendor_q or "",
+        selected_review_status=selected_review_status,
+        selected_transaction_type=selected_transaction_type,
+        vendor_q=vendor_q,
         can_manage=can_manage_department(user_id, department_name),
         can_view_budget=has_budget_view(user_id),
     )

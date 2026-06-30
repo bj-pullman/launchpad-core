@@ -1,0 +1,23 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+
+  <div class="finance-loading-page">
+    <div class="finance-loading-card">
+      <div class="finance-loading-spinner"></div>
+      <h3>Loading Budget</h3>
+      <p>Building fiscal year totals and breakdowns...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.location.replace("{{ url_for('finance.budget', department_name=department_name) }}");
+</script>
+{% endblock %}
