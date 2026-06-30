@@ -15,9 +15,14 @@
   >Renewals</a>
 
   <a
-    href="{{ url_for('finance.transactions', department_name=department_name) }}"
-    class="{% if active_tab == 'transactions' %}active{% endif %}"
-  >Transactions</a>
+    href="{{ url_for('finance.ledger', department_name=department_name) }}"
+    class="{% if active_tab == 'ledger' %}active{% endif %}"
+  >Ledger</a>
+
+  <a
+    href="{{ url_for('finance.purchase_orders', department_name=department_name) }}"
+    class="{% if active_tab == 'purchase_orders' %}active{% endif %}"
+  >Purchase Orders</a>
 
   <a
     href="{{ url_for('finance.vendors', department_name=department_name) }}"
@@ -26,8 +31,13 @@
 
   {% if can_view_budget %}
     <a
+      href="{{ url_for('finance.budget_accounts', department_name=department_name) }}"
+      class="{% if active_tab == 'budget_accounts' %}active{% endif %}"
+    >Budget Accounts</a>
+
+    <a
       href="{{ url_for('finance.budget_loading', department_name=department_name) }}"
       class="{% if active_tab == 'budget' %}active{% endif %}"
-    >Budget</a>
+    >Budget Setup</a>
   {% endif %}
 </div>
