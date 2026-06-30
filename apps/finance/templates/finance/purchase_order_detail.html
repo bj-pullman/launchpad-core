@@ -1,0 +1,44 @@
+{% extends "launchpad_ui/base.html" %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">{% endblock %}
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+  <div class="finance-back-row"><a class="finance-back-link" href="{{ url_for('finance.purchase_orders', department_name=department_name) }}">Back to Purchase Orders</a></div>
+  <div class="page-header"><div><h1>PO {{ purchase_order.po_number or "" }}</h1><p class="page-subtitle">{{ purchase_order.vendor_name or "Purchase order detail" }}</p></div></div>
+
+  <div class="finance-stats finance-stats-wide">
+    <div class="finance-stat-card"><div class="finance-stat-label">Fiscal Year</div><div class="finance-stat-value">{{ purchase_order.fiscal_year_code or "-" }}</div></div>
+    <div class="finance-stat-card"><div class="finance-stat-label">Encumbered</div><div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order.current_encumbrance|float) }}</div></div>
+    <div class="finance-stat-card"><div class="finance-stat-label">Paid</div><div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order.paid_amount|float) }}</div></div>
+    <div class="finance-stat-card"><div class="finance-stat-label">Remaining</div><div class="finance-stat-value {% if purchase_order.remaining_encumbrance|float < 0 %}finance-negative{% endif %}">${{ "{:,.2f}".format(purchase_order.remaining_encumbrance|float) }}</div></div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header"><div><h2 class="finance-section-title">Purchase Order Details</h2><p class="finance-section-subtitle">Vendor, account, record, and PO status.</p></div></div>
+    <div class="finance-detail-grid">
+      <div><span>Status</span><strong>{{ purchase_order.status|replace("_", " ")|title }}</strong></div>
+      <div><span>Vendor</span><strong>{{ purchase_order.vendor_name or "-" }}</strong></div>
+      <div><span>Budget Account</span><strong>{{ purchase_order.account_code or "-" }}</strong></div>
+      <div><span>Budget Unit</span><strong>{{ purchase_order.budget_unit or "-" }}</strong></div>
+      <div><span>Linked Record</span><strong>{{ purchase_order.linked_record_title or "Unlinked" }}</strong></div>
+      <div><span>Original Encumbrance</span><strong>${{ "{:,.2f}".format(purchase_order.original_encumbrance|float) }}</strong></div>
+      <div><span>Encumbrance Changes</span><strong>${{ "{:,.2f}".format(purchase_order.encumbrance_changes|float) }}</strong></div>
+      <div><span>Available Budget</span><strong>${{ "{:,.2f}".format(purchase_order.budget_available_amount|float) }}</strong></div>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header"><div><h2 class="finance-section-title">Ledger Activity</h2><p class="finance-section-subtitle">ERP rows tied to this purchase order.</p></div></div>
+    {% if purchase_order.activity %}
+    <div class="table-wrap"><table class="data-table finance-money-table"><thead><tr><th>Date</th><th>T/C</th><th>Kind</th><th>Description</th><th>Paid</th><th>Encumbered</th></tr></thead><tbody>
+      {% for item in purchase_order.activity %}
+      <tr class="finance-row-link" data-href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}"><td>{{ item.purchase_date or "-" }}</td><td><span class="finance-pill">{{ item.transaction_code or "-" }}</span></td><td>{{ item.ledger_kind|replace("_", " ")|title }}</td><td>{{ item.description or item.title or "-" }}</td><td>${{ "{:,.2f}".format(item.expenditure_amount|float) }}</td><td>${{ "{:,.2f}".format(item.encumbrance_amount|float) }}</td></tr>
+      {% endfor %}
+    </tbody></table></div>
+    {% else %}
+    <div class="finance-empty"><h3>No ledger activity found</h3><p>No ledger rows are tied to this purchase order yet.</p></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>{% endblock %}
