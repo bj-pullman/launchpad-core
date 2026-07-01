@@ -24,7 +24,14 @@
     <form method="get" class="finance-record-filters">
       <div class="form-field">
         <label>Fiscal Year</label>
-        <input type="text" name="fiscal_year_code" value="{{ selected_fiscal_year_code or '' }}" placeholder="FY26">
+        <select name="fiscal_year_code">
+          <option value="">All Fiscal Years</option>
+          {% for fy in fiscal_years %}
+            <option value="{{ fy.code }}" {% if selected_fiscal_year_code == fy.code %}selected{% endif %}>
+              {{ fy.code }}{% if fy.is_current %} - Current{% endif %}
+            </option>
+          {% endfor %}
+        </select>
       </div>
       <div class="form-field">
         <label>Ledger Kind</label>
@@ -33,6 +40,9 @@
           <option value="budget" {% if selected_ledger_kind == 'budget' %}selected{% endif %}>Budget</option>
           <option value="encumbrance" {% if selected_ledger_kind == 'encumbrance' %}selected{% endif %}>Encumbrance</option>
           <option value="expenditure" {% if selected_ledger_kind == 'expenditure' %}selected{% endif %}>Expenditure</option>
+          <option value="journal" {% if selected_ledger_kind == 'journal' %}selected{% endif %}>Journal</option>
+          <option value="payroll" {% if selected_ledger_kind == 'payroll' %}selected{% endif %}>Payroll</option>
+          <option value="receipt" {% if selected_ledger_kind == 'receipt' %}selected{% endif %}>Receipt</option>
           <option value="other" {% if selected_ledger_kind == 'other' %}selected{% endif %}>Other</option>
         </select>
       </div>
@@ -79,7 +89,7 @@
             <th>PO</th>
             <th>Account</th>
             <th>Paid</th>
-            <th>Encumbered</th>
+            <th>Encumbrance</th>
             <th>Record</th>
             <th>Status</th>
           </tr>
