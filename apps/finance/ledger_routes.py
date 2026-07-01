@@ -19,6 +19,7 @@ from .ledger_query_service import (
     list_purchase_orders,
 )
 from .ledger_validation_service import validate_ledger_import
+from .page_total_service import budget_account_totals, purchase_order_totals
 from .service import get_import_run_by_id, save_budget_target_for_department
 
 
@@ -265,14 +266,24 @@ def purchase_orders(department_name: str):
         abort(403)
 
     selected_fiscal_year_code = _selected_fiscal_year_code()
+    selected_status = (request.args.get("status") or "").strip()
+    vendor_q = (request.args.get("vendor_q") or "").strip()
+    q = (request.args.get("q") or "").strip()
     po_page = list_purchase_orders(
         department_name=department_name,
         fiscal_year_code=selected_fiscal_year_code or None,
-        status=(request.args.get("status") or "").strip() or None,
-        vendor_q=(request.args.get("vendor_q") or "").strip() or None,
-        q=(request.args.get("q") or "").strip() or None,
+        status=selected_status or None,
+        vendor_q=vendor_q or None,
+        q=q or None,
         page=request.args.get("page", default=1, type=int),
         per_page=100,
+    )
+    po_summary = purchase_order_totals(
+        department_name=department_name,
+        fiscal_year_code=selected_fiscal_year_code or None,
+        status=selected_status or None,
+        vendor_q=vendor_q or None,
+        q=q or None,
     )
 
     return render_template(
@@ -280,12 +291,13 @@ def purchase_orders(department_name: str):
         department_name=department_name,
         active_tab="purchase_orders",
         po_page=po_page,
+        po_summary=po_summary,
         purchase_orders=po_page["rows"],
         fiscal_years=_fiscal_year_options(),
         selected_fiscal_year_code=selected_fiscal_year_code,
-        selected_status=(request.args.get("status") or "").strip(),
-        vendor_q=(request.args.get("vendor_q") or "").strip(),
-        q=(request.args.get("q") or "").strip(),
+        selected_status=selected_status,
+        vendor_q=vendor_q,
+        q=q,
         can_manage=can_manage_department(user_id, department_name),
         can_view_budget=has_budget_view(user_id),
     )
@@ -322,12 +334,18 @@ def budget_accounts(department_name: str):
         abort(403)
 
     selected_fiscal_year_code = _selected_fiscal_year_code()
+    q = (request.args.get("q") or "").strip()
     account_page = list_budget_accounts(
         department_name=department_name,
         fiscal_year_code=selected_fiscal_year_code or None,
-        q=(request.args.get("q") or "").strip() or None,
+        q=q or None,
         page=request.args.get("page", default=1, type=int),
         per_page=100,
+    )
+    account_summary = budget_account_totals(
+        department_name=department_name,
+        fiscal_year_code=selected_fiscal_year_code or None,
+        q=q or None,
     )
 
     return render_template(
@@ -335,10 +353,11 @@ def budget_accounts(department_name: str):
         department_name=department_name,
         active_tab="budget_accounts",
         account_page=account_page,
+        account_summary=account_summary,
         budget_accounts=account_page["rows"],
         fiscal_years=_fiscal_year_options(),
         selected_fiscal_year_code=selected_fiscal_year_code,
-        q=(request.args.get("q") or "").strip(),
+        q=q,
         can_manage=can_manage_department(user_id, department_name),
         can_view_budget=True,
     )
