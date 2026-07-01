@@ -10,3 +10,4 @@ bp = Blueprint(
 
 from . import routes  # noqa: E402,F401
 from . import ledger_routes  # noqa: E402,F401
+from . import legacy_redirect_routes  # noqa: E402,F401
