@@ -21,11 +21,11 @@ from .ledger_service import (
     upsert_purchase_order,
     utc_now_iso,
 )
+from .ledger_vendor_service import get_or_create_vendor_for_ledger_import
 from .service import (
     apply_import_mapping,
     get_import_profile_fields,
     get_import_run_by_id,
-    get_or_create_vendor_for_import,
     log_import_run_error,
     normalize_import_vendor_fields,
     read_import_rows,
@@ -87,9 +87,17 @@ def _build_title(mapped: dict[str, Any], row_number: int) -> str:
     vendor_name = normalize_text(mapped.get("vendor_name"))
     po_number = normalize_text(mapped.get("po_number"))
     account_code = normalize_text(mapped.get("account_code"))
+    account_title = normalize_text(mapped.get("account_title"))
+    transaction_code = normalize_transaction_code(mapped.get("transaction_code"))
 
     if description:
         return description.title()
+    if transaction_code == "11":
+        if account_title:
+            return f"Budget Allocation - {account_title.title()}"
+        if account_code:
+            return f"Budget Allocation - Account {account_code}"
+        return "Budget Allocation"
     if vendor_name and po_number:
         return f"{vendor_name} - PO {po_number}"
     if vendor_name and account_code:
@@ -220,7 +228,8 @@ def execute_ledger_import(
                 vendor_name = normalize_text(mapped.get("vendor_name"))
                 vendor_code = normalize_text(mapped.get("vendor_code"))
                 if vendor_name or vendor_code:
-                    vendor_id, vendor_was_created = get_or_create_vendor_for_import(
+                    vendor_id, vendor_was_created = get_or_create_vendor_for_ledger_import(
+                        conn,
                         vendor_name=vendor_name,
                         vendor_code=vendor_code,
                     )
