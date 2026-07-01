@@ -6,6 +6,7 @@ from modules.core.auth.decorators import login_required
 
 from .access_service import can_access_department, can_manage_department, has_budget_view
 from .blueprint import bp
+from .derived_totals_service import rebuild_department_totals
 from .ledger_budget_overview_service import get_ledger_budget_page_context
 from .service import save_budget_target_for_department
 
@@ -67,6 +68,15 @@ def budget(department_name: str):
         return redirect(url_for("finance.budget", department_name=department_name, year=fiscal_year))
 
     selected_year = request.args.get("year", type=int)
+
+    try:
+        rebuild_department_totals(
+            department_name=department_name,
+            changed_by_user_id=user_id,
+        )
+    except Exception as exc:
+        flash(f"Budget totals refresh failed: {exc}", "error")
+
     budget_context = get_ledger_budget_page_context(
         department_name=department_name,
         year=selected_year,
