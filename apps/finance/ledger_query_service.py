@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any
 
 from .db import get_connection
+from .ledger_accounting_service import normalize_po, po_line_item
 from .ledger_service import ensure_finance_ledger_schema, money, normalize_text, parse_money
 
 
@@ -264,6 +265,42 @@ def list_purchase_orders(
     }
 
 
+def _build_po_line_items(activity: list[dict]) -> list[dict]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in activity:
+        raw_po = row.get("po_number")
+        line_number = po_line_item(raw_po) or "base"
+        item = grouped.setdefault(
+            line_number,
+            {
+                "line_number": line_number,
+                "po_number": raw_po,
+                "description": row.get("description") or row.get("title"),
+                "account_code": row.get("account_code"),
+                "budget_unit": row.get("budget_unit"),
+                "ledger_count": 0,
+                "encumbered_amount": Decimal("0.00"),
+                "paid_amount": Decimal("0.00"),
+                "remaining_amount": Decimal("0.00"),
+            },
+        )
+        item["ledger_count"] += 1
+        if row.get("description") and not item.get("description"):
+            item["description"] = row.get("description")
+        item["encumbered_amount"] += parse_money(row.get("encumbrance_amount"))
+        item["paid_amount"] += parse_money(row.get("expenditure_amount"))
+
+    results = []
+    for item in grouped.values():
+        item["remaining_amount"] = item["encumbered_amount"]
+        item["encumbered_amount"] = money(item["encumbered_amount"])
+        item["paid_amount"] = money(item["paid_amount"])
+        item["remaining_amount"] = money(item["remaining_amount"])
+        results.append(item)
+
+    return sorted(results, key=lambda item: (item["line_number"] == "base", item["line_number"]))
+
+
 def get_purchase_order_detail(purchase_order_id: int) -> dict | None:
     with get_connection() as conn:
         ensure_finance_ledger_schema(conn)
@@ -273,6 +310,8 @@ def get_purchase_order_detail(purchase_order_id: int) -> dict | None:
                 po.*,
                 r.title AS linked_record_title,
                 ba.account_title AS budget_account_title,
+                ba.fund AS budget_fund,
+                ba.budget_unit AS budget_unit_full,
                 ba.current_budget AS budget_current_budget,
                 ba.available_amount AS budget_available_amount
             FROM finance_purchase_orders po
@@ -290,13 +329,17 @@ def get_purchase_order_detail(purchase_order_id: int) -> dict | None:
             SELECT *
             FROM finance_ledger_transactions
             WHERE purchase_order_id = ?
-            ORDER BY purchase_date ASC, id ASC
+            ORDER BY po_number COLLATE NOCASE ASC, purchase_date ASC, id ASC
             """,
             (purchase_order_id,),
         ).fetchall()
 
+    activity_rows = [dict(row) for row in activity]
     result = dict(po)
-    result["activity"] = [dict(row) for row in activity]
+    result["base_po_number"] = normalize_po(result.get("po_number")) or result.get("po_number")
+    result["activity"] = activity_rows
+    result["line_items"] = _build_po_line_items(activity_rows)
+    result["line_item_count"] = len(result["line_items"])
     return result
 
 
