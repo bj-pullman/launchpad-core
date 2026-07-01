@@ -7,11 +7,22 @@ from .db import get_connection
 from .ledger_import_service import _mapped_row, _should_skip_ledger_row
 from .ledger_service import normalize_text, resolve_fiscal_year
 from .service import (
+    find_vendor_for_import,
     get_import_profile_fields,
     get_import_run_by_id,
     read_import_rows,
 )
 from .transaction_code_service import get_transaction_code_info, normalize_transaction_code
+
+
+def _vendor_key(vendor_name: str | None, vendor_code: str | None) -> str | None:
+    vendor_name = normalize_text(vendor_name)
+    vendor_code = normalize_text(vendor_code)
+    if vendor_code:
+        return f"code:{vendor_code}"
+    if vendor_name:
+        return f"name:{vendor_name.lower()}"
+    return None
 
 
 def validate_ledger_import(
@@ -39,7 +50,8 @@ def validate_ledger_import(
     fiscal_years: Counter[str] = Counter()
     budget_accounts: set[tuple[str | None, str | None, str | None, str | None]] = set()
     purchase_orders: set[str] = set()
-    vendors: set[str] = set()
+    vendors: dict[str, tuple[str | None, str | None]] = {}
+    vendors_to_create: dict[str, tuple[str | None, str | None]] = {}
 
     with get_connection() as conn:
         for index, row in enumerate(rows, start=2):
@@ -77,8 +89,12 @@ def validate_ledger_import(
 
                 vendor_name = normalize_text(mapped.get("vendor_name"))
                 vendor_code = normalize_text(mapped.get("vendor_code"))
-                if vendor_name or vendor_code:
-                    vendors.add(vendor_code or vendor_name or "")
+                key = _vendor_key(vendor_name, vendor_code)
+                if key:
+                    vendors[key] = (vendor_name, vendor_code)
+                    existing_vendor = find_vendor_for_import(vendor_name=vendor_name, vendor_code=vendor_code)
+                    if not existing_vendor:
+                        vendors_to_create[key] = (vendor_name, vendor_code)
 
                 if len(preview_rows) < preview_limit:
                     preview = dict(mapped)
@@ -105,7 +121,7 @@ def validate_ledger_import(
         "duplicate_rows": 0,
         "error_rows": error_rows,
         "errors": errors,
-        "vendors_to_create": 0,
+        "vendors_to_create": len(vendors_to_create),
         "preview_rows": preview_rows,
         "category_suggestions": [],
         "transaction_codes": dict(transaction_codes),
