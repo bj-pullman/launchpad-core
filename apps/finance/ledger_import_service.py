@@ -5,15 +5,12 @@ from typing import Any
 
 from .db import get_connection
 from .ledger_service import (
-    TC_MAP,
-    classify_ledger_kind,
     ensure_finance_ledger_schema,
     find_record_match,
     link_ledger_to_record,
     make_source_hash,
     money,
     normalize_po,
-    normalize_tc,
     normalize_text,
     resolve_fiscal_year,
     upsert_budget_account,
@@ -30,6 +27,7 @@ from .service import (
     read_import_rows,
     update_import_run_results,
 )
+from .transaction_code_service import get_transaction_code_info, normalize_transaction_code
 
 
 HEADER_ALIASES = {
@@ -73,7 +71,6 @@ def _mapped_row(row: dict[str, Any], mappings: list[dict], row_number: int) -> d
     else:
         mapped = _apply_loose_mapping(row)
 
-    # Fill any unmapped ledger fields using common eFinance headers.
     loose = _apply_loose_mapping(row)
     for key, value in loose.items():
         mapped.setdefault(key, value)
@@ -153,12 +150,7 @@ def execute_ledger_import(
     default_department_name: str | None = None,
     created_by_user_id: int | None = None,
 ) -> dict:
-    """Import an ERP audit-trail file into the ledger-first tables.
-
-    This is intentionally additive. It does not delete or rewrite finance_records.
-    Instead, it preserves raw ERP rows, derives budget/PO rollups, and links rows
-    to existing Records when confidence is high.
-    """
+    """Import an ERP audit-trail file into the ledger-first tables."""
     run = get_import_run_by_id(run_id)
     if not run:
         raise ValueError("Import run not found")
@@ -175,6 +167,8 @@ def execute_ledger_import(
     purchase_orders_updated: set[int] = set()
     linked_rows = 0
     vendors_created = 0
+    known_transaction_codes: set[str] = set()
+    unknown_transaction_codes: set[str] = set()
 
     update_import_run_results(
         run_id,
@@ -205,8 +199,14 @@ def execute_ledger_import(
                     skipped_rows += 1
                     continue
 
-                transaction_code = normalize_tc(mapped.get("transaction_code"))
-                ledger_kind = classify_ledger_kind(transaction_code)
+                transaction_code = normalize_transaction_code(mapped.get("transaction_code"))
+                transaction_code_info = get_transaction_code_info(transaction_code)
+                ledger_kind = transaction_code_info["ledger_kind"]
+                if transaction_code_info.get("is_known") and transaction_code:
+                    known_transaction_codes.add(transaction_code)
+                elif transaction_code:
+                    unknown_transaction_codes.add(transaction_code)
+
                 purchase_date = normalize_text(mapped.get("purchase_date"))
                 fiscal_year = resolve_fiscal_year(conn, purchase_date)
 
@@ -222,6 +222,11 @@ def execute_ledger_import(
                     if vendor_was_created:
                         vendors_created += 1
 
+                raw_payload = {
+                    "source_row": row,
+                    "transaction_code_info": transaction_code_info,
+                }
+
                 ledger = {
                     "department_name": department_name,
                     "import_run_id": run_id,
@@ -231,7 +236,7 @@ def execute_ledger_import(
                     "fiscal_year_id": fiscal_year["id"] if fiscal_year else None,
                     "fiscal_year_code": fiscal_year["code"] if fiscal_year else None,
                     "transaction_code": transaction_code,
-                    "transaction_code_label": TC_MAP.get(transaction_code or ""),
+                    "transaction_code_label": transaction_code_info["label"],
                     "ledger_kind": ledger_kind,
                     "title": _build_title(mapped, index),
                     "description": normalize_text(mapped.get("description")),
@@ -249,7 +254,7 @@ def execute_ledger_import(
                     "expenditure_amount": mapped.get("expenditure_amount"),
                     "encumbrance_amount": mapped.get("encumbrance_amount"),
                     "cumulative_balance": mapped.get("cumulative_balance"),
-                    "raw_json": json.dumps(row, default=str),
+                    "raw_json": json.dumps(raw_payload, default=str),
                 }
 
                 budget_account_id = upsert_budget_account(conn, ledger=ledger)
@@ -269,7 +274,6 @@ def execute_ledger_import(
                     duplicate_rows += 1
 
                 if ledger_id:
-                    # Recalculate after insert because rollups read from ledger table.
                     if budget_account_id:
                         from .ledger_service import recalculate_budget_account
                         recalculate_budget_account(conn, budget_account_id)
@@ -303,6 +307,7 @@ def execute_ledger_import(
         f"Ledger import completed. Inserted: {inserted_rows}, Duplicates: {duplicate_rows}, "
         f"Linked to records: {linked_rows}, Budget accounts updated: {len(budget_accounts_updated)}, "
         f"Purchase orders updated: {len(purchase_orders_updated)}, Vendors created: {vendors_created}, "
+        f"Known T/C: {len(known_transaction_codes)}, Unknown T/C: {len(unknown_transaction_codes)}, "
         f"Skipped: {skipped_rows}, Errors: {error_rows}."
     )
     final_status = "completed"
@@ -331,6 +336,8 @@ def execute_ledger_import(
         "budget_accounts_updated": len(budget_accounts_updated),
         "purchase_orders_updated": len(purchase_orders_updated),
         "vendors_created": vendors_created,
+        "known_transaction_codes": sorted(known_transaction_codes),
+        "unknown_transaction_codes": sorted(unknown_transaction_codes),
         "skipped_rows": skipped_rows,
         "error_rows": error_rows,
         "status": final_status,
