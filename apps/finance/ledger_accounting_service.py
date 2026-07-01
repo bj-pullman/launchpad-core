@@ -72,6 +72,56 @@ def resolve_fiscal_year(conn, purchase_date: str | None) -> dict | None:
     return dict(row) if row else None
 
 
+def _positive(value: Any) -> Decimal:
+    amount = parse_money(value)
+    return amount if amount > 0 else Decimal("0.00")
+
+
+def _po_totals(rows) -> dict[str, Decimal]:
+    """Calculate PO totals from accounting events.
+
+    eFinance AP rows often include a negative encumbrance release. For display and
+    rollups, authorized encumbrance should stay positive while open encumbrance is
+    authorized less paid, never the raw negative release total.
+    """
+    authorized = Decimal("0.00")
+    paid = Decimal("0.00")
+
+    for row in rows:
+        tc = row["transaction_code"]
+        if tc in ENCUMBRANCE_TC:
+            authorized += _positive(row["encumbrance_amount"])
+        if tc in EXPENDITURE_TC:
+            paid += parse_money(row["expenditure_amount"])
+
+    open_encumbrance = authorized - paid
+    if open_encumbrance < 0:
+        open_encumbrance = Decimal("0.00")
+
+    return {
+        "authorized": authorized,
+        "paid": paid,
+        "open_encumbrance": open_encumbrance,
+    }
+
+
+def _open_encumbrance_for_account(rows) -> Decimal:
+    po_groups: dict[str, list] = {}
+    non_po_open = Decimal("0.00")
+
+    for row in rows:
+        po_key = normalize_po(row["po_number"])
+        if po_key:
+            po_groups.setdefault(po_key, []).append(row)
+        elif row["transaction_code"] in ENCUMBRANCE_TC:
+            non_po_open += _positive(row["encumbrance_amount"])
+
+    open_total = non_po_open
+    for group_rows in po_groups.values():
+        open_total += _po_totals(group_rows)["open_encumbrance"]
+    return open_total
+
+
 def upsert_budget_account(conn, *, ledger: dict) -> int | None:
     if ledger["ledger_kind"] != "budget" and not (ledger.get("fund") and ledger.get("budget_unit") and ledger.get("account_code")):
         return None
@@ -145,7 +195,6 @@ def recalculate_budget_account(conn, budget_account_id: int) -> None:
     adjustments = Decimal("0.00")
     transfers = Decimal("0.00")
     spent = Decimal("0.00")
-    open_encumbrance = Decimal("0.00")
 
     for row in rows:
         tc = row["transaction_code"]
@@ -158,8 +207,8 @@ def recalculate_budget_account(conn, budget_account_id: int) -> None:
             transfers += budget_amount
         if tc in EXPENDITURE_TC:
             spent += parse_money(row["expenditure_amount"])
-        open_encumbrance += parse_money(row["encumbrance_amount"])
 
+    open_encumbrance = _open_encumbrance_for_account(rows)
     current_budget = original_budget + adjustments + transfers
     available = current_budget - spent - open_encumbrance
     now = utc_now_iso()
@@ -243,22 +292,8 @@ def recalculate_purchase_order(conn, purchase_order_id: int) -> None:
         (po["department_name"], po["fiscal_year_code"], po["normalized_po_number"]),
     ).fetchall()
 
-    original = Decimal("0.00")
-    changes = Decimal("0.00")
-    paid = Decimal("0.00")
-    open_encumbrance = Decimal("0.00")
-
-    for row in rows:
-        tc = row["transaction_code"]
-        if tc == "17":
-            original += parse_money(row["encumbrance_amount"])
-        elif tc == "18":
-            changes += parse_money(row["encumbrance_amount"])
-        if tc in EXPENDITURE_TC:
-            paid += parse_money(row["expenditure_amount"])
-        open_encumbrance += parse_money(row["encumbrance_amount"])
-
-    status = "closed" if paid > 0 and open_encumbrance <= 0 else "open"
+    totals = _po_totals(rows)
+    status = "closed" if totals["paid"] > 0 and totals["open_encumbrance"] <= 0 else "open"
     now = utc_now_iso()
     conn.execute(
         """
@@ -267,7 +302,16 @@ def recalculate_purchase_order(conn, purchase_order_id: int) -> None:
             paid_amount = ?, remaining_encumbrance = ?, status = ?, updated_at = ?
         WHERE id = ?
         """,
-        (money(original), money(changes), money(open_encumbrance), money(paid), money(open_encumbrance), status, now, purchase_order_id),
+        (
+            money(totals["authorized"]),
+            money(Decimal("0.00")),
+            money(totals["authorized"]),
+            money(totals["paid"]),
+            money(totals["open_encumbrance"]),
+            status,
+            now,
+            purchase_order_id,
+        ),
     )
 
 
@@ -335,8 +379,15 @@ def refresh_record_fiscal_year_summary(conn, record_id: int, fiscal_year_code: s
     vendor_name = next((row["vendor_name"] for row in rows if row["vendor_name"]), None)
 
     budget_amount = sum((parse_money(row["budget_amount"]) for row in rows), Decimal("0.00"))
-    open_encumbrance = sum((parse_money(row["encumbrance_amount"]) for row in rows), Decimal("0.00"))
     paid = sum((parse_money(row["expenditure_amount"]) for row in rows if row["transaction_code"] in EXPENDITURE_TC), Decimal("0.00"))
+    remaining = Decimal("0.00")
+    po_groups: dict[str, list] = {}
+    for row in rows:
+        po_key = normalize_po(row["po_number"])
+        if po_key:
+            po_groups.setdefault(po_key, []).append(row)
+    for group_rows in po_groups.values():
+        remaining += _po_totals(group_rows)["open_encumbrance"]
     now = utc_now_iso()
 
     conn.execute(
@@ -359,7 +410,7 @@ def refresh_record_fiscal_year_summary(conn, record_id: int, fiscal_year_code: s
             remaining_encumbrance = excluded.remaining_encumbrance,
             updated_at = excluded.updated_at
         """,
-        (record_id, rows[0]["fiscal_year_id"], fiscal_year_code, vendor_id, vendor_name, len(po_numbers), ", ".join([p for p in po_numbers if p]), ", ".join(budget_accounts), money(budget_amount), money(open_encumbrance), money(paid), money(open_encumbrance), now),
+        (record_id, rows[0]["fiscal_year_id"], fiscal_year_code, vendor_id, vendor_name, len(po_numbers), ", ".join([p for p in po_numbers if p]), ", ".join(budget_accounts), money(budget_amount), money(remaining), money(paid), money(remaining), now),
     )
 
 
