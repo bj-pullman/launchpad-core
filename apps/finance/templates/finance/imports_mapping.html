@@ -31,8 +31,8 @@
         <p>Map the source T/C column here. Launchpad uses it to classify rows such as 11 budget, 17 encumbrance, 18 change order, 21 AP payment, and 25 budget transfer.</p>
       </div>
       <div class="finance-import-help-card">
-        <h4>Fiscal Year</h4>
-        <p>Launchpad maps rows to your Fiscal Year setup using the transaction date. Make sure the Date field is mapped correctly.</p>
+        <h4>Vendor Parsing</h4>
+        <p>Map the ERP Vendor column only. If the value starts with a vendor number, Launchpad automatically separates it into Vendor Code and Vendor Name.</p>
       </div>
       <div class="finance-import-help-card">
         <h4>PO and Account</h4>
@@ -75,8 +75,7 @@
               {% set display_fields = [
                 {"field_name":"transaction_code","label":"T/C Transaction Code","required":False},
                 {"field_name":"budget_amount","label":"Budget Amount","required":False},
-                {"field_name":"account_title","label":"Account Title","required":False},
-                {"field_name":"vendor_code","label":"Vendor Code","required":False}
+                {"field_name":"account_title","label":"Account Title","required":False}
               ] + target_fields %}
             {% else %}
               {% set display_fields = target_fields %}
