@@ -15,6 +15,7 @@ from .ledger_query_service import (
     list_ledger_transactions,
     list_purchase_orders,
 )
+from .ledger_validation_service import validate_ledger_import
 from .service import get_import_run_by_id
 
 
@@ -25,13 +26,13 @@ def _current_user_id():
     return user_id
 
 
+def _is_import_validate_request() -> bool:
+    return request.path.endswith("/validate") and "/imports/runs/" in request.path
+
+
 @bp.before_request
-def intercept_ledger_import_execution():
-    if request.method != "POST":
-        return None
-    if not request.path.endswith("/validate"):
-        return None
-    if "/imports/runs/" not in request.path:
+def intercept_ledger_import_validation_and_execution():
+    if not _is_import_validate_request():
         return None
 
     view_args = request.view_args or {}
@@ -47,6 +48,32 @@ def intercept_ledger_import_execution():
     user_id = _current_user_id()
     if not can_access_department(user_id, department_name):
         abort(403)
+
+    if request.method == "GET":
+        profile_id = run.get("profile_id")
+        if not profile_id:
+            flash("Complete mapping before validation.", "error")
+            return redirect(url_for("finance.imports_mapping", department_name=department_name, run_id=run_id))
+
+        validation = validate_ledger_import(
+            run_id=run_id,
+            profile_id=profile_id,
+            default_department_name=department_name,
+            preview_limit=20,
+        )
+        return render_template(
+            "finance/imports_validate.html",
+            department_name=department_name,
+            active_tab="overview",
+            import_tab="upload",
+            run=run,
+            validation=validation,
+            can_manage=can_manage_department(user_id, department_name),
+        )
+
+    if request.method != "POST":
+        return None
+
     if not can_manage_department(user_id, department_name):
         abort(403)
 
