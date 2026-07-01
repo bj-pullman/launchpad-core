@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from .db import get_connection
-from .ledger_service import ensure_finance_ledger_schema, money, parse_money
+from .ledger_service import ensure_finance_ledger_schema, parse_money
 from .service import get_budget_target_for_department
 
 
@@ -139,26 +139,32 @@ def get_ledger_budget_page_context(*, department_name: str, year: int | None = N
             ).fetchall()
         ]
 
-    total_budget = _money_sum(accounts, "current_budget")
+    ledger_budget_total = _money_sum(accounts, "current_budget")
     total_spent = _money_sum(accounts, "spent_amount")
     encumbrance_total = _money_sum(accounts, "encumbered_amount")
+    budget_target = get_budget_target_for_department(department_name, selected_year)
+    manual_budget_total = parse_money(budget_target.get("total_budget"))
+
+    total_budget = manual_budget_total if manual_budget_total > 0 else ledger_budget_total
+    budget_source = "manual" if manual_budget_total > 0 else "ledger"
     remaining_budget = total_budget - total_spent - encumbrance_total
+
     record_ids = {row.get("linked_record_id") for row in ledger_rows if row.get("linked_record_id")}
     record_count = len(record_ids)
     average_spend = total_spent / Decimal(record_count) if record_count else Decimal("0.00")
-    percent_used = Decimal("0.00")
+
     if total_budget > 0:
         percent_used = ((total_spent + encumbrance_total) / total_budget) * Decimal("100")
     elif total_spent or encumbrance_total:
         percent_used = Decimal("100.00")
-
-    budget_target = get_budget_target_for_department(department_name, selected_year)
-    if total_budget == 0 and budget_target.get("total_budget"):
-        total_budget = budget_target["total_budget"]
-        remaining_budget = total_budget - total_spent - encumbrance_total
+    else:
+        percent_used = Decimal("0.00")
 
     summary = {
         "total_budget": total_budget,
+        "ledger_budget_total": ledger_budget_total,
+        "manual_budget_total": manual_budget_total,
+        "budget_source": budget_source,
         "total_spent": total_spent,
         "remaining_budget": remaining_budget,
         "percent_used": percent_used.quantize(Decimal("0.1")),
