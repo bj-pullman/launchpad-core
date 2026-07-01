@@ -78,27 +78,43 @@ def _positive(value: Any) -> Decimal:
 
 
 def _po_totals(rows) -> dict[str, Decimal]:
-    """Calculate PO totals from accounting events.
+    """Calculate PO totals from eFinance accounting events.
 
-    eFinance AP rows often include a negative encumbrance release. For display and
-    rollups, authorized encumbrance should stay positive while open encumbrance is
-    authorized less paid, never the raw negative release total.
+    T/C 17 establishes the original encumbrance.
+    T/C 18 represents encumbrance changes/change orders.
+    T/C 20/21/22 represent payments/expenditures.
+
+    AP rows frequently include negative encumbrance releases. Those releases are
+    not displayed as the authorized encumbrance. Remaining is calculated from the
+    authorized PO amount less paid activity and is never allowed to go negative.
     """
-    authorized = Decimal("0.00")
+    original = Decimal("0.00")
+    changes = Decimal("0.00")
     paid = Decimal("0.00")
 
     for row in rows:
         tc = row["transaction_code"]
-        if tc in ENCUMBRANCE_TC:
-            authorized += _positive(row["encumbrance_amount"])
+        if tc == "17":
+            original += _positive(row["encumbrance_amount"])
+        elif tc == "18":
+            changes += parse_money(row["encumbrance_amount"])
+        elif tc in ENCUMBRANCE_TC and tc not in EXPENDITURE_TC:
+            original += _positive(row["encumbrance_amount"])
+
         if tc in EXPENDITURE_TC:
             paid += parse_money(row["expenditure_amount"])
+
+    authorized = original + changes
+    if authorized < 0:
+        authorized = Decimal("0.00")
 
     open_encumbrance = authorized - paid
     if open_encumbrance < 0:
         open_encumbrance = Decimal("0.00")
 
     return {
+        "original": original,
+        "changes": changes,
         "authorized": authorized,
         "paid": paid,
         "open_encumbrance": open_encumbrance,
@@ -293,7 +309,7 @@ def recalculate_purchase_order(conn, purchase_order_id: int) -> None:
     ).fetchall()
 
     totals = _po_totals(rows)
-    status = "closed" if totals["paid"] > 0 and totals["open_encumbrance"] <= 0 else "open"
+    status = "open" if totals["open_encumbrance"] > 0 else "closed"
     now = utc_now_iso()
     conn.execute(
         """
@@ -303,8 +319,8 @@ def recalculate_purchase_order(conn, purchase_order_id: int) -> None:
         WHERE id = ?
         """,
         (
-            money(totals["authorized"]),
-            money(Decimal("0.00")),
+            money(totals["original"]),
+            money(totals["changes"]),
             money(totals["authorized"]),
             money(totals["paid"]),
             money(totals["open_encumbrance"]),
