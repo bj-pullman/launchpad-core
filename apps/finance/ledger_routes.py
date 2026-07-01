@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from flask import abort, render_template, request, session
+from flask import abort, flash, redirect, render_template, request, session, url_for
 
 from modules.core.auth.decorators import login_required
 
 from .access_service import can_access_department, can_manage_department, has_budget_view
 from .blueprint import bp
+from .ledger_import_service import execute_ledger_import
 from .ledger_query_service import (
     get_budget_account_detail,
     get_ledger_transaction_detail,
@@ -14,6 +15,7 @@ from .ledger_query_service import (
     list_ledger_transactions,
     list_purchase_orders,
 )
+from .service import get_import_run_by_id
 
 
 def _current_user_id():
@@ -21,6 +23,52 @@ def _current_user_id():
     if not user_id:
         abort(403)
     return user_id
+
+
+@bp.before_request
+def intercept_ledger_import_execution():
+    if request.method != "POST":
+        return None
+    if not request.path.endswith("/validate"):
+        return None
+    if "/imports/runs/" not in request.path:
+        return None
+
+    view_args = request.view_args or {}
+    department_name = view_args.get("department_name")
+    run_id = view_args.get("run_id")
+    if not department_name or not run_id:
+        return None
+
+    run = get_import_run_by_id(run_id)
+    if not run or run.get("import_type") != "transactions":
+        return None
+
+    user_id = _current_user_id()
+    if not can_access_department(user_id, department_name):
+        abort(403)
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    try:
+        result = execute_ledger_import(
+            run_id=run_id,
+            profile_id=run.get("profile_id"),
+            default_department_name=department_name,
+            created_by_user_id=user_id,
+        )
+        flash(
+            f"Ledger import finished. Inserted {result['inserted_rows']} ledger row(s), "
+            f"linked {result['linked_rows']} row(s) to records, "
+            f"updated {result['budget_accounts_updated']} budget account(s), "
+            f"updated {result['purchase_orders_updated']} purchase order(s), "
+            f"skipped {result['skipped_rows']}, errors {result['error_rows']}.",
+            "success",
+        )
+        return redirect(url_for("finance.ledger", department_name=department_name))
+    except Exception as exc:
+        flash(f"Ledger import execution failed: {exc}", "error")
+        return redirect(url_for("finance.imports_validate", department_name=department_name, run_id=run_id))
 
 
 @bp.route("/<department_name>/ledger")
