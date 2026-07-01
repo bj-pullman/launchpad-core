@@ -18,6 +18,7 @@ from .ledger_accounting_service import (
 from .ledger_record_service import (
     create_record_from_ledger,
     should_create_record_from_ledger,
+    update_record_financials_from_ledger,
 )
 from .ledger_service import (
     ensure_finance_ledger_schema,
@@ -183,8 +184,10 @@ def execute_ledger_import(
     import_errors: list[tuple[int, str | None, str]] = []
     budget_accounts_updated: set[int] = set()
     purchase_orders_updated: set[int] = set()
+    touched_record_ids: set[int] = set()
     linked_rows = 0
     auto_created_records = 0
+    records_refreshed = 0
     vendors_created = 0
     known_transaction_codes: set[str] = set()
     unknown_transaction_codes: set[str] = set()
@@ -330,12 +333,21 @@ def execute_ledger_import(
                             confidence=confidence,
                             reason=reason,
                         )
+                        touched_record_ids.add(record_id)
                         linked_rows += 1
 
             except Exception as exc:
                 error_rows += 1
                 source_identifier = row.get(next(iter(row.keys()), ""), "") if row else None
                 import_errors.append((index, source_identifier, str(exc)))
+
+        for record_id in sorted(touched_record_ids):
+            update_record_financials_from_ledger(
+                conn,
+                record_id=record_id,
+                changed_by_user_id=created_by_user_id,
+            )
+            records_refreshed += 1
 
         conn.commit()
 
@@ -350,6 +362,7 @@ def execute_ledger_import(
     run_notes = (
         f"Ledger import completed. Inserted: {inserted_rows}, Duplicates: {duplicate_rows}, "
         f"Linked to records: {linked_rows}, Auto-created records: {auto_created_records}, "
+        f"Records refreshed: {records_refreshed}, "
         f"Budget accounts updated: {len(budget_accounts_updated)}, "
         f"Purchase orders updated: {len(purchase_orders_updated)}, Vendors created: {vendors_created}, "
         f"Known T/C: {len(known_transaction_codes)}, Unknown T/C: {len(unknown_transaction_codes)}, "
@@ -366,7 +379,7 @@ def execute_ledger_import(
         status=final_status,
         total_rows=total_rows,
         created_rows=inserted_rows,
-        updated_rows=linked_rows,
+        updated_rows=linked_rows + records_refreshed,
         skipped_rows=skipped_rows + duplicate_rows,
         error_rows=error_rows,
         run_notes=run_notes,
@@ -379,6 +392,7 @@ def execute_ledger_import(
         "duplicate_rows": duplicate_rows,
         "linked_rows": linked_rows,
         "auto_created_records": auto_created_records,
+        "records_refreshed": records_refreshed,
         "budget_accounts_updated": len(budget_accounts_updated),
         "purchase_orders_updated": len(purchase_orders_updated),
         "vendors_created": vendors_created,
