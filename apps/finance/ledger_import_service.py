@@ -4,6 +4,10 @@ import json
 from typing import Any
 
 from .db import get_connection
+from .ledger_record_service import (
+    create_record_from_ledger,
+    should_create_record_from_ledger,
+)
 from .ledger_service import (
     ensure_finance_ledger_schema,
     find_record_match,
@@ -166,6 +170,7 @@ def execute_ledger_import(
     budget_accounts_updated: set[int] = set()
     purchase_orders_updated: set[int] = set()
     linked_rows = 0
+    auto_created_records = 0
     vendors_created = 0
     known_transaction_codes: set[str] = set()
     unknown_transaction_codes: set[str] = set()
@@ -282,6 +287,21 @@ def execute_ledger_import(
                         recalculate_purchase_order(conn, purchase_order_id)
 
                     record_id, confidence, reason = find_record_match(conn, ledger=ledger)
+                    if not record_id:
+                        should_create, create_reason = should_create_record_from_ledger(
+                            ledger=ledger,
+                            match_confidence=confidence,
+                        )
+                        if should_create:
+                            record_id = create_record_from_ledger(
+                                conn,
+                                ledger=ledger,
+                                created_by_user_id=created_by_user_id,
+                            )
+                            confidence = 95
+                            reason = create_reason
+                            auto_created_records += 1
+
                     if record_id and confidence >= 90:
                         link_ledger_to_record(
                             conn,
@@ -305,7 +325,8 @@ def execute_ledger_import(
 
     run_notes = (
         f"Ledger import completed. Inserted: {inserted_rows}, Duplicates: {duplicate_rows}, "
-        f"Linked to records: {linked_rows}, Budget accounts updated: {len(budget_accounts_updated)}, "
+        f"Linked to records: {linked_rows}, Auto-created records: {auto_created_records}, "
+        f"Budget accounts updated: {len(budget_accounts_updated)}, "
         f"Purchase orders updated: {len(purchase_orders_updated)}, Vendors created: {vendors_created}, "
         f"Known T/C: {len(known_transaction_codes)}, Unknown T/C: {len(unknown_transaction_codes)}, "
         f"Skipped: {skipped_rows}, Errors: {error_rows}."
@@ -333,6 +354,7 @@ def execute_ledger_import(
         "inserted_rows": inserted_rows,
         "duplicate_rows": duplicate_rows,
         "linked_rows": linked_rows,
+        "auto_created_records": auto_created_records,
         "budget_accounts_updated": len(budget_accounts_updated),
         "purchase_orders_updated": len(purchase_orders_updated),
         "vendors_created": vendors_created,
