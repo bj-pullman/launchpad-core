@@ -6,6 +6,7 @@ from modules.core.auth.decorators import login_required
 
 from .access_service import can_access_department, can_manage_department, has_budget_view
 from .blueprint import bp
+from .fiscal_year_service import list_fiscal_years
 from .ledger_import_service import execute_ledger_import
 from .ledger_query_service import (
     get_budget_account_detail,
@@ -28,6 +29,14 @@ def _current_user_id():
 
 def _is_import_validate_request() -> bool:
     return request.path.endswith("/validate") and "/imports/runs/" in request.path
+
+
+def _selected_fiscal_year_code() -> str:
+    return (request.args.get("fiscal_year_code") or "").strip()
+
+
+def _fiscal_year_options() -> list[dict]:
+    return list_fiscal_years(include_closed=True)
 
 
 @bp.before_request
@@ -105,9 +114,10 @@ def ledger(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
+    selected_fiscal_year_code = _selected_fiscal_year_code()
     ledger_page = list_ledger_transactions(
         department_name=department_name,
-        fiscal_year_code=(request.args.get("fiscal_year_code") or "").strip() or None,
+        fiscal_year_code=selected_fiscal_year_code or None,
         archive_status=(request.args.get("archive_status") or "active").strip(),
         ledger_kind=(request.args.get("ledger_kind") or "").strip() or None,
         review_status=(request.args.get("review_status") or "").strip() or None,
@@ -125,7 +135,8 @@ def ledger(department_name: str):
         active_tab="ledger",
         ledger_page=ledger_page,
         ledgers=ledger_page["rows"],
-        selected_fiscal_year_code=(request.args.get("fiscal_year_code") or "").strip(),
+        fiscal_years=_fiscal_year_options(),
+        selected_fiscal_year_code=selected_fiscal_year_code,
         selected_archive_status=(request.args.get("archive_status") or "active").strip(),
         selected_ledger_kind=(request.args.get("ledger_kind") or "").strip(),
         selected_review_status=(request.args.get("review_status") or "").strip(),
@@ -166,9 +177,10 @@ def purchase_orders(department_name: str):
     if not can_access_department(user_id, department_name):
         abort(403)
 
+    selected_fiscal_year_code = _selected_fiscal_year_code()
     po_page = list_purchase_orders(
         department_name=department_name,
-        fiscal_year_code=(request.args.get("fiscal_year_code") or "").strip() or None,
+        fiscal_year_code=selected_fiscal_year_code or None,
         status=(request.args.get("status") or "").strip() or None,
         vendor_q=(request.args.get("vendor_q") or "").strip() or None,
         q=(request.args.get("q") or "").strip() or None,
@@ -182,7 +194,8 @@ def purchase_orders(department_name: str):
         active_tab="purchase_orders",
         po_page=po_page,
         purchase_orders=po_page["rows"],
-        selected_fiscal_year_code=(request.args.get("fiscal_year_code") or "").strip(),
+        fiscal_years=_fiscal_year_options(),
+        selected_fiscal_year_code=selected_fiscal_year_code,
         selected_status=(request.args.get("status") or "").strip(),
         vendor_q=(request.args.get("vendor_q") or "").strip(),
         q=(request.args.get("q") or "").strip(),
@@ -221,9 +234,10 @@ def budget_accounts(department_name: str):
     if not has_budget_view(user_id):
         abort(403)
 
+    selected_fiscal_year_code = _selected_fiscal_year_code()
     account_page = list_budget_accounts(
         department_name=department_name,
-        fiscal_year_code=(request.args.get("fiscal_year_code") or "").strip() or None,
+        fiscal_year_code=selected_fiscal_year_code or None,
         q=(request.args.get("q") or "").strip() or None,
         page=request.args.get("page", default=1, type=int),
         per_page=100,
@@ -235,7 +249,8 @@ def budget_accounts(department_name: str):
         active_tab="budget_accounts",
         account_page=account_page,
         budget_accounts=account_page["rows"],
-        selected_fiscal_year_code=(request.args.get("fiscal_year_code") or "").strip(),
+        fiscal_years=_fiscal_year_options(),
+        selected_fiscal_year_code=selected_fiscal_year_code,
         q=(request.args.get("q") or "").strip(),
         can_manage=can_manage_department(user_id, department_name),
         can_view_budget=True,
