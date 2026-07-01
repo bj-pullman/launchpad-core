@@ -4,21 +4,26 @@ import json
 from typing import Any
 
 from .db import get_connection
+from .ledger_accounting_service import (
+    find_record_match,
+    link_ledger_to_record,
+    normalize_po,
+    parse_ledger_date_for_sql,
+    recalculate_budget_account,
+    recalculate_purchase_order,
+    resolve_fiscal_year,
+    upsert_budget_account,
+    upsert_purchase_order,
+)
 from .ledger_record_service import (
     create_record_from_ledger,
     should_create_record_from_ledger,
 )
 from .ledger_service import (
     ensure_finance_ledger_schema,
-    find_record_match,
-    link_ledger_to_record,
     make_source_hash,
     money,
-    normalize_po,
     normalize_text,
-    resolve_fiscal_year,
-    upsert_budget_account,
-    upsert_purchase_order,
     utc_now_iso,
 )
 from .ledger_vendor_service import get_or_create_vendor_for_ledger_import
@@ -99,7 +104,7 @@ def _build_title(mapped: dict[str, Any], row_number: int) -> str:
             return f"Budget Allocation - Account {account_code}"
         return "Budget Allocation"
     if vendor_name and po_number:
-        return f"{vendor_name} - PO {po_number}"
+        return f"{vendor_name} - PO {normalize_po(po_number) or po_number}"
     if vendor_name and account_code:
         return f"{vendor_name} - Account {account_code}"
     if account_code:
@@ -175,6 +180,7 @@ def execute_ledger_import(
     duplicate_rows = 0
     skipped_rows = 0
     error_rows = 0
+    import_errors: list[tuple[int, str | None, str]] = []
     budget_accounts_updated: set[int] = set()
     purchase_orders_updated: set[int] = set()
     linked_rows = 0
@@ -220,8 +226,9 @@ def execute_ledger_import(
                 elif transaction_code:
                     unknown_transaction_codes.add(transaction_code)
 
-                purchase_date = normalize_text(mapped.get("purchase_date"))
-                fiscal_year = resolve_fiscal_year(conn, purchase_date)
+                purchase_date_raw = normalize_text(mapped.get("purchase_date"))
+                purchase_date = parse_ledger_date_for_sql(purchase_date_raw) or purchase_date_raw
+                fiscal_year = resolve_fiscal_year(conn, purchase_date_raw)
 
                 vendor_id = None
                 vendor_was_created = False
@@ -236,9 +243,15 @@ def execute_ledger_import(
                     if vendor_was_created:
                         vendors_created += 1
 
+                raw_po_number = normalize_text(mapped.get("po_number"))
+                base_po_number = normalize_po(raw_po_number)
+
                 raw_payload = {
                     "source_row": row,
                     "transaction_code_info": transaction_code_info,
+                    "raw_po_number": raw_po_number,
+                    "base_po_number": base_po_number,
+                    "purchase_date_raw": purchase_date_raw,
                 }
 
                 ledger = {
@@ -261,8 +274,8 @@ def execute_ledger_import(
                     "budget_unit": normalize_text(mapped.get("budget_unit")),
                     "account_code": normalize_text(mapped.get("account_code")),
                     "account_title": normalize_text(mapped.get("account_title")),
-                    "po_number": normalize_text(mapped.get("po_number")),
-                    "normalized_po_number": normalize_po(mapped.get("po_number")),
+                    "po_number": raw_po_number,
+                    "normalized_po_number": base_po_number,
                     "purchase_date": purchase_date,
                     "budget_amount": mapped.get("budget_amount"),
                     "expenditure_amount": mapped.get("expenditure_amount"),
@@ -289,10 +302,8 @@ def execute_ledger_import(
 
                 if ledger_id:
                     if budget_account_id:
-                        from .ledger_service import recalculate_budget_account
                         recalculate_budget_account(conn, budget_account_id)
                     if purchase_order_id:
-                        from .ledger_service import recalculate_purchase_order
                         recalculate_purchase_order(conn, purchase_order_id)
 
                     record_id, confidence, reason = find_record_match(conn, ledger=ledger)
@@ -323,14 +334,18 @@ def execute_ledger_import(
 
             except Exception as exc:
                 error_rows += 1
-                log_import_run_error(
-                    run_id=run_id,
-                    row_number=index,
-                    source_identifier=row.get(next(iter(row.keys()), ""), "") if row else None,
-                    error_message=str(exc),
-                )
+                source_identifier = row.get(next(iter(row.keys()), ""), "") if row else None
+                import_errors.append((index, source_identifier, str(exc)))
 
         conn.commit()
+
+    for row_number, source_identifier, error_message in import_errors:
+        log_import_run_error(
+            run_id=run_id,
+            row_number=row_number,
+            source_identifier=source_identifier,
+            error_message=error_message,
+        )
 
     run_notes = (
         f"Ledger import completed. Inserted: {inserted_rows}, Duplicates: {duplicate_rows}, "
