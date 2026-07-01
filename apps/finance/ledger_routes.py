@@ -6,7 +6,9 @@ from modules.core.auth.decorators import login_required
 
 from .access_service import can_access_department, can_manage_department, has_budget_view
 from .blueprint import bp
+from .derived_totals_service import rebuild_department_totals
 from .fiscal_year_service import list_fiscal_years
+from .ledger_budget_overview_service import get_ledger_budget_page_context
 from .ledger_import_service import execute_ledger_import
 from .ledger_query_service import (
     get_budget_account_detail,
@@ -17,7 +19,7 @@ from .ledger_query_service import (
     list_purchase_orders,
 )
 from .ledger_validation_service import validate_ledger_import
-from .service import get_import_run_by_id
+from .service import get_import_run_by_id, save_budget_target_for_department
 
 
 def _current_user_id():
@@ -37,6 +39,91 @@ def _selected_fiscal_year_code() -> str:
 
 def _fiscal_year_options() -> list[dict]:
     return list_fiscal_years(include_closed=True)
+
+
+def _selected_group_by() -> str:
+    group_by = (request.args.get("group_by") or "category").strip().lower()
+    return group_by if group_by in {"category", "vendor", "month", "record_type", "status"} else "category"
+
+
+@bp.before_request
+def intercept_budget_overview_routes():
+    if request.endpoint not in {"finance.budget", "finance.budget_loading"}:
+        return None
+
+    department_name = (request.view_args or {}).get("department_name")
+    if not department_name:
+        return None
+
+    user_id = _current_user_id()
+    if not can_access_department(user_id, department_name):
+        abort(403)
+    if not has_budget_view(user_id):
+        abort(403)
+
+    can_manage = can_manage_department(user_id, department_name)
+
+    if request.method == "POST":
+        if not can_manage:
+            abort(403)
+
+        fiscal_year = request.form.get("fiscal_year", type=int)
+        total_budget = (request.form.get("total_budget") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+
+        try:
+            save_budget_target_for_department(
+                department_name=department_name,
+                fiscal_year=fiscal_year,
+                total_budget=total_budget,
+                notes=notes,
+                created_by_user_id=user_id,
+            )
+            flash("Budget Overview settings saved successfully.", "success")
+        except Exception as exc:
+            flash(f"Budget Overview settings failed: {exc}", "error")
+
+        return redirect(url_for("finance.budget", department_name=department_name, year=fiscal_year))
+
+    if request.endpoint == "finance.budget_loading":
+        return render_template(
+            "finance/budget_loading.html",
+            department_name=department_name,
+            active_tab="budget",
+            can_view_budget=True,
+            can_manage=can_manage,
+        )
+
+    try:
+        rebuild_department_totals(
+            department_name=department_name,
+            changed_by_user_id=user_id,
+        )
+    except Exception as exc:
+        flash(f"Budget totals refresh failed: {exc}", "error")
+
+    selected_year = request.args.get("year", type=int)
+    selected_group_by = _selected_group_by()
+    budget_context = get_ledger_budget_page_context(
+        department_name=department_name,
+        year=selected_year,
+    )
+    budget_dashboard = budget_context["dashboard"]
+
+    return render_template(
+        "finance/budget.html",
+        department_name=department_name,
+        active_tab="budget",
+        can_manage=can_manage,
+        can_view_budget=True,
+        year_options=budget_context["year_options"],
+        selected_year=budget_context["selected_year"],
+        selected_group_by=selected_group_by,
+        selected_q=(request.args.get("q") or "").strip(),
+        budget_summary=budget_context["summary"],
+        budget_breakdown=budget_dashboard[selected_group_by],
+        budget_dashboard=budget_dashboard,
+    )
 
 
 @bp.before_request
