@@ -1,0 +1,54 @@
+<form method="post" action="{{ url_for('finance.fiscal_years', department_name=department_name) }}" class="finance-form">
+  <div class="finance-form-grid finance-fy-create-grid">
+    <div class="finance-field">
+      <label for="fy_year_number">Fiscal Year</label>
+      <input id="fy_year_number" name="year_number" type="number" min="2000" max="2100" placeholder="2026" required>
+      <div class="finance-field-help">Creates FY2026, FY26, and 2026 aliases.</div>
+    </div>
+
+    <div class="finance-field">
+      <label for="fy_friendly_name">Friendly Name</label>
+      <input id="fy_friendly_name" name="friendly_name" type="text" placeholder="Fiscal Year 2026">
+    </div>
+
+    <div class="finance-field finance-field-date">
+      <label for="fy_start_date">Start Date</label>
+      <input id="fy_start_date" name="start_date" type="date" required>
+    </div>
+
+    <div class="finance-field finance-field-date">
+      <label for="fy_end_date">End Date</label>
+      <input id="fy_end_date" name="end_date" type="date" required>
+    </div>
+
+    <div class="finance-field">
+      <label for="fy_adopted_budget">Adopted Budget</label>
+      <input id="fy_adopted_budget" name="adopted_budget" type="number" min="0" step="0.01" placeholder="1146117.86" required>
+      <div class="finance-field-help">Required. This value drives Budget Overview, Budget Accounts, and reporting.</div>
+    </div>
+
+    <div class="finance-field finance-fy-role-field">
+      <div class="finance-role-box">
+        <div class="finance-role-box-title">Fiscal Year Role</div>
+        <div class="finance-role-options">
+          <label class="finance-checkbox-row">
+            <input type="radio" name="fiscal_year_role" value="previous">
+            <span><strong>Previous fiscal year</strong><br>Historical records, purchase orders, budget accounts, and reports remain accessible.</span>
+          </label>
+          <label class="finance-checkbox-row">
+            <input type="radio" name="fiscal_year_role" value="current" checked>
+            <span><strong>Current fiscal year</strong><br>Active year for ledger imports and budget tracking.</span>
+          </label>
+          <label class="finance-checkbox-row">
+            <input type="radio" name="fiscal_year_role" value="next">
+            <span><strong>Next fiscal year</strong><br>Planning year for upcoming budget definitions.</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="finance-form-actions">
+    <button type="submit" class="btn btn-primary finance-action-button">Create Fiscal Year</button>
+  </div>
+</form>
