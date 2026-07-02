@@ -24,7 +24,7 @@ def _department_name() -> str | None:
 
 
 def _setup_redirect(department_name: str):
-    flash("Complete Fiscal Year setup before adding or importing Finance data.", "error")
+    flash("Complete Fiscal Year setup before adding, importing, or viewing operational Finance data.", "error")
     return redirect(
         url_for("finance.department_overview", department_name=department_name)
         + "?open_modal=finance-settings-modal&open_tab=start-year"
@@ -115,8 +115,8 @@ def intercept_fiscal_year_create_with_budget():
 
 
 @bp.before_request
-def require_fiscal_year_setup_for_data_changes():
-    if request.method != "POST":
+def require_fiscal_year_setup_for_finance_operations():
+    if request.method in {"OPTIONS", "HEAD"}:
         return None
     if request.endpoint in _ALLOWED_SETUP_ENDPOINTS:
         return None
