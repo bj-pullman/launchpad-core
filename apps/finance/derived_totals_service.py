@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from .db import get_connection
-from .ledger_accounting_service import recalculate_budget_account, recalculate_purchase_order
+from .ledger_accounting_service import (
+    recalculate_budget_account,
+    recalculate_purchase_order,
+    refresh_record_fiscal_year_summary,
+)
 from .ledger_record_service import update_record_financials_from_ledger
 from .ledger_service import ensure_finance_ledger_schema, normalize_text
 
@@ -52,6 +56,17 @@ def rebuild_department_totals(
                 """,
                 (department_name, fiscal_year_code),
             ).fetchall()
+            record_fy_rows = conn.execute(
+                """
+                SELECT DISTINCT linked_record_id AS id, fiscal_year_code
+                FROM finance_ledger_transactions
+                WHERE department_name = ?
+                  AND fiscal_year_code = ?
+                  AND linked_record_id IS NOT NULL
+                ORDER BY linked_record_id, fiscal_year_code
+                """,
+                (department_name, fiscal_year_code),
+            ).fetchall()
         else:
             budget_rows = conn.execute(
                 """
@@ -81,6 +96,17 @@ def rebuild_department_totals(
                 """,
                 (department_name,),
             ).fetchall()
+            record_fy_rows = conn.execute(
+                """
+                SELECT DISTINCT linked_record_id AS id, fiscal_year_code
+                FROM finance_ledger_transactions
+                WHERE department_name = ?
+                  AND linked_record_id IS NOT NULL
+                  AND fiscal_year_code IS NOT NULL
+                ORDER BY linked_record_id, fiscal_year_code
+                """,
+                (department_name,),
+            ).fetchall()
 
         for row in budget_rows:
             recalculate_budget_account(conn, row["id"])
@@ -95,10 +121,14 @@ def rebuild_department_totals(
                 changed_by_user_id=changed_by_user_id,
             )
 
+        for row in record_fy_rows:
+            refresh_record_fiscal_year_summary(conn, row["id"], row["fiscal_year_code"])
+
         conn.commit()
 
     return {
         "budget_accounts_refreshed": len(budget_rows),
         "purchase_orders_refreshed": len(po_rows),
         "records_refreshed": len(record_rows),
+        "record_years_refreshed": len(record_fy_rows),
     }
