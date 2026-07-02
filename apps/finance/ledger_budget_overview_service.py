@@ -6,7 +6,6 @@ from typing import Any
 
 from .db import get_connection
 from .ledger_service import ensure_finance_ledger_schema, parse_money
-from .service import get_budget_target_for_department
 
 
 def _money_sum(rows: list[dict[str, Any]], key: str) -> Decimal:
@@ -96,6 +95,7 @@ def get_ledger_budget_page_context(*, department_name: str, year: int | None = N
 
         selected_year = int(selected_fy["year_number"]) if selected_fy else year
         selected_code = selected_fy.get("code") if selected_fy else None
+        adopted_budget = parse_money(selected_fy.get("adopted_budget")) if selected_fy else Decimal("0.00")
 
         account_params: list[Any] = [department_name]
         account_where = ["department_name = ?"]
@@ -142,11 +142,7 @@ def get_ledger_budget_page_context(*, department_name: str, year: int | None = N
     ledger_budget_total = _money_sum(accounts, "current_budget")
     total_spent = _money_sum(accounts, "spent_amount")
     encumbrance_total = _money_sum(accounts, "encumbered_amount")
-    budget_target = get_budget_target_for_department(department_name, selected_year)
-    manual_budget_total = parse_money(budget_target.get("total_budget"))
-
-    total_budget = manual_budget_total if manual_budget_total > 0 else ledger_budget_total
-    budget_source = "manual" if manual_budget_total > 0 else "ledger"
+    total_budget = adopted_budget
     remaining_budget = total_budget - total_spent - encumbrance_total
 
     record_ids = {row.get("linked_record_id") for row in ledger_rows if row.get("linked_record_id")}
@@ -163,8 +159,9 @@ def get_ledger_budget_page_context(*, department_name: str, year: int | None = N
     summary = {
         "total_budget": total_budget,
         "ledger_budget_total": ledger_budget_total,
-        "manual_budget_total": manual_budget_total,
-        "budget_source": budget_source,
+        "manual_budget_total": adopted_budget,
+        "budget_source": "fiscal_year",
+        "fiscal_year": selected_fy,
         "total_spent": total_spent,
         "remaining_budget": remaining_budget,
         "percent_used": percent_used.quantize(Decimal("0.1")),
@@ -174,7 +171,12 @@ def get_ledger_budget_page_context(*, department_name: str, year: int | None = N
         "purchases_total": Decimal("0.00"),
         "active_total": total_spent,
         "encumbrance_total": encumbrance_total,
-        "budget_target": budget_target,
+        "budget_target": {
+            "department_name": department_name,
+            "fiscal_year": selected_year,
+            "total_budget": adopted_budget,
+            "notes": "Fiscal Year adopted budget",
+        },
     }
 
     dashboard = {
