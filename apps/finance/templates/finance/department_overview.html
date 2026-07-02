@@ -8,6 +8,7 @@
 {% endblock %}
 
 {% block content %}
+{% set setup_ready = finance_setup_status and finance_setup_status.is_ready %}
 <div class="page-shell finance-shell">
 
 {% include "finance/_finance_tabs.html" %}
@@ -20,9 +21,11 @@
 
     {% if can_manage %}
       <div class="page-header-actions">
-        <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name) }}">Import</a>
-        <a class="btn btn-primary" href="{{ url_for('finance.record_create', department_name=department_name) }}">Add Record</a>
-        <a class="btn btn-primary" href="{{ url_for('finance.vendor_create', department_name=department_name) }}">Add Vendor</a>
+        {% if setup_ready %}
+          <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name) }}">Import</a>
+          <a class="btn btn-primary" href="{{ url_for('finance.record_create', department_name=department_name) }}">Add Record</a>
+          <a class="btn btn-primary" href="{{ url_for('finance.vendor_create', department_name=department_name) }}">Add Vendor</a>
+        {% endif %}
         <button
           type="button"
           class="btn finance-settings-btn"
@@ -50,34 +53,58 @@
     {% endif %}
   </div>
 
-  <div class="finance-alert">
-    <strong>Admin note:</strong> {{ explicit_permissions_notice }}
-  </div>
+  {% if not setup_ready %}
+    <div class="content-card finance-empty">
+      <h3>Finance Setup Required</h3>
+      <p>Before using Budget Overview, imports, records, purchase orders, or reports, create a Current fiscal year and enter its Budget Amount.</p>
 
-  <div class="finance-stats">
-    <div class="finance-stat-card">
-      <div class="finance-stat-label">Total Records</div>
-      <div class="finance-stat-value">{{ dashboard_summary.total_records }}</div>
+      {% if finance_setup_status and finance_setup_status.missing_items %}
+        <div class="finance-alert">
+          <strong>Still needed:</strong>
+          <ul>
+            {% for item in finance_setup_status.missing_items %}
+              <li>{{ item|replace('adopted budget', 'Budget Amount') }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      {% if can_manage %}
+        <button type="button" class="btn btn-primary finance-action-button" data-finance-modal-open="finance-settings-modal">
+          Complete Finance Setup
+        </button>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="finance-alert">
+      <strong>Admin note:</strong> {{ explicit_permissions_notice }}
     </div>
 
-    <div class="finance-stat-card">
-      <div class="finance-stat-label">Renewals Due in 30 Days</div>
-      <div class="finance-stat-value">{{ dashboard_summary.renewals_due_30 }}</div>
+    <div class="finance-stats">
+      <div class="finance-stat-card">
+        <div class="finance-stat-label">Total Records</div>
+        <div class="finance-stat-value">{{ dashboard_summary.total_records }}</div>
+      </div>
+
+      <div class="finance-stat-card">
+        <div class="finance-stat-label">Renewals Due in 30 Days</div>
+        <div class="finance-stat-value">{{ dashboard_summary.renewals_due_30 }}</div>
+      </div>
+
+      <div class="finance-stat-card">
+        <div class="finance-stat-label">Active Vendors</div>
+        <div class="finance-stat-value">{{ dashboard_summary.active_vendors }}</div>
+      </div>
     </div>
 
-    <div class="finance-stat-card">
-      <div class="finance-stat-label">Active Vendors</div>
-      <div class="finance-stat-value">{{ dashboard_summary.active_vendors }}</div>
+    <div class="content-card">
+      {% if can_view_budget %}
+        <p class="muted">Budget module access is enabled for your account.</p>
+      {% else %}
+        <p class="muted">Budget module access is not assigned for your account.</p>
+      {% endif %}
     </div>
-  </div>
-
-  <div class="content-card">
-    {% if can_view_budget %}
-      <p class="muted">Budget module access is enabled for your account.</p>
-    {% else %}
-      <p class="muted">Budget module access is not assigned for your account.</p>
-    {% endif %}
-  </div>
+  {% endif %}
 </div>
 
 {% include "finance/_finance_settings_modal.html" %}
