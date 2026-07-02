@@ -4,14 +4,6 @@
 <link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
 {% endblock %}
 
-{% set totals = namespace(current_budget=0, spent=0, encumbered=0, available=0) %}
-{% for account in budget_accounts %}
-  {% set totals.current_budget = totals.current_budget + (account.current_budget|float) %}
-  {% set totals.spent = totals.spent + (account.spent_amount|float) %}
-  {% set totals.encumbered = totals.encumbered + (account.encumbered_amount|float) %}
-  {% set totals.available = totals.available + (account.available_amount|float) %}
-{% endfor %}
-
 {% block content %}
 <div class="page-shell finance-shell">
   {% include "finance/_finance_tabs.html" %}
@@ -26,19 +18,19 @@
   <div class="finance-stats finance-stats-wide">
     <div class="finance-stat-card">
       <div class="finance-stat-label">Current Budget</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.current_budget) }}</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(account_summary.current_budget|float) }}</div>
     </div>
     <div class="finance-stat-card">
       <div class="finance-stat-label">Spent</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.spent) }}</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(account_summary.spent|float) }}</div>
     </div>
     <div class="finance-stat-card">
       <div class="finance-stat-label">Open Encumbrance</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.encumbered) }}</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(account_summary.encumbered|float) }}</div>
     </div>
     <div class="finance-stat-card">
       <div class="finance-stat-label">Available</div>
-      <div class="finance-stat-value {% if totals.available < 0 %}finance-negative{% endif %}">${{ "{:,.2f}".format(totals.available) }}</div>
+      <div class="finance-stat-value {% if account_summary.available|float < 0 %}finance-negative{% endif %}">${{ "{:,.2f}".format(account_summary.available|float) }}</div>
     </div>
   </div>
 
