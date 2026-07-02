@@ -77,6 +77,12 @@ def money(value: Any) -> str:
     return str(parse_money(value).quantize(Decimal("0.01")))
 
 
+def _ensure_column(conn, table_name: str, column_name: str, column_sql: str) -> None:
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
+
+
 def ensure_finance_ledger_schema(conn=None) -> None:
     owns_connection = conn is None
     conn = conn or get_connection()
@@ -106,6 +112,7 @@ def ensure_finance_ledger_schema(conn=None) -> None:
                 fund TEXT NULL,
                 budget_unit TEXT NULL,
                 account_code TEXT NULL,
+                budget_account_id INTEGER NULL,
                 po_number TEXT NULL,
                 normalized_po_number TEXT NULL,
                 purchase_order_id INTEGER NULL,
@@ -199,7 +206,17 @@ def ensure_finance_ledger_schema(conn=None) -> None:
                 updated_at TEXT NOT NULL,
                 UNIQUE(finance_record_id, fiscal_year_code)
             );
+            """
+        )
 
+        _ensure_column(conn, "finance_ledger_transactions", "budget_account_id", "INTEGER NULL")
+        _ensure_column(conn, "finance_ledger_transactions", "purchase_order_id", "INTEGER NULL")
+        _ensure_column(conn, "finance_ledger_transactions", "linked_record_id", "INTEGER NULL")
+        _ensure_column(conn, "finance_ledger_transactions", "link_confidence", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "finance_ledger_transactions", "link_reason", "TEXT NULL")
+
+        conn.executescript(
+            """
             CREATE INDEX IF NOT EXISTS idx_finance_ledger_department_status
             ON finance_ledger_transactions(department_name, archive_status, review_status);
 
