@@ -71,6 +71,22 @@ def purchase_order_totals(
     }
 
 
+def _adopted_budget_for_fiscal_year(conn, fiscal_year_code: str | None):
+    fiscal_year_code = normalize_text(fiscal_year_code)
+    if not fiscal_year_code:
+        return None
+    row = conn.execute(
+        """
+        SELECT adopted_budget
+        FROM finance_fiscal_years
+        WHERE code = ? OR short_code = ?
+        LIMIT 1
+        """,
+        (fiscal_year_code, fiscal_year_code),
+    ).fetchone()
+    return parse_money(row["adopted_budget"]) if row else None
+
+
 def budget_account_totals(
     *,
     department_name: str,
@@ -103,6 +119,7 @@ def budget_account_totals(
     where_sql = " AND ".join(f"({item})" for item in where)
     with get_connection() as conn:
         ensure_finance_ledger_schema(conn)
+        adopted_budget = _adopted_budget_for_fiscal_year(conn, fiscal_year_code)
         row = conn.execute(
             f"""
             SELECT
@@ -116,9 +133,15 @@ def budget_account_totals(
             params,
         ).fetchone()
 
+    spent = parse_money(row["spent"])
+    encumbered = parse_money(row["encumbered"])
+    current_budget = adopted_budget if adopted_budget is not None else parse_money(row["current_budget"])
+    available = current_budget - spent - encumbered
+
     return {
-        "current_budget": parse_money(row["current_budget"]),
-        "spent": parse_money(row["spent"]),
-        "encumbered": parse_money(row["encumbered"]),
-        "available": parse_money(row["available"]),
+        "current_budget": current_budget,
+        "ledger_budget": parse_money(row["current_budget"]),
+        "spent": spent,
+        "encumbered": encumbered,
+        "available": available,
     }
