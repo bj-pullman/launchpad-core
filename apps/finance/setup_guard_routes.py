@@ -62,7 +62,7 @@ def intercept_fiscal_year_create_with_budget():
         fiscal_year_role = "next"
 
     if not year_number or not start_date or not end_date or not adopted_budget:
-        flash("Fiscal year, start date, end date, and adopted budget are required.", "error")
+        flash("Fiscal year, start date, end date, and Budget Amount are required.", "error")
         return redirect(
             url_for("finance.department_overview", department_name=department_name)
             + "?open_modal=finance-settings-modal&open_tab=start-year"
