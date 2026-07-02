@@ -33,14 +33,6 @@ START_CHECKLIST_TEMPLATE = [
         "is_skippable": 0,
         "auto_complete": False,
     },
-    # {
-    #     "item_key": "verify_department_aliases",
-    #     "label": "Verify department aliases",
-    #     "description": "Review department mappings and aliases, including legacy names.",
-    #     "is_required": 1,
-    #     "is_skippable": 0,
-    #     "auto_complete": False,
-    # },
     {
         "item_key": "import_opening_transactions",
         "label": "Import current/opening transactions",
@@ -141,26 +133,42 @@ def fiscal_year_aliases_for(code: str, year_number: int) -> list[str]:
     )
 
 
+def _role_limited_years(years: list[dict]) -> list[dict]:
+    current_years = [item for item in years if item.get("is_current")]
+    next_years = [item for item in years if item.get("is_next")]
+    open_non_role_years = [
+        item
+        for item in years
+        if item.get("status") in OPEN_STATUSES and not item.get("is_current") and not item.get("is_next")
+    ]
+    previous_year = next((item for item in years if item.get("status") == "closed"), None)
+
+    selected: dict[int, dict] = {}
+    for item in [*current_years, *next_years, *open_non_role_years]:
+        selected[item["id"]] = item
+    if previous_year:
+        selected[previous_year["id"]] = previous_year
+
+    return sorted(selected.values(), key=lambda item: item["year_number"], reverse=True)
+
+
 def list_fiscal_years(include_closed: bool = True) -> list[dict]:
-    where = ""
-    params = []
+    with get_connection() as conn:
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT *
+                FROM finance_fiscal_years
+                ORDER BY year_number DESC
+                """
+            ).fetchall()
+        ]
 
     if not include_closed:
-        where = "WHERE status != ?"
-        params.append("closed")
+        return [item for item in rows if item["status"] != "closed"]
 
-    with get_connection() as conn:
-        rows = conn.execute(
-            f"""
-            SELECT *
-            FROM finance_fiscal_years
-            {where}
-            ORDER BY year_number DESC
-            """,
-            params,
-        ).fetchall()
-
-    return [dict(row) for row in rows]
+    return _role_limited_years(rows)
 
 
 def get_fiscal_year(fiscal_year_id: int) -> dict | None:
@@ -617,113 +625,3 @@ def get_fiscal_year_workflow_context() -> dict:
             [item for item in years if item["status"] in OPEN_STATUSES]
         ),
     }
-
-
-def activate_fiscal_year_after_start_checklist(
-    *,
-    fiscal_year_id: int,
-) -> None:
-    if not checklist_ready_for_workflow_completion(fiscal_year_id, "start_year"):
-        raise ValueError(
-            "All required start checklist items must be completed, and all skippable items must be completed or skipped."
-        )
-
-    now = utc_now_iso()
-
-    with get_connection() as conn:
-        fiscal_year = conn.execute(
-            """
-            SELECT *
-            FROM finance_fiscal_years
-            WHERE id = ?
-            """,
-            (fiscal_year_id,),
-        ).fetchone()
-
-        if not fiscal_year:
-            raise ValueError("Fiscal year not found.")
-
-        conn.execute(
-            """
-            UPDATE finance_fiscal_years
-            SET is_current = 0,
-                updated_at = ?
-            """,
-            (now,),
-        )
-
-        conn.execute(
-            """
-            UPDATE finance_fiscal_years
-            SET status = 'active',
-                is_current = 1,
-                is_next = 0,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            (now, fiscal_year_id),
-        )
-
-        conn.commit()
-
-
-def close_fiscal_year_after_close_checklist(
-    *,
-    fiscal_year_id: int,
-) -> None:
-    if not checklist_ready_for_workflow_completion(fiscal_year_id, "close_year"):
-        raise ValueError(
-            "All required close checklist items must be completed, and all skippable items must be completed or skipped."
-        )
-
-    now = utc_now_iso()
-
-    with get_connection() as conn:
-        fiscal_year = conn.execute(
-            """
-            SELECT *
-            FROM finance_fiscal_years
-            WHERE id = ?
-            """,
-            (fiscal_year_id,),
-        ).fetchone()
-
-        if not fiscal_year:
-            raise ValueError("Fiscal year not found.")
-
-        conn.execute(
-            """
-            UPDATE finance_fiscal_years
-            SET status = 'closed',
-                is_current = 0,
-                is_next = 0,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            (now, fiscal_year_id),
-        )
-
-        next_year = conn.execute(
-            """
-            SELECT *
-            FROM finance_fiscal_years
-            WHERE status = 'planning'
-            ORDER BY year_number ASC
-            LIMIT 1
-            """
-        ).fetchone()
-
-        if next_year:
-            conn.execute(
-                """
-                UPDATE finance_fiscal_years
-                SET status = 'active',
-                    is_current = 1,
-                    is_next = 0,
-                    updated_at = ?
-                WHERE id = ?
-                """,
-                (now, next_year["id"]),
-            )
-
-        conn.commit()
