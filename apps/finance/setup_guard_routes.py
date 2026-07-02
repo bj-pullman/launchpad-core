@@ -31,6 +31,14 @@ def _setup_redirect(department_name: str):
     )
 
 
+@bp.app_context_processor
+def inject_finance_setup_status():
+    try:
+        return {"finance_setup_status": get_finance_setup_status()}
+    except Exception:
+        return {"finance_setup_status": None}
+
+
 @bp.before_request
 def intercept_fiscal_year_create_with_budget():
     if request.endpoint != "finance.fiscal_years" or request.method != "POST":
