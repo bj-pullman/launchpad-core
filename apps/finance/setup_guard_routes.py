@@ -4,6 +4,7 @@ from flask import abort, flash, redirect, request, session, url_for
 
 from .access_service import can_access_department, can_manage_department
 from .blueprint import bp
+from .budget_definition_schema_service import ensure_budget_definition_schema
 from .finance_setup_guard_service import get_finance_setup_status, update_fiscal_year_adopted_budget
 from .fiscal_year_service import create_fiscal_year, update_fiscal_year_status
 
@@ -37,6 +38,13 @@ def inject_finance_setup_status():
         return {"finance_setup_status": get_finance_setup_status()}
     except Exception:
         return {"finance_setup_status": None}
+
+
+@bp.before_request
+def ensure_finance_route_schema():
+    if request.endpoint and request.endpoint.startswith("finance."):
+        ensure_budget_definition_schema()
+    return None
 
 
 @bp.before_request
