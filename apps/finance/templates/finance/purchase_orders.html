@@ -4,14 +4,6 @@
 <link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
 {% endblock %}
 
-{% set totals = namespace(encumbered=0, paid=0, remaining=0, open_count=0) %}
-{% for po in purchase_orders %}
-  {% set totals.encumbered = totals.encumbered + (po.current_encumbrance|float) %}
-  {% set totals.paid = totals.paid + (po.paid_amount|float) %}
-  {% set totals.remaining = totals.remaining + (po.remaining_encumbrance|float) %}
-  {% if po.status == "open" %}{% set totals.open_count = totals.open_count + 1 %}{% endif %}
-{% endfor %}
-
 {% block content %}
 <div class="page-shell finance-shell">
   {% include "finance/_finance_tabs.html" %}
@@ -30,15 +22,15 @@
     </div>
     <div class="finance-stat-card">
       <div class="finance-stat-label">Encumbered</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.encumbered) }}</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(po_summary.encumbered|float) }}</div>
     </div>
     <div class="finance-stat-card">
       <div class="finance-stat-label">Paid</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.paid) }}</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(po_summary.paid|float) }}</div>
     </div>
     <div class="finance-stat-card">
       <div class="finance-stat-label">Remaining</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(totals.remaining) }}</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(po_summary.remaining|float) }}</div>
     </div>
   </div>
 
@@ -46,7 +38,14 @@
     <form method="get" class="finance-record-filters">
       <div class="form-field">
         <label>Fiscal Year</label>
-        <input type="text" name="fiscal_year_code" value="{{ selected_fiscal_year_code or '' }}" placeholder="FY26">
+        <select name="fiscal_year_code">
+          <option value="">All Fiscal Years</option>
+          {% for fy in fiscal_years %}
+            <option value="{{ fy.code }}" {% if selected_fiscal_year_code == fy.code %}selected{% endif %}>
+              {{ fy.code }}{% if fy.is_current %} - Current{% endif %}
+            </option>
+          {% endfor %}
+        </select>
       </div>
       <div class="form-field">
         <label>Status</label>
@@ -112,6 +111,18 @@
         </tbody>
       </table>
     </div>
+
+    {% if po_page.total_pages > 1 %}
+    <div class="finance-pagination">
+      {% if po_page.has_prev %}
+        <a class="btn btn-secondary" href="{{ url_for('finance.purchase_orders', department_name=department_name, fiscal_year_code=selected_fiscal_year_code, status=selected_status, vendor_q=vendor_q, q=q, page=po_page.prev_page) }}">Previous</a>
+      {% endif %}
+      <span class="finance-pagination-label">Page {{ po_page.page }} of {{ po_page.total_pages }}</span>
+      {% if po_page.has_next %}
+        <a class="btn btn-secondary" href="{{ url_for('finance.purchase_orders', department_name=department_name, fiscal_year_code=selected_fiscal_year_code, status=selected_status, vendor_q=vendor_q, q=q, page=po_page.next_page) }}">Next</a>
+      {% endif %}
+    </div>
+    {% endif %}
     {% else %}
     <div class="finance-empty">
       <h3>No purchase orders found</h3>
