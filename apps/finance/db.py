@@ -16,6 +16,12 @@ def get_connection():
     return conn
 
 
+def _ensure_column(conn, table_name: str, column_name: str, column_sql: str) -> None:
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
+
+
 def init_finance_db():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -215,88 +221,45 @@ def init_finance_db():
 
             CREATE TABLE IF NOT EXISTS finance_transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-
                 department_name TEXT NOT NULL,
                 import_run_id INTEGER,
-                source_type TEXT,
-                source_row_number INTEGER,
-
-                transaction_type TEXT,
-                review_status TEXT NOT NULL DEFAULT 'needs_review',
-
-                title TEXT,
-                description TEXT,
-
-                vendor_id INTEGER,
-                vendor_code TEXT,
-                vendor_name TEXT,
-
-                fund TEXT,
-                budget_unit TEXT,
-                account_code TEXT,
-                po_number TEXT,
-                purchase_date TEXT,
-
-                expenditure_amount TEXT,
-                encumbrance_amount TEXT,
-                cumulative_balance TEXT,
-
-                suggested_record_type TEXT,
-                is_promotable INTEGER NOT NULL DEFAULT 0,
-                promoted_record_id INTEGER,
-
-                raw_json TEXT,
-
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS finance_budget_targets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                department_name TEXT NOT NULL,
-                fiscal_year INTEGER NOT NULL,
-                total_budget TEXT NOT NULL DEFAULT '0',
-                notes TEXT NULL,
-                created_by_user_id INTEGER NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                UNIQUE(department_name, fiscal_year)
-            );
-
-            CREATE TABLE IF NOT EXISTS finance_budget_definition_sets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                fiscal_year TEXT NOT NULL,
-                source_filename TEXT NULL,
-                uploaded_by_user_id INTEGER NULL,
-                uploaded_at TEXT NOT NULL,
-                is_active INTEGER NOT NULL DEFAULT 1,
-                notes TEXT NULL,
+                transaction_type TEXT NULL,
+                purchase_date TEXT NULL,
+                vendor_id INTEGER NULL,
+                vendor_name TEXT NULL,
+                po_number TEXT NULL,
+                account_code TEXT NULL,
+                description TEXT NULL,
+                expenditure_amount TEXT DEFAULT '0.00',
+                encumbrance_amount TEXT DEFAULT '0.00',
+                budget_amount TEXT DEFAULT '0.00',
+                source_identifier TEXT NULL,
+                raw_json TEXT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS finance_budget_definitions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                definition_set_id INTEGER NOT NULL,
                 fiscal_year TEXT NOT NULL,
-
-                level_number INTEGER NULL,
-                code TEXT NULL,
-
+                combined_code TEXT NOT NULL,
                 fund_code TEXT NULL,
+                fund_title TEXT NULL,
                 function_code TEXT NULL,
+                function_title TEXT NULL,
                 building_code TEXT NULL,
+                building_title TEXT NULL,
                 program_code TEXT NULL,
+                program_title TEXT NULL,
                 modifier_code TEXT NULL,
-                combined_code TEXT NULL,
-
-                title TEXT NULL,
+                modifier_title TEXT NULL,
+                segment_6_code TEXT NULL,
+                segment_6_title TEXT NULL,
                 description TEXT NULL,
-
-                raw_json TEXT NULL,
                 is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                UNIQUE(fiscal_year, combined_code)
             );
 
             CREATE TABLE IF NOT EXISTS finance_budget_buildings (
@@ -339,6 +302,7 @@ def init_finance_db():
                 friendly_name TEXT NOT NULL,
                 start_date TEXT NOT NULL,
                 end_date TEXT NOT NULL,
+                adopted_budget TEXT NOT NULL DEFAULT '0.00',
                 status TEXT NOT NULL DEFAULT 'planning',
                 is_current INTEGER NOT NULL DEFAULT 0,
                 is_next INTEGER NOT NULL DEFAULT 0,
@@ -402,6 +366,8 @@ def init_finance_db():
         )
 
         now = datetime.now(timezone.utc).isoformat()
+
+        _ensure_column(conn, "finance_fiscal_years", "adopted_budget", "TEXT NOT NULL DEFAULT '0.00'")
 
         starter_categories = [
             "Curriculum Software",
@@ -474,143 +440,12 @@ def init_finance_db():
 
         if "status" not in finance_vendor_columns:
             conn.execute(
-                "ALTER TABLE finance_vendors ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+                "ALTER TABLE finance_vendors ADD COLUMN status TEXT DEFAULT 'active'"
             )
 
         if "deleted_at" not in finance_vendor_columns:
             conn.execute(
                 "ALTER TABLE finance_vendors ADD COLUMN deleted_at TEXT NULL"
-            )
-
-        if "friendly_name" not in finance_vendor_columns:
-            conn.execute(
-                "ALTER TABLE finance_vendors ADD COLUMN friendly_name TEXT NULL"
-            )
-
-        import_profile_field_columns = conn.execute(
-            "PRAGMA table_info(finance_import_profile_fields)"
-        ).fetchall()
-
-        source_column_info = next(
-            (row for row in import_profile_field_columns if row["name"] == "source_column_name"),
-            None,
-        )
-
-        if source_column_info and source_column_info["notnull"] == 1:
-            conn.executescript(
-                """
-                ALTER TABLE finance_import_profile_fields RENAME TO finance_import_profile_fields_old;
-
-                CREATE TABLE finance_import_profile_fields (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    profile_id INTEGER NOT NULL,
-                    source_column_name TEXT NULL,
-                    target_field_name TEXT NOT NULL,
-                    transform_rule TEXT NULL,
-                    default_value TEXT NULL,
-                    required INTEGER NOT NULL DEFAULT 0,
-                    ignore_field INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-
-                INSERT INTO finance_import_profile_fields (
-                    id,
-                    profile_id,
-                    source_column_name,
-                    target_field_name,
-                    transform_rule,
-                    default_value,
-                    required,
-                    ignore_field,
-                    created_at,
-                    updated_at
-                )
-                SELECT
-                    id,
-                    profile_id,
-                    source_column_name,
-                    target_field_name,
-                    transform_rule,
-                    default_value,
-                    required,
-                    ignore_field,
-                    created_at,
-                    updated_at
-                FROM finance_import_profile_fields_old;
-
-                DROP TABLE finance_import_profile_fields_old;
-                """
-            )
-
-        finance_transaction_columns = [
-            row["name"]
-            for row in conn.execute("PRAGMA table_info(finance_transactions)").fetchall()
-        ]
-
-        transaction_budget_columns = {
-            "budget_fund_code": "TEXT NULL",
-            "budget_function_code": "TEXT NULL",
-            "budget_building_code": "TEXT NULL",
-            "budget_program_code": "TEXT NULL",
-            "budget_modifier_code": "TEXT NULL",
-            "budget_combined_code": "TEXT NULL",
-            "budget_definition_id": "INTEGER NULL",
-            "budget_definition_status": "TEXT NULL",
-        }
-
-        for column_name, column_type in transaction_budget_columns.items():
-            if column_name not in finance_transaction_columns:
-                conn.execute(
-                    f"ALTER TABLE finance_transactions ADD COLUMN {column_name} {column_type}"
-                )
-
-        budget_buildings = [
-            ("000", "District", "District / Administrative"),
-            ("018", "EEE", "East End Elementary"),
-            ("019", "SES", "Sheridan Elementary School"),
-            ("020", "SMS", "Sheridan Middle School"),
-            ("021", "SHS", "Sheridan High School"),
-            ("023", "SIS", "Sheridan Intermediate School"),
-            ("024", "EEI", "East End Intermediate"),
-            ("026", "EEM", "East End Middle School"),
-        ]
-
-        for code, short_name, full_name in budget_buildings:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO finance_budget_buildings (
-                    building_code,
-                    short_name,
-                    full_name,
-                    is_active,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?, ?, ?, 1, ?, ?)
-                """,
-                (code, short_name, full_name, now, now),
-            )
-
-        building_aliases = [
-            ("020", "SJHS"),
-            ("020", "Sheridan Junior High"),
-            ("026", "EMS"),
-            ("026", "East End Middle"),
-        ]
-
-        for building_code, alias in building_aliases:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO finance_budget_building_aliases (
-                    building_code,
-                    alias,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?, ?, ?, ?)
-                """,
-                (building_code, alias, now, now),
             )
 
         conn.commit()
