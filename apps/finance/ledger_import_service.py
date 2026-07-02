@@ -130,6 +130,52 @@ def insert_ledger_transaction(conn, *, ledger: dict[str, Any]) -> tuple[int | No
         (ledger["source_hash"],),
     ).fetchone()
     if existing:
+        now = utc_now_iso()
+        conn.execute(
+            """
+            UPDATE finance_ledger_transactions
+            SET import_run_id = ?,
+                source_type = ?,
+                source_row_number = ?,
+                fiscal_year_id = ?,
+                fiscal_year_code = ?,
+                transaction_code = ?,
+                transaction_code_label = ?,
+                ledger_kind = ?,
+                title = ?,
+                description = ?,
+                vendor_id = ?,
+                vendor_code = ?,
+                vendor_name = ?,
+                fund = ?,
+                budget_unit = ?,
+                account_code = ?,
+                budget_account_id = ?,
+                po_number = ?,
+                normalized_po_number = ?,
+                purchase_order_id = ?,
+                purchase_date = ?,
+                budget_amount = ?,
+                expenditure_amount = ?,
+                encumbrance_amount = ?,
+                cumulative_balance = ?,
+                raw_json = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                ledger.get("import_run_id"), ledger.get("source_type"), ledger.get("source_row_number"),
+                ledger.get("fiscal_year_id"), ledger.get("fiscal_year_code"), ledger.get("transaction_code"),
+                ledger.get("transaction_code_label"), ledger.get("ledger_kind"), ledger.get("title"),
+                ledger.get("description"), ledger.get("vendor_id"), ledger.get("vendor_code"),
+                ledger.get("vendor_name"), ledger.get("fund"), ledger.get("budget_unit"),
+                ledger.get("account_code"), ledger.get("budget_account_id"), ledger.get("po_number"),
+                ledger.get("normalized_po_number"), ledger.get("purchase_order_id"), ledger.get("purchase_date"),
+                money(ledger.get("budget_amount")), money(ledger.get("expenditure_amount")),
+                money(ledger.get("encumbrance_amount")), money(ledger.get("cumulative_balance")),
+                ledger.get("raw_json"), now, existing["id"],
+            ),
+        )
         return existing["id"], False
 
     now = utc_now_iso()
