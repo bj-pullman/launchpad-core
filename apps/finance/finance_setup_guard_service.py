@@ -34,26 +34,28 @@ def get_finance_setup_status() -> dict[str, Any]:
         ).fetchone()
 
     current = dict(current_fy) if current_fy else None
-    adopted_budget = _money(current.get("adopted_budget")) if current else Decimal("0.00")
+    budget_amount = _money(current.get("adopted_budget")) if current else Decimal("0.00")
     has_fiscal_year = fiscal_year_count > 0
     has_current_fiscal_year = current is not None
-    has_adopted_budget = adopted_budget > 0
+    has_budget_amount = budget_amount > 0
 
     missing_items = []
     if not has_fiscal_year:
         missing_items.append("Create at least one fiscal year.")
     if not has_current_fiscal_year:
         missing_items.append("Mark one fiscal year as Current.")
-    if has_current_fiscal_year and not has_adopted_budget:
-        missing_items.append("Enter the adopted budget for the current fiscal year.")
+    if has_current_fiscal_year and not has_budget_amount:
+        missing_items.append("Enter the Budget Amount for the current fiscal year.")
 
     return {
-        "is_ready": has_fiscal_year and has_current_fiscal_year and has_adopted_budget,
+        "is_ready": has_fiscal_year and has_current_fiscal_year and has_budget_amount,
         "has_fiscal_year": has_fiscal_year,
         "has_current_fiscal_year": has_current_fiscal_year,
-        "has_adopted_budget": has_adopted_budget,
+        "has_adopted_budget": has_budget_amount,
+        "has_budget_amount": has_budget_amount,
         "current_fiscal_year": current,
-        "adopted_budget": adopted_budget,
+        "adopted_budget": budget_amount,
+        "budget_amount": budget_amount,
         "missing_items": missing_items,
     }
 
@@ -61,12 +63,12 @@ def get_finance_setup_status() -> dict[str, Any]:
 def require_finance_setup_ready() -> dict[str, Any]:
     status = get_finance_setup_status()
     if not status["is_ready"]:
-        raise ValueError("Finance setup must be completed before adding or importing data.")
+        raise ValueError("Finance setup must be completed before adding, importing, or viewing operational data.")
     return status
 
 
 def update_fiscal_year_adopted_budget(*, fiscal_year_id: int, adopted_budget: str | None) -> None:
-    adopted_budget_value = _money(adopted_budget)
+    budget_amount = _money(adopted_budget)
     with get_connection() as conn:
         conn.execute(
             """
@@ -75,6 +77,6 @@ def update_fiscal_year_adopted_budget(*, fiscal_year_id: int, adopted_budget: st
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (str(adopted_budget_value), fiscal_year_id),
+            (str(budget_amount), fiscal_year_id),
         )
         conn.commit()
