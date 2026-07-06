@@ -105,6 +105,7 @@ from .fiscal_year_service import (
     activate_fiscal_year_after_start_checklist,
     close_fiscal_year_after_close_checklist,
     get_fiscal_year_workflow_context,
+    update_fiscal_year,
 )
 
 @bp.route("/")
@@ -1910,9 +1911,11 @@ def fiscal_years(department_name: str):
         start_date = (request.form.get("start_date") or "").strip()
         end_date = (request.form.get("end_date") or "").strip()
         friendly_name = (request.form.get("friendly_name") or "").strip()
+        adopted_budget = (request.form.get("adopted_budget") or "0.00").strip()
+        make_previous = request.form.get("make_previous") == "1"
 
-        make_current = False
-        make_next = True
+        make_current = request.form.get("make_current") == "1"
+        make_next = request.form.get("make_next") == "1"
 
         if not year_number or not start_date or not end_date:
             flash("Fiscal year, start date, and end date are required.", "error")
@@ -1927,6 +1930,8 @@ def fiscal_years(department_name: str):
                 start_date=start_date,
                 end_date=end_date,
                 friendly_name=friendly_name,
+                adopted_budget=adopted_budget,
+                make_previous=make_previous,
                 make_current=make_current,
                 make_next=make_next,
                 created_by_user_id=user_id,
@@ -1954,6 +1959,45 @@ def fiscal_years(department_name: str):
     return redirect(
         url_for("finance.department_overview", department_name=department_name)
         + "?open_modal=finance-settings-modal&open_tab=start-year"
+    )
+
+@bp.route("/<department_name>/fiscal-years/<int:fiscal_year_id>/edit", methods=["POST"])
+@login_required
+def fiscal_year_edit(department_name: str, fiscal_year_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    try:
+        fiscal_year_role = (request.form.get("fiscal_year_role") or "").strip().lower()
+
+        update_fiscal_year(
+            fiscal_year_id=fiscal_year_id,
+            year_number=request.form.get("year_number", type=int),
+            friendly_name=(request.form.get("friendly_name") or "").strip(),
+            start_date=(request.form.get("start_date") or "").strip(),
+            end_date=(request.form.get("end_date") or "").strip(),
+            adopted_budget=(request.form.get("adopted_budget") or "0.00").strip(),
+            status=(request.form.get("status") or "").strip(),
+            is_previous=fiscal_year_role == "previous",
+            is_current=fiscal_year_role == "current",
+            is_next=fiscal_year_role == "next",
+        )
+
+        flash("Fiscal year updated successfully.", "success")
+
+    except Exception as exc:
+        flash(f"Fiscal year update failed: {exc}", "error")
+
+    return redirect(
+        url_for("finance.department_overview", department_name=department_name)
+        + "?open_modal=finance-settings-modal&open_tab=fiscal-years"
     )
 
 

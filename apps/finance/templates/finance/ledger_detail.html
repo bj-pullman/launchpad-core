@@ -1,23 +1,146 @@
 {% extends "launchpad_ui/base.html" %}
-{% block extra_css %}<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="page-shell finance-shell">
-  {% include "finance/_finance_tabs.html" %}
-  <div class="finance-back-row"><a class="finance-back-link" href="{{ url_for('finance.ledger', department_name=department_name) }}">Back to Ledger</a></div>
-  <div class="page-header"><div><h1>Ledger Transaction</h1><p class="page-subtitle">{{ ledger_transaction.description or ledger_transaction.title or "ERP ledger row" }}</p></div></div>
+
+  <div class="finance-back-row">
+    <a href="{{ url_for('finance.ledger', department_name=department_name) }}" class="finance-back-link">
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Ledger</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>Ledger Transaction</h1>
+      <p class="page-subtitle">
+        {{ ledger_transaction.description or ledger_transaction.title or "ERP ledger row" }}
+      </p>
+    </div>
+  </div>
+
+  <div class="content-card finance-ledger-detail-card">
+    <div class="finance-ledger-detail-header">
+      <div>
+        <p class="finance-eyebrow">Ledger Row</p>
+        <h2 class="finance-section-title">Transaction Details</h2>
+        <p class="finance-section-subtitle">Accounting identity for this ERP ledger row.</p>
+      </div>
+
+      <span class="finance-pill">
+        {{ ledger_transaction.ledger_kind|replace("_", " ")|title }}
+      </span>
+    </div>
+
+    <div class="finance-ledger-detail-grid">
+      <div class="finance-ledger-detail-item">
+        <span>Fiscal Year</span>
+        <strong>{{ ledger_transaction.fiscal_year_code or "-" }}</strong>
+      </div>
+
+      <div class="finance-ledger-detail-item">
+        <span>Date</span>
+        <strong>{{ ledger_transaction.purchase_date or "-" }}</strong>
+      </div>
+
+      <div class="finance-ledger-detail-item">
+        <span>T/C</span>
+        <strong>{{ ledger_transaction.transaction_code or "-" }}</strong>
+      </div>
+
+      <div class="finance-ledger-detail-item">
+        <span>Type</span>
+        <strong>{{ ledger_transaction.ledger_kind|replace("_", " ")|title }}</strong>
+      </div>
+
+      <div class="finance-ledger-detail-item finance-ledger-detail-item-wide">
+        <span>Vendor</span>
+        <strong>{{ ledger_transaction.vendor_friendly_name or ledger_transaction.vendor_name or ledger_transaction.matched_vendor_name or "-" }}</strong>
+      </div>
+
+      <div class="finance-ledger-detail-item">
+        <span>PO</span>
+        <strong>{{ ledger_transaction.po_number or "-" }}</strong>
+      </div>
+
+      <div class="finance-ledger-detail-item">
+        <span>Account</span>
+        <strong>{{ ledger_transaction.account_code or "-" }}</strong>
+      </div>
+
+      <div class="finance-ledger-detail-item finance-ledger-detail-item-wide">
+        <span>Record</span>
+        <strong>{{ ledger_transaction.linked_record_title or "Unlinked" }}</strong>
+      </div>
+    </div>
+  </div>
+
   <div class="content-card">
-    <div class="finance-section-header"><div><h2 class="finance-section-title">Details</h2><p class="finance-section-subtitle">Accounting identity for this ledger row.</p></div></div>
-    <div class="finance-detail-grid">
-      <div><span>Fiscal Year</span><strong>{{ ledger_transaction.fiscal_year_code or "-" }}</strong></div>
-      <div><span>Date</span><strong>{{ ledger_transaction.purchase_date or "-" }}</strong></div>
-      <div><span>T/C</span><strong>{{ ledger_transaction.transaction_code or "-" }}</strong></div>
-      <div><span>Type</span><strong>{{ ledger_transaction.ledger_kind|replace("_", " ")|title }}</strong></div>
-      <div><span>Vendor</span><strong>{{ ledger_transaction.vendor_friendly_name or ledger_transaction.vendor_name or ledger_transaction.matched_vendor_name or "-" }}</strong></div>
-      <div><span>PO</span><strong>{{ ledger_transaction.po_number or "-" }}</strong></div>
-      <div><span>Account</span><strong>{{ ledger_transaction.account_code or "-" }}</strong></div>
-      <div><span>Record</span><strong>{{ ledger_transaction.linked_record_title or "Unlinked" }}</strong></div>
+    <div class="finance-section-header">
+      <div>
+        <h2 class="finance-section-title">Relationships</h2>
+        <p class="finance-section-subtitle">Only linked objects are shown here.</p>
+      </div>
+    </div>
+
+    <div class="finance-linked-items-grid">
+      {% if linked_purchase_order %}
+        <a
+          class="finance-linked-item-card finance-linked-item-clickable"
+          href="{{ url_for('finance.purchase_order_detail', purchase_order_id=linked_purchase_order.id) }}"
+        >
+          <div class="finance-linked-item-header">
+            <h3>Purchase Order</h3>
+            <span class="finance-pill">Open PO</span>
+          </div>
+
+          <div class="finance-linked-item-body">
+            <div><span>Base PO</span><strong>{{ linked_purchase_order.base_po_number or linked_purchase_order.po_number }}</strong></div>
+            <div><span>Vendor</span><strong>{{ linked_purchase_order.vendor_name or "-" }}</strong></div>
+            <div><span>Status</span><strong>{{ linked_purchase_order.status|replace("_", " ")|title if linked_purchase_order.status else "-" }}</strong></div>
+            <div><span>Open Encumbrance</span><strong>${{ "{:,.2f}".format(linked_purchase_order.remaining_encumbrance|float) }}</strong></div>
+          </div>
+        </a>
+      {% endif %}
+
+      {% if linked_record %}
+        <a
+          class="finance-linked-item-card finance-linked-item-clickable"
+          href="{{ url_for('finance.record_detail', record_id=linked_record.id) }}"
+        >
+          <div class="finance-linked-item-header">
+            <h3>Finance Record</h3>
+            <span class="finance-pill">{{ linked_record.record_type|replace("_", " ")|title if linked_record.record_type else "Record" }}</span>
+          </div>
+
+          <div class="finance-linked-item-body">
+            <div><span>Title</span><strong>{{ linked_record.title }}</strong></div>
+            <div><span>Status</span><strong>{{ linked_record.status|replace("_", " ")|title }}</strong></div>
+            <div><span>Vendor</span><strong>{{ linked_record.vendor_name or "-" }}</strong></div>
+            <div><span>Cost</span><strong>${{ "{:,.2f}".format(linked_record.cost|float) }}</strong></div>
+          </div>
+        </a>
+      {% endif %}
+
+      {% if not linked_purchase_order and not linked_record %}
+        <div class="finance-empty finance-empty-compact">
+          <h3>No linked PO or Record</h3>
+          <p>This is normal for some day-to-day ledger activity.</p>
+        </div>
+      {% endif %}
     </div>
   </div>
 </div>
 {% endblock %}
-{% block extra_js %}<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+{% endblock %}

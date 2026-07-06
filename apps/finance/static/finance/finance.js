@@ -968,3 +968,38 @@ function initFinanceLoadingOverlay() {
     });
   });
 }
+
+document.addEventListener("click", function (event) {
+  const toggle = event.target.closest("[data-finance-fy-edit-toggle]");
+  if (!toggle) return;
+
+  if (event.target.closest("form") && !event.target.matches("[data-finance-fy-edit-toggle]")) {
+    return;
+  }
+
+  const targetId = toggle.getAttribute("data-finance-fy-edit-toggle");
+  const target = document.getElementById(targetId);
+
+  if (!target) return;
+
+  target.hidden = !target.hidden;
+});
+
+document.addEventListener("change", function (event) {
+  const startInput = event.target.closest('input[name="start_date"]');
+  if (!startInput || !startInput.value) return;
+
+  const form = startInput.closest("form");
+  if (!form) return;
+
+  const endInput = form.querySelector('input[name="end_date"]');
+  if (!endInput) return;
+
+  const startDate = new Date(startInput.value + "T00:00:00");
+  const endDate = new Date(startDate);
+
+  endDate.setFullYear(endDate.getFullYear() + 1);
+  endDate.setDate(endDate.getDate() - 1);
+
+  endInput.value = endDate.toISOString().slice(0, 10);
+});

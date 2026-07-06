@@ -18,8 +18,12 @@ from .ledger_query_service import (
     list_ledger_transactions,
     list_purchase_orders,
 )
+from .ledger_service import (
+    get_linked_purchase_order_for_ledger,
+    get_linked_record_for_ledger,
+)
 from .ledger_validation_service import validate_ledger_import
-from .page_total_service import budget_account_totals, purchase_order_totals
+from .page_total_service import budget_account_totals
 from .service import get_import_run_by_id, save_budget_target_for_department
 
 
@@ -36,6 +40,15 @@ def _is_import_validate_request() -> bool:
 
 def _selected_fiscal_year_code() -> str:
     return (request.args.get("fiscal_year_code") or "").strip()
+
+def _current_fiscal_year_code() -> str:
+    fiscal_years = _fiscal_year_options()
+    current_year = next((year for year in fiscal_years if year.get("is_current")), None)
+
+    if current_year:
+        return current_year.get("code") or ""
+
+    return fiscal_years[0].get("code") if fiscal_years else ""
 
 
 def _fiscal_year_options() -> list[dict]:
@@ -241,18 +254,25 @@ def ledger(department_name: str):
 @login_required
 def ledger_detail(ledger_transaction_id: int):
     user_id = _current_user_id()
+
     ledger_transaction = get_ledger_transaction_detail(ledger_transaction_id)
     if not ledger_transaction:
         abort(404)
+
     department_name = ledger_transaction["department_name"]
     if not can_access_department(user_id, department_name):
         abort(403)
+
+    linked_purchase_order = get_linked_purchase_order_for_ledger(ledger_transaction)
+    linked_record = get_linked_record_for_ledger(ledger_transaction)
 
     return render_template(
         "finance/ledger_detail.html",
         department_name=department_name,
         active_tab="ledger",
         ledger_transaction=ledger_transaction,
+        linked_purchase_order=linked_purchase_order,
+        linked_record=linked_record,
         can_manage=can_manage_department(user_id, department_name),
         can_view_budget=has_budget_view(user_id),
     )
@@ -266,9 +286,14 @@ def purchase_orders(department_name: str):
         abort(403)
 
     selected_fiscal_year_code = _selected_fiscal_year_code()
+
+    if not selected_fiscal_year_code:
+        selected_fiscal_year_code = _current_fiscal_year_code()
+
     selected_status = (request.args.get("status") or "").strip()
     vendor_q = (request.args.get("vendor_q") or "").strip()
     q = (request.args.get("q") or "").strip()
+
     po_page = list_purchase_orders(
         department_name=department_name,
         fiscal_year_code=selected_fiscal_year_code or None,
@@ -278,20 +303,13 @@ def purchase_orders(department_name: str):
         page=request.args.get("page", default=1, type=int),
         per_page=100,
     )
-    po_summary = purchase_order_totals(
-        department_name=department_name,
-        fiscal_year_code=selected_fiscal_year_code or None,
-        status=selected_status or None,
-        vendor_q=vendor_q or None,
-        q=q or None,
-    )
 
     return render_template(
         "finance/purchase_orders.html",
         department_name=department_name,
         active_tab="purchase_orders",
         po_page=po_page,
-        po_summary=po_summary,
+        purchase_order_summary=po_page["summary"],
         purchase_orders=po_page["rows"],
         fiscal_years=_fiscal_year_options(),
         selected_fiscal_year_code=selected_fiscal_year_code,
@@ -334,6 +352,11 @@ def budget_accounts(department_name: str):
         abort(403)
 
     selected_fiscal_year_code = _selected_fiscal_year_code()
+
+    if not selected_fiscal_year_code:
+        current_fy = next((fy for fy in _fiscal_year_options() if fy.get("is_current")), None)
+        selected_fiscal_year_code = current_fy["code"] if current_fy else ""
+
     q = (request.args.get("q") or "").strip()
     account_page = list_budget_accounts(
         department_name=department_name,

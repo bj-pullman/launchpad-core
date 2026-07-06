@@ -4,187 +4,285 @@
     <div class="finance-modal-header">
       <div>
         <h2 id="finance-settings-title">Finance Setup</h2>
-        <p>Manage fiscal years, budget amounts, rollover workflow, and setup checklists.</p>
+        <p>Manage fiscal years, fiscal year roles, and closeout status.</p>
       </div>
-      <button type="button" class="finance-modal-close" data-finance-modal-close aria-label="Close Finance Setup">×</button>
+
+      <button type="button" class="finance-modal-close" data-finance-modal-close aria-label="Close Finance Setup">
+        ×
+      </button>
     </div>
 
     <div class="finance-modal-tabs">
-      <button type="button" class="active" data-finance-settings-tab="fiscal-years">Fiscal Years</button>
-      <button type="button" data-finance-settings-tab="start-year">Create Fiscal Year</button>
-      <button type="button" data-finance-settings-tab="close-year">Close Fiscal Year</button>
+      <button type="button" class="active" data-finance-settings-tab="fiscal-years">
+        Fiscal Years
+      </button>
+
+      <button type="button" data-finance-settings-tab="start-year">
+        Create Fiscal Year
+      </button>
+
+      <button type="button" data-finance-settings-tab="close-year">
+        Close Fiscal Year
+      </button>
     </div>
 
     <div class="finance-modal-body">
       {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="finance-modal-flashes">
-            {% for category, message in messages %}
-              <div class="finance-modal-flash finance-modal-flash-{{ category }}">{{ message }}</div>
-            {% endfor %}
-          </div>
-        {% endif %}
+      {% if messages %}
+      <div class="finance-modal-flashes">
+        {% for category, message in messages %}
+        <div class="finance-modal-flash finance-modal-flash-{{ category }}">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
       {% endwith %}
 
       <section class="finance-settings-panel active" data-finance-settings-panel="fiscal-years">
         <h3>Fiscal Years</h3>
-        <p class="finance-settings-help">Finance requires a Current fiscal year with a Budget Amount before operational pages can be used. Previous and Next fiscal years remain available for historical reporting and planning.</p>
+
+        <p class="finance-settings-help">
+          Review configured fiscal years. Use Edit to correct dates, names, status, or fiscal year role.
+        </p>
+
+        {% if fiscal_year_setup.stale_open_previous_years %}
+        <div class="finance-alert">
+          Older fiscal years are still open and may need to be closed:
+          {% for year in fiscal_year_setup.stale_open_previous_years %}
+          <strong>{{ year.code }}</strong>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
 
         {% if fiscal_year_setup and fiscal_year_setup.fiscal_years %}
-          <div class="table-wrap finance-modal-table">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Fiscal Year</th>
-                  <th>Dates</th>
-                  <th>Budget Amount</th>
-                  <th>Status</th>
-                  <th>Role</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for year in fiscal_year_setup.fiscal_years %}
-                  <tr>
-                    <td>
-                      <strong>{{ year.code }}</strong>
-                      <div class="finance-field-help">{{ year.friendly_name }}</div>
-                    </td>
-                    <td>{{ year.start_date }} - {{ year.end_date }}</td>
-                    <td>${{ "{:,.2f}".format(year.adopted_budget|default('0')|float) }}</td>
-                    <td>{{ year.status|replace("_", " ")|title }}</td>
-                    <td>
-                      {% if year.is_current %}
-                        <span class="finance-pill">Current</span>
-                      {% elif year.is_next %}
-                        <span class="finance-pill">Next</span>
-                      {% elif year.status == "closed" %}
-                        <span class="finance-pill">Previous</span>
-                      {% else %}
-                        -
-                      {% endif %}
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+        <div class="table-wrap finance-modal-table">
+          <table class="data-table finance-fy-edit-table">
+            <thead>
+              <tr>
+                <th>Fiscal Year</th>
+                <th>Dates</th>
+                <th>Status</th>
+                <th>Role</th>
+                <th class="text-right">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for year in fiscal_year_setup.fiscal_years %}
+              <tr class="finance-fy-summary-row" data-finance-fy-edit-toggle="fy-edit-{{ year.id }}">
+                <td>
+                  <strong>{{ year.code }}</strong>
+                  <div class="finance-field-help">{{ year.friendly_name }}</div>
+                </td>
+
+                <td>{{ year.start_date }} - {{ year.end_date }}</td>
+
+                <td>{{ year.status|replace("_", " ")|title }}</td>
+
+                <td>
+                  {% if year.is_previous %}
+                  <span class="finance-pill">Previous</span>
+                  {% endif %}
+
+                  {% if year.is_current %}
+                  <span class="finance-pill">Current</span>
+                  {% endif %}
+
+                  {% if year.is_next %}
+                  <span class="finance-pill">Next</span>
+                  {% endif %}
+
+                  {% if not year.is_previous and not year.is_current and not year.is_next %}
+                  -
+                  {% endif %}
+                </td>
+
+                <td class="text-right">
+                  <button type="button" class="btn btn-secondary" data-finance-fy-edit-toggle="fy-edit-{{ year.id }}">
+                    Edit
+                  </button>
+                </td>
+              </tr>
+
+              <tr id="fy-edit-{{ year.id }}" class="finance-fy-edit-panel" hidden>
+                <td colspan="5">
+                  <form method="post"
+                    action="{{ url_for('finance.fiscal_year_edit', department_name=department_name, fiscal_year_id=year.id) }}"
+                    class="finance-fiscal-year-edit-row">
+                    <div class="finance-form-grid">
+                      <div class="finance-field">
+                        <label>Fiscal Year</label>
+                        <input type="number" name="year_number" value="{{ year.year_number }}" required>
+                      </div>
+
+                      <div class="finance-field">
+                        <label>Friendly Name</label>
+                        <input type="text" name="friendly_name" value="{{ year.friendly_name or '' }}">
+                      </div>
+
+                      <div class="finance-field">
+                        <label>Start Date</label>
+                        <input type="date" name="start_date" value="{{ year.start_date }}" required>
+                      </div>
+
+                      <div class="finance-field">
+                        <label>End Date</label>
+                        <input type="date" name="end_date" value="{{ year.end_date }}" required>
+                      </div>
+
+                      <div class="finance-field">
+                        <label>Adopted Budget</label>
+                        <input type="text" name="adopted_budget" value="{{ year.adopted_budget or '0.00' }}">
+                      </div>
+
+                      <div class="finance-field">
+                        <label>Status</label>
+                        <select name="status">
+                          <option value="planning" {% if year.status=="planning" %}selected{% endif %}>Planning</option>
+                          <option value="active" {% if year.status=="active" %}selected{% endif %}>Active</option>
+                          <option value="closing" {% if year.status=="closing" %}selected{% endif %}>Closing</option>
+                          <option value="closed" {% if year.status=="closed" %}selected{% endif %}>Closed</option>
+                        </select>
+                      </div>
+
+                      <div class="finance-field finance-field-span-2">
+                        <label>Fiscal Year Role</label>
+
+                        <div class="finance-fy-role-segmented">
+                          <label class="finance-fy-role-segment">
+                            <input type="radio" name="fiscal_year_role" value="previous" {% if year.is_previous
+                              %}checked{% endif %}>
+                            <span>Previous</span>
+                          </label>
+
+                          <label class="finance-fy-role-segment">
+                            <input type="radio" name="fiscal_year_role" value="current" {% if year.is_current
+                              %}checked{% endif %}>
+                            <span>Current</span>
+                          </label>
+
+                          <label class="finance-fy-role-segment">
+                            <input type="radio" name="fiscal_year_role" value="next" {% if year.is_next %}checked{%
+                              endif %}>
+                            <span>Next</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="finance-form-actions">
+                      <button type="button" class="btn btn-ghost" data-finance-fy-edit-toggle="fy-edit-{{ year.id }}">
+                        Cancel
+                      </button>
+
+                      <button type="submit" class="btn btn-primary">
+                        Save Fiscal Year
+                      </button>
+                    </div>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
         {% else %}
-          <div class="finance-empty">
-            <h3>Finance Setup Required</h3>
-            <p>Create the Current fiscal year and enter its Budget Amount before adding or importing Finance data.</p>
-          </div>
+        <div class="finance-empty">
+          <h3>No fiscal years configured</h3>
+          <p>Create the current fiscal year to begin using Finance.</p>
+        </div>
         {% endif %}
       </section>
 
       <section class="finance-settings-panel" data-finance-settings-panel="start-year">
         <h3>Create Fiscal Year</h3>
-        <p class="finance-settings-help">Create a Previous, Current, or Next fiscal year. Budget Amount is required and becomes the source of truth for Budget Overview and reporting.</p>
+
+        <p class="finance-settings-help">
+          Create a Previous, Current, or Next fiscal year. Fiscal year budget amounts are managed separately in Budget
+          settings.
+        </p>
 
         <div class="finance-workflow-card">
           <h4>Fiscal Year Details</h4>
           {% include "finance/_fiscal_year_create_form.html" %}
         </div>
-
-        {% if fiscal_year_setup and fiscal_year_setup.fiscal_years %}
-          <div class="finance-workflow-card">
-            <h4>Start Workflow</h4>
-            <p>Select a planning fiscal year to review the start checklist before activating it.</p>
-            <div class="table-wrap finance-modal-table">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Fiscal Year</th>
-                    <th>Dates</th>
-                    <th>Budget Amount</th>
-                    <th>Status</th>
-                    <th>Role</th>
-                    <th>Start Workflow</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for year in fiscal_year_setup.fiscal_years %}
-                    {% if year.status == "planning" %}
-                      <tr>
-                        <td><strong>{{ year.code }}</strong><div class="finance-field-help">{{ year.friendly_name }}</div></td>
-                        <td>{{ year.start_date }} - {{ year.end_date }}</td>
-                        <td>${{ "{:,.2f}".format(year.adopted_budget|default('0')|float) }}</td>
-                        <td>{{ year.status|replace("_", " ")|title }}</td>
-                        <td>{% if year.is_next %}<span class="finance-pill">Next</span>{% else %}-{% endif %}</td>
-                        <td><button type="button" class="btn btn-primary finance-action-button" data-finance-checklist-open="start-checklist-{{ year.id }}">Begin Start</button></td>
-                      </tr>
-                      <tr>
-                        <td colspan="6">
-                          {% set panel_id = "start-checklist-" ~ year.id %}
-                          {% set fiscal_year_id = year.id %}
-                          {% set checklist_type = "start_year" %}
-                          {% set checklist_items = start_checklists.get(year.id, []) %}
-                          {% set title = year.code ~ " Start Checklist" %}
-                          {% set subtitle = "Complete required start tasks before activating this fiscal year." %}
-                          {% include "finance/_fiscal_year_checklist_panel.html" %}
-                        </td>
-                      </tr>
-                    {% endif %}
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        {% endif %}
       </section>
 
       <section class="finance-settings-panel" data-finance-settings-panel="close-year">
         <h3>Close Fiscal Year</h3>
-        <p class="finance-settings-help">Choose the fiscal year you want to close. Closed fiscal years stay available as Previous-year history.</p>
+
+        <p class="finance-settings-help">
+          Closing a fiscal year keeps it available for historical reporting. This does not automatically change your
+          Current or Previous role.
+        </p>
 
         {% if fiscal_year_setup and fiscal_year_setup.fiscal_years %}
-          <div class="table-wrap finance-modal-table">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Fiscal Year</th>
-                  <th>Dates</th>
-                  <th>Budget Amount</th>
-                  <th>Status</th>
-                  <th>Role</th>
-                  <th>Close Workflow</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for year in fiscal_year_setup.fiscal_years %}
-                  {% if year.status != "closed" %}
-                    <tr>
-                      <td><strong>{{ year.code }}</strong><div class="finance-field-help">{{ year.friendly_name }}</div></td>
-                      <td>{{ year.start_date }} - {{ year.end_date }}</td>
-                      <td>${{ "{:,.2f}".format(year.adopted_budget|default('0')|float) }}</td>
-                      <td>{{ year.status|replace("_", " ")|title }}</td>
-                      <td>
-                        {% if year.is_current %}<span class="finance-pill">Current</span>{% endif %}
-                        {% if year.is_next %}<span class="finance-pill">Next</span>{% endif %}
-                        {% if not year.is_current and not year.is_next %}-{% endif %}
-                      </td>
-                      <td><button type="button" class="btn btn-secondary finance-action-button finance-fy-close-btn" data-finance-checklist-open="close-checklist-{{ year.id }}">Begin Close</button></td>
-                    </tr>
-                    <tr>
-                      <td colspan="6">
-                        {% set panel_id = "close-checklist-" ~ year.id %}
-                        {% set fiscal_year_id = year.id %}
-                        {% set checklist_type = "close_year" %}
-                        {% set checklist_items = close_checklists.get(year.id, []) %}
-                        {% set title = year.code ~ " Close Checklist" %}
-                        {% set subtitle = "Complete required close tasks before closing this fiscal year." %}
-                        {% include "finance/_fiscal_year_checklist_panel.html" %}
-                      </td>
-                    </tr>
+        <div class="table-wrap finance-modal-table">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fiscal Year</th>
+                <th>Dates</th>
+                <th>Status</th>
+                <th>Role</th>
+                <th class="text-right">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for year in fiscal_year_setup.fiscal_years %}
+              {% if year.status != "closed" %}
+              <tr>
+                <td>
+                  <strong>{{ year.code }}</strong>
+                  <div class="finance-field-help">{{ year.friendly_name }}</div>
+                </td>
+
+                <td>{{ year.start_date }} - {{ year.end_date }}</td>
+
+                <td>{{ year.status|replace("_", " ")|title }}</td>
+
+                <td>
+                  {% if year.is_previous %}
+                  <span class="finance-pill">Previous</span>
                   {% endif %}
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+
+                  {% if year.is_current %}
+                  <span class="finance-pill">Current</span>
+                  {% endif %}
+
+                  {% if year.is_next %}
+                  <span class="finance-pill">Next</span>
+                  {% endif %}
+
+                  {% if not year.is_previous and not year.is_current and not year.is_next %}
+                  -
+                  {% endif %}
+                </td>
+
+                <td class="text-right">
+                  <form method="post"
+                    action="{{ url_for('finance.fiscal_year_close', department_name=department_name, fiscal_year_id=year.id) }}"
+                    class="finance-inline-form"
+                    data-confirm="Close {{ year.code }}? This will keep it available for historical reporting."
+                    data-confirm-action="confirm">
+                    <button type="submit" class="btn btn-secondary">
+                      Close Year
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
         {% else %}
-          <div class="finance-empty">
-            <h3>No fiscal years configured</h3>
-            <p>Create a fiscal year before using close workflows.</p>
-          </div>
+        <div class="finance-empty">
+          <h3>No fiscal years configured</h3>
+          <p>Create a fiscal year before using close actions.</p>
+        </div>
         {% endif %}
       </section>
     </div>

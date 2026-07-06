@@ -7,13 +7,13 @@
 {% block content %}
 <div class="page-shell finance-shell">
 
-<div id="finance-loading-overlay" class="finance-loading-overlay" hidden>
-  <div class="finance-loading-card">
-    <div class="finance-loading-spinner"></div>
-    <h3>Loading Budget</h3>
-    <p>Building fiscal year totals and breakdowns...</p>
+  <div id="finance-loading-overlay" class="finance-loading-overlay" hidden>
+    <div class="finance-loading-card">
+      <div class="finance-loading-spinner"></div>
+      <h3>Loading Budget</h3>
+      <p>Building fiscal year totals and breakdowns...</p>
+    </div>
   </div>
-</div>
 
   {% include "finance/_finance_tabs.html" %}
 
@@ -31,161 +31,143 @@
       <label for="year">Fiscal Year</label>
       <select id="year" name="year" data-finance-loading-submit>
         {% for year in year_options %}
-          <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+        <option value="{{ year }}" {% if selected_year==year %}selected{% endif %}>{{ year }}</option>
         {% endfor %}
       </select>
     </form>
 
     {% if can_manage %}
-      <button
-        type="button"
-        class="btn btn-primary"
-        data-finance-modal-open="finance-budget-settings-modal"
-      >
-        Budget Settings
-      </button>
+    <button type="button" class="btn btn-primary" data-finance-modal-open="finance-budget-settings-modal">
+      Budget Settings
+    </button>
     {% endif %}
   </div>
 
   {% set percent_used = budget_summary.percent_used %}
   {% set remaining_budget = budget_summary.remaining_budget %}
 
-  {% if remaining_budget < 0 or percent_used >= 100 %}
+  {% if remaining_budget < 0 or percent_used>= 100 %}
     {% set budget_health = "over" %}
     {% set budget_health_label = "Over Budget" %}
-  {% elif percent_used >= 85 %}
+    {% elif percent_used >= 85 %}
     {% set budget_health = "watch" %}
     {% set budget_health_label = "Watch" %}
-  {% else %}
+    {% else %}
     {% set budget_health = "healthy" %}
     {% set budget_health_label = "On Track" %}
-  {% endif %}
+    {% endif %}
 
-  <section class="content-card finance-budget-executive-panel">
-    <div class="finance-budget-executive-main">
-      <div class="finance-budget-executive-heading">
-        <div>
-          <p class="finance-eyebrow">Fiscal Year {{ selected_year or "—" }}</p>
-          <h2>Budget Overview</h2>
+    <section class="content-card finance-budget-executive-panel">
+      <div class="finance-budget-executive-main">
+        <div class="finance-budget-executive-heading">
+          <div>
+            <p class="finance-eyebrow">Fiscal Year {{ selected_year or "—" }}</p>
+            <h2>Budget Overview</h2>
+          </div>
+
+          <span class="finance-budget-health finance-budget-health-{{ budget_health }}">
+            {{ budget_health_label }}
+          </span>
         </div>
 
-        <span class="finance-budget-health finance-budget-health-{{ budget_health }}">
-          {{ budget_health_label }}
-        </span>
+        <div class="finance-budget-executive-amounts finance-budget-executive-amounts-four">
+          <div>
+            <span>Total Budget</span>
+            <strong>${{ "{:,.2f}".format(budget_summary.total_budget) }}</strong>
+          </div>
+
+          <div>
+            <span>Spent</span>
+            <strong>${{ "{:,.2f}".format(budget_summary.total_spent) }}</strong>
+          </div>
+
+          <div>
+            <span>Pending / Encumbrance</span>
+            <strong>${{ "{:,.2f}".format(budget_summary.encumbrance_total) }}</strong>
+          </div>
+
+          <div>
+            <span>Remaining</span>
+            <strong>${{ "{:,.2f}".format(budget_summary.remaining_budget) }}</strong>
+          </div>
+        </div>
+
+        <div class="finance-budget-progress-block">
+          <div class="finance-budget-progress-meta">
+            <span>{{ "{:.1f}".format(percent_used) }}% used</span>
+            <span>{{ budget_health_label }}</span>
+          </div>
+
+          <div class="finance-budget-progress">
+            <div class="finance-budget-progress-bar finance-budget-progress-bar-{{ budget_health }}"
+              style="width: {{ [percent_used, 100]|min }}%;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+
+    <div class="content-card finance-budget-dashboard-card">
+      <div class="finance-section-header">
+        <div>
+          <h2>Financial Insights</h2>
+          <p class="page-subtitle">Compare spending trends and budget activity.</p>
+        </div>
       </div>
 
-      <div class="finance-budget-executive-amounts">
-        <div>
-          <span>Total Budget</span>
-          <strong>${{ "{:,.2f}".format(budget_summary.total_budget) }}</strong>
-        </div>
+      <div class="finance-budget-chart-picker">
+        <label class="finance-budget-chart-toggle">
+          <input type="checkbox" data-budget-chart-toggle value="category" checked>
+          <span>Category</span>
+        </label>
 
-        <div>
-          <span>Spent</span>
-          <strong>${{ "{:,.2f}".format(budget_summary.total_spent) }}</strong>
-        </div>
+        <label class="finance-budget-chart-toggle">
+          <input type="checkbox" data-budget-chart-toggle value="vendor" checked>
+          <span>Vendor</span>
+        </label>
 
-        <div>
-          <span>Remaining</span>
-          <strong>${{ "{:,.2f}".format(budget_summary.remaining_budget) }}</strong>
-        </div>
+        <label class="finance-budget-chart-toggle">
+          <input type="checkbox" data-budget-chart-toggle value="month" checked>
+          <span>Monthly Trend</span>
+        </label>
+
+        <label class="finance-budget-chart-toggle">
+          <input type="checkbox" data-budget-chart-toggle value="record_type">
+          <span>Record Type</span>
+        </label>
+
+        <label class="finance-budget-chart-toggle">
+          <input type="checkbox" data-budget-chart-toggle value="status">
+          <span>Status</span>
+        </label>
       </div>
 
-      <div class="finance-budget-progress-block">
-        <div class="finance-budget-progress-meta">
-          <span>{{ "{:.1f}".format(percent_used) }}% used</span>
-          <span>{{ budget_health_label }}</span>
-        </div>
-
-        <div class="finance-budget-progress">
-          <div
-            class="finance-budget-progress-bar finance-budget-progress-bar-{{ budget_health }}"
-            style="width: {{ [percent_used, 100]|min }}%;"
-          ></div>
-        </div>
-      </div>
+      <div id="finance-budget-chart-dashboard" class="finance-budget-chart-dashboard"></div>
     </div>
 
-    <div class="finance-budget-executive-side">
-      <div class="finance-budget-side-metric">
-        <span>Tracked Records</span>
-        <strong>{{ budget_summary.record_count }}</strong>
+    <div class="content-card finance-budget-table-card">
+      <div class="finance-section-header">
+        <div>
+          <h2>Budget Breakdown Table</h2>
+          <p class="page-subtitle">Detailed totals for the selected primary breakdown.</p>
+        </div>
       </div>
 
-      <div class="finance-budget-side-metric">
-        <span>Average Record</span>
-        <strong>${{ "{:,.2f}".format(budget_summary.average_spend) }}</strong>
-      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Group</th>
+              <th class="text-right">Total</th>
+              <th class="text-right">Records</th>
+              <th class="text-right">Average</th>
+              <th class="text-right">Percent</th>
+            </tr>
+          </thead>
 
-      <div class="finance-budget-side-metric">
-        <span>Pending / Encumbrance</span>
-        <strong>${{ "{:,.2f}".format(budget_summary.encumbrance_total) }}</strong>
-      </div>
-    </div>
-  </section>
-
-
-
-  <div class="content-card finance-budget-dashboard-card">
-    <div class="finance-section-header">
-      <div>
-        <h2>Financial Insights</h2>
-        <p class="page-subtitle">Compare spending trends and budget activity.</p>
-      </div>
-    </div>
-
-  <div class="finance-budget-chart-picker">
-    <label class="finance-budget-chart-toggle">
-      <input type="checkbox" data-budget-chart-toggle value="category" checked>
-      <span>Category</span>
-    </label>
-
-    <label class="finance-budget-chart-toggle">
-      <input type="checkbox" data-budget-chart-toggle value="vendor" checked>
-      <span>Vendor</span>
-    </label>
-
-    <label class="finance-budget-chart-toggle">
-      <input type="checkbox" data-budget-chart-toggle value="month" checked>
-      <span>Monthly Trend</span>
-    </label>
-
-    <label class="finance-budget-chart-toggle">
-      <input type="checkbox" data-budget-chart-toggle value="record_type">
-      <span>Record Type</span>
-    </label>
-
-    <label class="finance-budget-chart-toggle">
-      <input type="checkbox" data-budget-chart-toggle value="status">
-      <span>Status</span>
-    </label>
-  </div>
-
-    <div id="finance-budget-chart-dashboard" class="finance-budget-chart-dashboard"></div>
-  </div>
-
-  <div class="content-card finance-budget-table-card">
-    <div class="finance-section-header">
-      <div>
-        <h2>Budget Breakdown Table</h2>
-        <p class="page-subtitle">Detailed totals for the selected primary breakdown.</p>
-      </div>
-    </div>
-
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Group</th>
-            <th class="text-right">Total</th>
-            <th class="text-right">Records</th>
-            <th class="text-right">Average</th>
-            <th class="text-right">Percent</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {% for row in budget_breakdown.rows %}
+          <tbody>
+            {% for row in budget_breakdown.rows %}
             <tr>
               <td>{{ row.label }}</td>
               <td class="text-right finance-money-negative">${{ "{:,.2f}".format(row.total_spent) }}</td>
@@ -193,83 +175,64 @@
               <td class="text-right finance-money-negative">${{ "{:,.2f}".format(row.average_spend) }}</td>
               <td class="text-right">{{ "{:.1f}".format(row.percent_of_total) }}%</td>
             </tr>
-          {% else %}
+            {% else %}
             <tr>
               <td colspan="5" class="text-center muted">No budget records found for this filter.</td>
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
 </div>
 
 {% if can_manage %}
-  <div
-    id="finance-budget-settings-modal"
-    class="finance-modal-backdrop"
-    hidden
-  >
-    <div class="finance-modal">
-      <div class="finance-modal-header">
-        <div>
-          <h2>Budget Settings</h2>
-          <p class="page-subtitle">Set the full budget for this department and fiscal year.</p>
-        </div>
-
-        <button
-          type="button"
-          class="finance-modal-close"
-          data-finance-modal-close
-          aria-label="Close"
-        >
-          ×
-        </button>
+<div id="finance-budget-settings-modal" class="finance-modal-backdrop" hidden>
+  <div class="finance-modal">
+    <div class="finance-modal-header">
+      <div>
+        <h2>Budget Settings</h2>
+        <p class="page-subtitle">Set the full budget for this department and fiscal year.</p>
       </div>
 
-      <form method="post" class="finance-form finance-budget-settings-form">
-        <div class="finance-form-grid">
-          <div class="finance-field">
-            <label for="budget_fiscal_year">Fiscal Year</label>
-            <select id="budget_fiscal_year" name="fiscal_year" required>
-              {% for year in year_options %}
-                <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>
-                  {{ year }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="finance-field">
-            <label for="total_budget">Total Budget</label>
-            <input
-              type="text"
-              id="total_budget"
-              name="total_budget"
-              value="{{ '{:.2f}'.format(budget_summary.total_budget) }}"
-              placeholder="0.00"
-              required
-            >
-          </div>
-
-          <div class="finance-field finance-field-span-2">
-            <label for="budget_notes">Notes</label>
-            <textarea
-              id="budget_notes"
-              name="notes"
-              rows="3"
-              placeholder="Optional budget notes..."
-            >{{ budget_summary.budget_target.notes or '' }}</textarea>
-          </div>
-        </div>
-
-        <div class="finance-form-actions">
-          <button type="button" class="btn btn-ghost" data-finance-modal-close>Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Budget</button>
-        </div>
-      </form>
+      <button type="button" class="finance-modal-close" data-finance-modal-close aria-label="Close">
+        ×
+      </button>
     </div>
+
+    <form method="post" class="finance-form finance-budget-settings-form">
+      <div class="finance-form-grid">
+        <div class="finance-field">
+          <label for="budget_fiscal_year">Fiscal Year</label>
+          <select id="budget_fiscal_year" name="fiscal_year" required>
+            {% for year in year_options %}
+            <option value="{{ year }}" {% if selected_year==year %}selected{% endif %}>
+              {{ year }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="finance-field">
+          <label for="total_budget">Total Budget</label>
+          <input type="text" id="total_budget" name="total_budget"
+            value="{{ '{:.2f}'.format(budget_summary.total_budget) }}" placeholder="0.00" required>
+        </div>
+
+        <div class="finance-field finance-field-span-2">
+          <label for="budget_notes">Notes</label>
+          <textarea id="budget_notes" name="notes" rows="3"
+            placeholder="Optional budget notes...">{{ budget_summary.budget_target.notes or '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="finance-form-actions">
+        <button type="button" class="btn btn-ghost" data-finance-modal-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Budget</button>
+      </div>
+    </form>
   </div>
+</div>
 {% endif %}
 
 <script type="application/json" id="finance-budget-dashboard-data">

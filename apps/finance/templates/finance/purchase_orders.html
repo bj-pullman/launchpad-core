@@ -18,19 +18,22 @@
   <div class="finance-stats finance-stats-wide">
     <div class="finance-stat-card">
       <div class="finance-stat-label">Purchase Orders</div>
-      <div class="finance-stat-value">{{ po_page.total }}</div>
+      <div class="finance-stat-value">{{ purchase_order_summary.purchase_order_count }}</div>
     </div>
+
     <div class="finance-stat-card">
-      <div class="finance-stat-label">Encumbered</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(po_summary.encumbered|float) }}</div>
+      <div class="finance-stat-label">PO Commitments</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order_summary.po_commitments|float) }}</div>
     </div>
+
     <div class="finance-stat-card">
-      <div class="finance-stat-label">Paid</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(po_summary.paid|float) }}</div>
+      <div class="finance-stat-label">Paid Against POs</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order_summary.paid_against_pos|float) }}</div>
     </div>
+
     <div class="finance-stat-card">
-      <div class="finance-stat-label">Remaining</div>
-      <div class="finance-stat-value">${{ "{:,.2f}".format(po_summary.remaining|float) }}</div>
+      <div class="finance-stat-label">Open PO Balance</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order_summary.open_po_balance|float) }}</div>
     </div>
   </div>
 
@@ -39,11 +42,10 @@
       <div class="form-field">
         <label>Fiscal Year</label>
         <select name="fiscal_year_code">
-          <option value="">All Fiscal Years</option>
           {% for fy in fiscal_years %}
-            <option value="{{ fy.code }}" {% if selected_fiscal_year_code == fy.code %}selected{% endif %}>
-              {{ fy.code }}{% if fy.is_current %} - Current{% endif %}
-            </option>
+          <option value="{{ fy.code }}" {% if selected_fiscal_year_code==fy.code %}selected{% endif %}>
+            {{ fy.code }}{% if fy.is_current %} - Current{% endif %}
+          </option>
           {% endfor %}
         </select>
       </div>
@@ -51,8 +53,8 @@
         <label>Status</label>
         <select name="status">
           <option value="">All</option>
-          <option value="open" {% if selected_status == 'open' %}selected{% endif %}>Open</option>
-          <option value="closed" {% if selected_status == 'closed' %}selected{% endif %}>Closed</option>
+          <option value="open" {% if selected_status=='open' %}selected{% endif %}>Open</option>
+          <option value="closed" {% if selected_status=='closed' %}selected{% endif %}>Closed</option>
         </select>
       </div>
       <div class="form-field">
@@ -65,7 +67,8 @@
       </div>
       <div class="finance-filter-actions">
         <button class="btn btn-primary">Filter</button>
-        <a class="btn btn-ghost" href="{{ url_for('finance.purchase_orders', department_name=department_name) }}">Reset</a>
+        <a class="btn btn-ghost"
+          href="{{ url_for('finance.purchase_orders', department_name=department_name) }}">Reset</a>
       </div>
     </form>
   </div>
@@ -74,7 +77,8 @@
     <div class="finance-section-header">
       <div>
         <h2 class="finance-section-title">Purchase Orders</h2>
-        <p class="finance-section-subtitle">Showing page {{ po_page.page }} of {{ po_page.total_pages }} · {{ po_page.total }} purchase order(s)</p>
+        <p class="finance-section-subtitle">Showing page {{ po_page.page }} of {{ po_page.total_pages }} · {{
+          po_page.total }} purchase order(s)</p>
       </div>
     </div>
 
@@ -87,23 +91,27 @@
             <th>PO</th>
             <th>Vendor</th>
             <th>Budget Account</th>
-            <th>Encumbered</th>
-            <th>Paid</th>
-            <th>Remaining</th>
+            <th>Current Encumbrance</th>
+            <th>Paid Against PO</th>
+            <th>Open PO Balance</th>
             <th>Record</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {% for po in purchase_orders %}
-          <tr class="finance-row-link" data-href="{{ url_for('finance.purchase_order_detail', purchase_order_id=po.id) }}">
+          <tr class="finance-row-link"
+            data-href="{{ url_for('finance.purchase_order_detail', purchase_order_id=po.id) }}">
             <td>{{ po.fiscal_year_code or "—" }}</td>
             <td><span class="finance-pill">{{ po.po_number or "—" }}</span></td>
             <td>{{ po.vendor_name or "—" }}</td>
-            <td>{{ po.account_code or "—" }}<div class="finance-meta">{{ po.budget_account_title or po.budget_unit or "" }}</div></td>
+            <td>{{ po.account_code or "—" }}<div class="finance-meta">{{ po.budget_account_title or po.budget_unit or ""
+                }}</div>
+            </td>
             <td>${{ "{:,.2f}".format(po.current_encumbrance|float) }}</td>
             <td>${{ "{:,.2f}".format(po.paid_amount|float) }}</td>
-            <td class="{% if po.remaining_encumbrance|float < 0 %}finance-negative{% endif %}">${{ "{:,.2f}".format(po.remaining_encumbrance|float) }}</td>
+            <td class="{% if po.remaining_encumbrance|float < 0 %}finance-negative{% endif %}">${{
+              "{:,.2f}".format(po.remaining_encumbrance|float) }}</td>
             <td>{{ po.linked_record_title or "Unlinked" }}</td>
             <td><span class="finance-pill">{{ po.status|replace("_", " ")|title }}</span></td>
           </tr>
@@ -115,11 +123,13 @@
     {% if po_page.total_pages > 1 %}
     <div class="finance-pagination">
       {% if po_page.has_prev %}
-        <a class="btn btn-secondary" href="{{ url_for('finance.purchase_orders', department_name=department_name, fiscal_year_code=selected_fiscal_year_code, status=selected_status, vendor_q=vendor_q, q=q, page=po_page.prev_page) }}">Previous</a>
+      <a class="btn btn-secondary"
+        href="{{ url_for('finance.purchase_orders', department_name=department_name, fiscal_year_code=selected_fiscal_year_code, status=selected_status, vendor_q=vendor_q, q=q, page=po_page.prev_page) }}">Previous</a>
       {% endif %}
       <span class="finance-pagination-label">Page {{ po_page.page }} of {{ po_page.total_pages }}</span>
       {% if po_page.has_next %}
-        <a class="btn btn-secondary" href="{{ url_for('finance.purchase_orders', department_name=department_name, fiscal_year_code=selected_fiscal_year_code, status=selected_status, vendor_q=vendor_q, q=q, page=po_page.next_page) }}">Next</a>
+      <a class="btn btn-secondary"
+        href="{{ url_for('finance.purchase_orders', department_name=department_name, fiscal_year_code=selected_fiscal_year_code, status=selected_status, vendor_q=vendor_q, q=q, page=po_page.next_page) }}">Next</a>
       {% endif %}
     </div>
     {% endif %}

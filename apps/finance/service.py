@@ -4191,6 +4191,42 @@ def list_active_budget_record_rows_for_department(department_name: str) -> list[
 
     return [dict(row) for row in rows]
 
+def get_budget_target_total_for_department(
+    department_name: str,
+    fiscal_year: int | None,
+) -> dict:
+    department_name = normalize_text(department_name)
+
+    if not department_name:
+        return {
+            "department_name": "",
+            "fiscal_year": fiscal_year,
+            "total_budget": Decimal("0"),
+            "notes": "",
+        }
+
+    if fiscal_year:
+        return get_budget_target_for_department(department_name, fiscal_year)
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT total_budget
+            FROM finance_budget_targets
+            WHERE department_name = ?
+            """,
+            (department_name,),
+        ).fetchall()
+
+    return {
+        "department_name": department_name,
+        "fiscal_year": None,
+        "total_budget": sum(
+            (parse_cost_to_decimal(row["total_budget"]) for row in rows),
+            Decimal("0"),
+        ),
+        "notes": "All fiscal years",
+    }
 
 def get_budget_anchor_date(record: dict) -> date | None:
     if not isinstance(record, dict):
@@ -4412,7 +4448,7 @@ def get_budget_summary_for_department(
         Decimal("0"),
     )
 
-    budget_target = get_budget_target_for_department(department_name, year)
+    budget_target = get_budget_target_total_for_department(department_name, year)
     total_budget = budget_target["total_budget"]
     remaining_budget = total_budget - total_spent
 

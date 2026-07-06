@@ -14,6 +14,43 @@ def _page_args(page: int = 1, per_page: int = 100) -> tuple[int, int, int]:
     offset = (page - 1) * per_page
     return page, per_page, offset
 
+def fiscal_year_suffix_from_code(fiscal_year_code: str | None) -> str | None:
+    fiscal_year_code = (fiscal_year_code or "").strip().upper()
+
+    if not fiscal_year_code:
+        return None
+
+    digits = "".join(ch for ch in fiscal_year_code if ch.isdigit())
+
+    if len(digits) >= 2:
+        return digits[-2:]
+
+    return None
+
+
+def po_matches_fiscal_year_sql(
+    *,
+    fiscal_year_code: str | None,
+    po_alias: str = "po",
+) -> tuple[str, list]:
+    fiscal_year_code = (fiscal_year_code or "").strip()
+    fiscal_year_suffix = fiscal_year_suffix_from_code(fiscal_year_code)
+
+    if not fiscal_year_code:
+        return "", []
+
+    return (
+        f"""
+        (
+            {po_alias}.fiscal_year_code = ?
+            OR substr(COALESCE({po_alias}.po_number, ''), 1, 2) = ?
+        )
+        """,
+        [
+            fiscal_year_code,
+            fiscal_year_suffix,
+        ],
+    )
 
 def list_ledger_transactions(
     *,
@@ -192,14 +229,19 @@ def list_purchase_orders(
     where = ["po.department_name = ?"]
     params: list[Any] = [department_name]
 
-    for column, value in {
-        "po.fiscal_year_code": fiscal_year_code,
-        "po.status": status,
-    }.items():
-        value = normalize_text(value)
-        if value:
-            where.append(f"{column} = ?")
-            params.append(value)
+    fy_sql, fy_params = po_matches_fiscal_year_sql(
+        fiscal_year_code=fiscal_year_code,
+        po_alias="po",
+    )
+
+    if fy_sql:
+        where.append(fy_sql)
+        params.extend(fy_params)
+
+    status = normalize_text(status)
+    if status:
+        where.append("po.status = ?")
+        params.append(status)
 
     vendor_q = normalize_text(vendor_q)
     if vendor_q:
@@ -225,6 +267,7 @@ def list_purchase_orders(
 
     with get_connection() as conn:
         ensure_finance_ledger_schema(conn)
+
         total = conn.execute(
             f"""
             SELECT COUNT(*) AS count
@@ -234,6 +277,22 @@ def list_purchase_orders(
             """,
             params,
         ).fetchone()["count"]
+
+        summary_row = conn.execute(
+            f"""
+            SELECT
+                COALESCE(SUM(CAST(po.paid_amount AS REAL)), 0) AS paid_against_pos,
+                COALESCE(SUM(CAST(po.remaining_encumbrance AS REAL)), 0) AS open_po_balance
+            FROM finance_purchase_orders po
+            LEFT JOIN finance_records r ON r.id = po.linked_record_id
+            WHERE {where_sql}
+            """,
+            params,
+        ).fetchone()
+
+        paid_against_pos = parse_money(summary_row["paid_against_pos"])
+        open_po_balance = parse_money(summary_row["open_po_balance"])
+        po_commitments = paid_against_pos + open_po_balance
 
         rows = conn.execute(
             f"""
@@ -252,9 +311,21 @@ def list_purchase_orders(
         ).fetchall()
 
     total_pages = max((total + per_page - 1) // per_page, 1)
+
     return {
         "rows": [dict(row) for row in rows],
         "total": total,
+        "summary": {
+            "purchase_order_count": total,
+            "po_commitments": money(po_commitments),
+            "paid_against_pos": money(paid_against_pos),
+            "open_po_balance": money(open_po_balance),
+
+            # Backward-compatible keys if your template still references old names.
+            "encumbered_amount": money(po_commitments),
+            "paid_amount": money(paid_against_pos),
+            "remaining_amount": money(open_po_balance),
+        },
         "page": page,
         "per_page": per_page,
         "total_pages": total_pages,

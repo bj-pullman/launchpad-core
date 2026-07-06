@@ -13,11 +13,13 @@ _ALLOWED_SETUP_ENDPOINTS = {
     "finance.index",
     "finance.department_overview",
     "finance.fiscal_years",
+    "finance.fiscal_year_edit",
     "finance.fiscal_year_status_update",
+    "finance.fiscal_year_activate",
+    "finance.fiscal_year_close",
     "finance.fiscal_year_checklist",
     "finance.fiscal_year_checklist_item_update",
 }
-
 
 def _department_name() -> str | None:
     view_args = request.view_args or {}
@@ -82,13 +84,11 @@ def intercept_fiscal_year_create_with_budget():
             start_date=start_date,
             end_date=end_date,
             friendly_name=friendly_name,
+            adopted_budget=adopted_budget,
+            make_previous=fiscal_year_role == "previous",
             make_current=fiscal_year_role == "current",
             make_next=fiscal_year_role == "next",
             created_by_user_id=user_id,
-        )
-        update_fiscal_year_adopted_budget(
-            fiscal_year_id=fiscal_year_id,
-            adopted_budget=adopted_budget,
         )
 
         if fiscal_year_role == "current":

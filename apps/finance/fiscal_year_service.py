@@ -133,6 +133,34 @@ def seed_fiscal_year_checklist(fiscal_year_id: int, created_by_user_id: int | No
                 )
         conn.commit()
 
+def fiscal_year_dates_overlap(
+    *,
+    start_date: str,
+    end_date: str,
+    exclude_fiscal_year_id: int | None = None,
+) -> bool:
+    with get_connection() as conn:
+        params = [end_date, start_date]
+
+        exclude_sql = ""
+        if exclude_fiscal_year_id:
+            exclude_sql = "AND id != ?"
+            params.append(exclude_fiscal_year_id)
+
+        row = conn.execute(
+            f"""
+            SELECT id
+            FROM finance_fiscal_years
+            WHERE date(start_date) <= date(?)
+              AND date(end_date) >= date(?)
+              {exclude_sql}
+            LIMIT 1
+            """,
+            params,
+        ).fetchone()
+
+    return row is not None
+
 
 def create_fiscal_year(
     *,
@@ -140,42 +168,138 @@ def create_fiscal_year(
     start_date: str,
     end_date: str,
     friendly_name: str | None = None,
+    adopted_budget: str | None = None,
+    make_previous: bool = False,
     make_current: bool = False,
     make_next: bool = False,
     created_by_user_id: int | None = None,
 ) -> int:
-    if make_current and make_next:
-        raise ValueError("A fiscal year cannot be both current and next.")
+    role_count = sum([make_previous, make_current, make_next])
+    if role_count > 1:
+        raise ValueError("A fiscal year can only have one role: Previous, Current, or Next.")
+
+    if not year_number:
+        raise ValueError("Fiscal year is required.")
+
+    if not start_date or not end_date:
+        raise ValueError("Start date and end date are required.")
+
+    if fiscal_year_dates_overlap(start_date=start_date, end_date=end_date):
+        raise ValueError("Fiscal year dates overlap with an existing fiscal year.")
+
     now = utc_now_iso()
     code = f"FY{year_number}"
     short_code = f"FY{str(year_number)[-2:]}"
     friendly_name = normalize_text(friendly_name) or f"Fiscal Year {year_number}"
+    adopted_budget = normalize_text(adopted_budget) or "0.00"
+
     with get_connection() as conn:
-        open_count = conn.execute("SELECT COUNT(*) AS count FROM finance_fiscal_years WHERE status IN ('planning','active','closing')").fetchone()["count"]
-        existing = conn.execute("SELECT id FROM finance_fiscal_years WHERE code = ?", (code,)).fetchone()
-        if not existing and open_count >= 3:
-            raise ValueError("Only three open fiscal years are allowed: previous, current, and next.")
+        open_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM finance_fiscal_years
+            WHERE status IN ('planning', 'active', 'closing')
+            """
+        ).fetchone()["count"]
+
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM finance_fiscal_years
+            WHERE code = ?
+            """,
+            (code,),
+        ).fetchone()
+
+        if existing:
+            raise ValueError(f"{code} already exists.")
+
+        if open_count >= 3:
+            raise ValueError("Only three open fiscal years are allowed: Previous, Current, and Next.")
+
+        if make_previous:
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET is_previous = 0,
+                    updated_at = ?
+                """,
+                (now,),
+            )
+
         if make_current:
-            conn.execute("UPDATE finance_fiscal_years SET is_current = 0, updated_at = ?", (now,))
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET is_current = 0,
+                    updated_at = ?
+                """,
+                (now,),
+            )
+
         if make_next:
-            conn.execute("UPDATE finance_fiscal_years SET is_next = 0, updated_at = ?", (now,))
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET is_next = 0,
+                    updated_at = ?
+                """,
+                (now,),
+            )
+
         cursor = conn.execute(
             """
             INSERT INTO finance_fiscal_years (
-                code, short_code, year_number, friendly_name, start_date, end_date,
-                status, is_current, is_next, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'planning', ?, ?, ?, ?)
+                code,
+                short_code,
+                year_number,
+                friendly_name,
+                start_date,
+                end_date,
+                adopted_budget,
+                status,
+                is_previous,
+                is_current,
+                is_next,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'planning', ?, ?, ?, ?, ?)
             """,
-            (code, short_code, year_number, friendly_name, start_date, end_date, 1 if make_current else 0, 1 if make_next else 0, now, now),
+            (
+                code,
+                short_code,
+                year_number,
+                friendly_name,
+                start_date,
+                end_date,
+                adopted_budget,
+                1 if make_previous else 0,
+                1 if make_current else 0,
+                1 if make_next else 0,
+                now,
+                now,
+            ),
         )
+
         fiscal_year_id = cursor.lastrowid
+
         for alias in fiscal_year_aliases_for(code, year_number):
             conn.execute(
-                "INSERT OR IGNORE INTO finance_fiscal_year_aliases (fiscal_year_id, alias, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                """
+                INSERT OR IGNORE INTO finance_fiscal_year_aliases (
+                    fiscal_year_id,
+                    alias,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?)
+                """,
                 (fiscal_year_id, alias, now, now),
             )
+
         conn.commit()
-    seed_fiscal_year_checklist(fiscal_year_id, created_by_user_id=created_by_user_id)
+
     return fiscal_year_id
 
 
@@ -261,24 +385,70 @@ def checklist_ready_for_workflow_completion(fiscal_year_id: int, checklist_type:
 
 def get_fiscal_year_workflow_context() -> dict:
     years = list_fiscal_years(include_closed=True)
+
+    current_year = next((item for item in years if item.get("is_current")), None)
+    previous_year = next((item for item in years if item.get("is_previous")), None)
+    next_year = next((item for item in years if item.get("is_next")), None)
+
+    stale_open_previous_years = []
+
+    if current_year:
+        stale_open_previous_years = [
+            item
+            for item in years
+            if int(item["year_number"]) < int(current_year["year_number"]) - 1
+            and item.get("status") != "closed"
+        ]
+
     return {
         "fiscal_years": years,
-        "current_fiscal_year": next((item for item in years if item["is_current"]), None),
-        "next_fiscal_year": next((item for item in years if item["is_next"]), None),
-        "open_fiscal_year_count": len([item for item in years if item["status"] in OPEN_STATUSES]),
+        "previous_fiscal_year": previous_year,
+        "current_fiscal_year": current_year,
+        "next_fiscal_year": next_year,
+        "stale_open_previous_years": stale_open_previous_years,
+        "open_fiscal_year_count": len(
+            [item for item in years if item["status"] in OPEN_STATUSES]
+        ),
     }
 
 
 def activate_fiscal_year_after_start_checklist(*, fiscal_year_id: int) -> None:
-    if not checklist_ready_for_workflow_completion(fiscal_year_id, "start_year"):
-        raise ValueError("All required start checklist items must be completed, and all skippable items must be completed or skipped.")
     now = utc_now_iso()
+
     with get_connection() as conn:
-        fiscal_year = conn.execute("SELECT * FROM finance_fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
+        fiscal_year = conn.execute(
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            WHERE id = ?
+            """,
+            (fiscal_year_id,),
+        ).fetchone()
+
         if not fiscal_year:
             raise ValueError("Fiscal year not found.")
-        conn.execute("UPDATE finance_fiscal_years SET is_current = 0, updated_at = ? WHERE id != ?", (now, fiscal_year_id))
-        conn.execute("UPDATE finance_fiscal_years SET status = 'active', is_current = 1, is_next = 0, updated_at = ? WHERE id = ?", (now, fiscal_year_id))
+
+        conn.execute(
+            """
+            UPDATE finance_fiscal_years
+            SET is_current = 0,
+                updated_at = ?
+            """,
+            (now,),
+        )
+
+        conn.execute(
+            """
+            UPDATE finance_fiscal_years
+            SET status = 'active',
+                is_current = 1,
+                is_next = 0,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (now, fiscal_year_id),
+        )
+
         conn.commit()
 
 
@@ -294,4 +464,162 @@ def close_fiscal_year_after_close_checklist(*, fiscal_year_id: int) -> None:
         next_year = conn.execute("SELECT * FROM finance_fiscal_years WHERE status = 'planning' ORDER BY year_number ASC LIMIT 1").fetchone()
         if next_year:
             conn.execute("UPDATE finance_fiscal_years SET status = 'active', is_current = 1, is_next = 0, updated_at = ? WHERE id = ?", (now, next_year["id"]))
+        conn.commit()
+
+def update_fiscal_year(
+    *,
+    fiscal_year_id: int,
+    year_number: int,
+    friendly_name: str | None,
+    start_date: str,
+    end_date: str,
+    adopted_budget: str | None = None,
+    status: str,
+    is_previous: bool = False,
+    is_current: bool = False,
+    is_next: bool = False,
+) -> None:
+    status = (normalize_text(status) or "").lower()
+
+    if status not in VALID_STATUSES:
+        raise ValueError("Invalid fiscal year status.")
+
+    role_count = sum([is_previous, is_current, is_next])
+    if role_count > 1:
+        raise ValueError("A fiscal year can only have one role: Previous, Current, or Next.")
+
+    if not year_number:
+        raise ValueError("Fiscal year is required.")
+
+    if not start_date or not end_date:
+        raise ValueError("Start date and end date are required.")
+
+    if fiscal_year_dates_overlap(
+        start_date=start_date,
+        end_date=end_date,
+        exclude_fiscal_year_id=fiscal_year_id,
+    ):
+        raise ValueError("Fiscal year dates overlap with an existing fiscal year.")
+
+    now = utc_now_iso()
+    code = f"FY{year_number}"
+    short_code = f"FY{str(year_number)[-2:]}"
+    friendly_name = normalize_text(friendly_name) or f"Fiscal Year {year_number}"
+    adopted_budget = normalize_text(adopted_budget) or "0.00"
+
+    with get_connection() as conn:
+        fiscal_year = conn.execute(
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            WHERE id = ?
+            """,
+            (fiscal_year_id,),
+        ).fetchone()
+
+        if not fiscal_year:
+            raise ValueError("Fiscal year not found.")
+
+        duplicate = conn.execute(
+            """
+            SELECT id
+            FROM finance_fiscal_years
+            WHERE code = ?
+              AND id != ?
+            """,
+            (code, fiscal_year_id),
+        ).fetchone()
+
+        if duplicate:
+            raise ValueError(f"{code} already exists.")
+
+        if is_previous:
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET is_previous = 0,
+                    updated_at = ?
+                WHERE id != ?
+                """,
+                (now, fiscal_year_id),
+            )
+
+        if is_current:
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET is_current = 0,
+                    updated_at = ?
+                WHERE id != ?
+                """,
+                (now, fiscal_year_id),
+            )
+
+        if is_next:
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET is_next = 0,
+                    updated_at = ?
+                WHERE id != ?
+                """,
+                (now, fiscal_year_id),
+            )
+
+        conn.execute(
+            """
+            UPDATE finance_fiscal_years
+            SET code = ?,
+                short_code = ?,
+                year_number = ?,
+                friendly_name = ?,
+                start_date = ?,
+                end_date = ?,
+                adopted_budget = ?,
+                status = ?,
+                is_previous = ?,
+                is_current = ?,
+                is_next = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                code,
+                short_code,
+                year_number,
+                friendly_name,
+                start_date,
+                end_date,
+                adopted_budget,
+                status,
+                1 if is_previous else 0,
+                1 if is_current else 0,
+                1 if is_next else 0,
+                now,
+                fiscal_year_id,
+            ),
+        )
+
+        conn.execute(
+            """
+            DELETE FROM finance_fiscal_year_aliases
+            WHERE fiscal_year_id = ?
+            """,
+            (fiscal_year_id,),
+        )
+
+        for alias in fiscal_year_aliases_for(code, year_number):
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO finance_fiscal_year_aliases (
+                    fiscal_year_id,
+                    alias,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (fiscal_year_id, alias, now, now),
+            )
+
         conn.commit()

@@ -374,3 +374,50 @@ def recalculate_budget_account(conn, budget_account_id: int) -> None:
         """,
         (money(original_budget), money(adjustments), money(transfers), money(current_budget), money(spent), money(encumbered), money(available), now, budget_account_id),
     )
+
+def get_linked_purchase_order_for_ledger(ledger_transaction: dict) -> dict | None:
+    if not ledger_transaction:
+        return None
+
+    purchase_order_id = ledger_transaction.get("purchase_order_id")
+    if not purchase_order_id:
+        return None
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM finance_purchase_orders
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (purchase_order_id,),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def get_linked_record_for_ledger(ledger_transaction: dict) -> dict | None:
+    if not ledger_transaction:
+        return None
+
+    linked_record_id = ledger_transaction.get("linked_record_id")
+    if not linked_record_id:
+        return None
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                r.*,
+                v.vendor_name
+            FROM finance_records r
+            LEFT JOIN finance_vendors v
+                ON v.id = r.vendor_id
+            WHERE r.id = ?
+            LIMIT 1
+            """,
+            (linked_record_id,),
+        ).fetchone()
+
+    return dict(row) if row else None

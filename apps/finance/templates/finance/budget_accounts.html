@@ -25,7 +25,7 @@
       <div class="finance-stat-value">${{ "{:,.2f}".format(account_summary.spent|float) }}</div>
     </div>
     <div class="finance-stat-card">
-      <div class="finance-stat-label">Open Encumbrance</div>
+      <div class="finance-stat-label">Pending / Open Encumbrance</div>
       <div class="finance-stat-value">${{ "{:,.2f}".format(account_summary.encumbered|float) }}</div>
     </div>
     <div class="finance-stat-card">
@@ -39,7 +39,6 @@
       <div class="form-field">
         <label>Fiscal Year</label>
         <select name="fiscal_year_code">
-          <option value="">All Fiscal Years</option>
           {% for fy in fiscal_years %}
             <option value="{{ fy.code }}" {% if selected_fiscal_year_code == fy.code %}selected{% endif %}>
               {{ fy.code }}{% if fy.is_current %} - Current{% endif %}

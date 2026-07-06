@@ -6,10 +6,15 @@
 
 {% block content %}
 <div class="page-shell finance-shell">
-  {% include "finance/_finance_tabs.html" %}
-
-  <div class="finance-back-row">
-    <a class="finance-back-link" href="{{ url_for('finance.purchase_orders', department_name=department_name) }}">&lt; Purchase Orders</a>
+    <div class="finance-back-row">
+    <a href="{{ url_for('finance.purchase_orders', department_name=department_name) }}" class="finance-back-link">
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+      <span>Purchase Orders</span>
+    </a>
   </div>
 
   <div class="page-header">
@@ -17,37 +22,105 @@
       <h1>PO {{ purchase_order.base_po_number or purchase_order.po_number or "" }}</h1>
       <p class="page-subtitle">
         {{ purchase_order.vendor_name or "Purchase order detail" }}
-        {% if purchase_order.line_item_count %} • {{ purchase_order.line_item_count }} line item{% if purchase_order.line_item_count != 1 %}s{% endif %}{% endif %}
+        {% if purchase_order.line_item_count %}
+          • {{ purchase_order.line_item_count }} line item{% if purchase_order.line_item_count != 1 %}s{% endif %}
+        {% endif %}
       </p>
     </div>
   </div>
 
   <div class="finance-stats finance-stats-wide">
-    <div class="finance-stat-card"><div class="finance-stat-label">Fiscal Year</div><div class="finance-stat-value">{{ purchase_order.fiscal_year_code or "-" }}</div></div>
-    <div class="finance-stat-card"><div class="finance-stat-label">Open Encumbrance</div><div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order.current_encumbrance|float) }}</div></div>
-    <div class="finance-stat-card"><div class="finance-stat-label">Paid</div><div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order.paid_amount|float) }}</div></div>
-    <div class="finance-stat-card"><div class="finance-stat-label">Status</div><div class="finance-stat-value">{{ purchase_order.status|replace("_", " ")|title }}</div></div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Fiscal Year</div>
+      <div class="finance-stat-value">{{ purchase_order.fiscal_year_code or "-" }}</div>
+    </div>
+
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Open Encumbrance</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order.current_encumbrance|float) }}</div>
+    </div>
+
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Paid</div>
+      <div class="finance-stat-value">${{ "{:,.2f}".format(purchase_order.paid_amount|float) }}</div>
+    </div>
+
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Status</div>
+      <div class="finance-stat-value">{{ purchase_order.status|replace("_", " ")|title }}</div>
+    </div>
   </div>
 
-  <div class="content-card">
-    <div class="finance-section-header">
+  <div class="content-card finance-po-detail-card">
+    <div class="finance-po-detail-card-header">
       <div>
+        <p class="finance-eyebrow">Purchase Order</p>
         <h2 class="finance-section-title">Purchase Order Details</h2>
         <p class="finance-section-subtitle">Base purchase order, vendor, budget account, and linked record.</p>
       </div>
+
+      <span class="finance-pill">
+        {{ purchase_order.status|replace("_", " ")|title }}
+      </span>
     </div>
 
-    <div class="finance-detail-grid finance-detail-grid-comfortable">
-      <div><span>Base PO</span><strong>{{ purchase_order.base_po_number or purchase_order.po_number or "-" }}</strong></div>
-      <div><span>Status</span><strong>{{ purchase_order.status|replace("_", " ")|title }}</strong></div>
-      <div><span>Vendor</span><strong>{{ purchase_order.vendor_name or "-" }}</strong></div>
-      <div><span>Linked Record</span><strong>{{ purchase_order.linked_record_title or "Unlinked" }}</strong></div>
-      <div><span>Budget Account</span><strong>{{ purchase_order.account_code or "-" }}{% if purchase_order.budget_account_title %} — {{ purchase_order.budget_account_title }}{% endif %}</strong></div>
-      <div><span>Budget Unit</span><strong>{{ purchase_order.budget_unit_full or purchase_order.budget_unit or "-" }}</strong></div>
-      <div><span>Original Encumbrance</span><strong>${{ "{:,.2f}".format(purchase_order.original_encumbrance|float) }}</strong></div>
-      <div><span>Encumbrance Changes</span><strong>${{ "{:,.2f}".format(purchase_order.encumbrance_changes|float) }}</strong></div>
-      <div><span>Open Encumbrance</span><strong>${{ "{:,.2f}".format(purchase_order.remaining_encumbrance|float) }}</strong></div>
-      <div><span>Available Budget</span><strong class="{% if purchase_order.budget_available_amount|float < 0 %}finance-negative{% endif %}">${{ "{:,.2f}".format(purchase_order.budget_available_amount|float) }}</strong></div>
+    <div class="finance-po-detail-grid">
+      <div class="finance-po-detail-item">
+        <span>Base PO</span>
+        <strong>{{ purchase_order.base_po_number or purchase_order.po_number or "-" }}</strong>
+      </div>
+
+      <div class="finance-po-detail-item">
+        <span>Vendor</span>
+        <strong>{{ purchase_order.vendor_name or "-" }}</strong>
+      </div>
+
+      <div class="finance-po-detail-item">
+        <span>Linked Record</span>
+        <strong>{{ purchase_order.linked_record_title or "Unlinked" }}</strong>
+      </div>
+
+      <div class="finance-po-detail-item">
+        <span>Fiscal Year</span>
+        <strong>{{ purchase_order.fiscal_year_code or "-" }}</strong>
+      </div>
+
+      <div class="finance-po-detail-item finance-po-detail-item-wide">
+        <span>Budget Account</span>
+        <strong>
+          {{ purchase_order.account_code or "-" }}
+          {% if purchase_order.budget_account_title %}
+            — {{ purchase_order.budget_account_title }}
+          {% endif %}
+        </strong>
+      </div>
+
+      <div class="finance-po-detail-item finance-po-detail-item-wide">
+        <span>Budget Unit</span>
+        <strong>{{ purchase_order.budget_unit_full or purchase_order.budget_unit or "-" }}</strong>
+      </div>
+
+      <div class="finance-po-detail-item">
+        <span>Original Encumbrance</span>
+        <strong>${{ "{:,.2f}".format(purchase_order.original_encumbrance|float) }}</strong>
+      </div>
+
+      <div class="finance-po-detail-item">
+        <span>Encumbrance Changes</span>
+        <strong>${{ "{:,.2f}".format(purchase_order.encumbrance_changes|float) }}</strong>
+      </div>
+
+      <div class="finance-po-detail-item">
+        <span>Open Encumbrance</span>
+        <strong>${{ "{:,.2f}".format(purchase_order.remaining_encumbrance|float) }}</strong>
+      </div>
+
+      <div class="finance-po-detail-item">
+        <span>Available Budget</span>
+        <strong class="{% if purchase_order.budget_available_amount|float < 0 %}finance-negative{% endif %}">
+          ${{ "{:,.2f}".format(purchase_order.budget_available_amount|float) }}
+        </strong>
+      </div>
     </div>
   </div>
 
@@ -60,36 +133,40 @@
     </div>
 
     {% if purchase_order.line_items %}
-    <div class="table-wrap">
-      <table class="data-table finance-money-table">
-        <thead>
-          <tr>
-            <th>Line</th>
-            <th>ERP PO</th>
-            <th>Description</th>
-            <th>Account</th>
-            <th>Rows</th>
-            <th>Paid</th>
-            <th>Open Encumbrance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in purchase_order.line_items %}
-          <tr>
-            <td><span class="finance-pill">{{ item.line_number }}</span></td>
-            <td>{{ item.po_number or "-" }}</td>
-            <td>{{ item.description or "-" }}</td>
-            <td>{{ item.account_code or "-" }}</td>
-            <td>{{ item.ledger_count }}</td>
-            <td>${{ "{:,.2f}".format(item.paid_amount|float) }}</td>
-            <td>${{ "{:,.2f}".format(item.remaining_amount|float) }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+      <div class="table-wrap">
+        <table class="data-table finance-money-table">
+          <thead>
+            <tr>
+              <th>Line</th>
+              <th>ERP PO</th>
+              <th>Description</th>
+              <th>Account</th>
+              <th>Rows</th>
+              <th>Paid</th>
+              <th>Open Encumbrance</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for item in purchase_order.line_items %}
+              <tr>
+                <td><span class="finance-pill">{{ item.line_number }}</span></td>
+                <td>{{ item.po_number or "-" }}</td>
+                <td>{{ item.description or "-" }}</td>
+                <td>{{ item.account_code or "-" }}</td>
+                <td>{{ item.ledger_count }}</td>
+                <td>${{ "{:,.2f}".format(item.paid_amount|float) }}</td>
+                <td>${{ "{:,.2f}".format(item.remaining_amount|float) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% else %}
-    <div class="finance-empty"><h3>No line items found</h3><p>No PO line items are tied to this purchase order yet.</p></div>
+      <div class="finance-empty">
+        <h3>No line items found</h3>
+        <p>No PO line items are tied to this purchase order yet.</p>
+      </div>
     {% endif %}
   </div>
 
@@ -100,27 +177,42 @@
         <p class="finance-section-subtitle">ERP rows tied to this purchase order.</p>
       </div>
     </div>
+
     {% if purchase_order.activity %}
-    <div class="table-wrap">
-      <table class="data-table finance-money-table">
-        <thead><tr><th>Date</th><th>ERP PO</th><th>T/C</th><th>Kind</th><th>Description</th><th>Paid</th><th>Encumbrance</th></tr></thead>
-        <tbody>
-          {% for item in purchase_order.activity %}
-          <tr class="finance-row-link" data-href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">
-            <td>{{ item.purchase_date or "-" }}</td>
-            <td>{{ item.po_number or "-" }}</td>
-            <td><span class="finance-pill">{{ item.transaction_code or "-" }}</span></td>
-            <td>{{ item.ledger_kind|replace("_", " ")|title }}</td>
-            <td>{{ item.description or item.title or "-" }}</td>
-            <td>${{ "{:,.2f}".format(item.expenditure_amount|float) }}</td>
-            <td>${{ "{:,.2f}".format(item.encumbrance_amount|float) }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+      <div class="table-wrap">
+        <table class="data-table finance-money-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>ERP PO</th>
+              <th>T/C</th>
+              <th>Kind</th>
+              <th>Description</th>
+              <th>Paid</th>
+              <th>Encumbrance</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for item in purchase_order.activity %}
+              <tr class="finance-row-link" data-href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">
+                <td>{{ item.purchase_date or "-" }}</td>
+                <td>{{ item.po_number or "-" }}</td>
+                <td><span class="finance-pill">{{ item.transaction_code or "-" }}</span></td>
+                <td>{{ item.ledger_kind|replace("_", " ")|title }}</td>
+                <td>{{ item.description or item.title or "-" }}</td>
+                <td>${{ "{:,.2f}".format(item.expenditure_amount|float) }}</td>
+                <td>${{ "{:,.2f}".format(item.encumbrance_amount|float) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% else %}
-    <div class="finance-empty"><h3>No ledger activity found</h3><p>No ledger rows are tied to this purchase order yet.</p></div>
+      <div class="finance-empty">
+        <h3>No ledger activity found</h3>
+        <p>No ledger rows are tied to this purchase order yet.</p>
+      </div>
     {% endif %}
   </div>
 </div>

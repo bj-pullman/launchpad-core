@@ -368,6 +368,7 @@ def init_finance_db():
         now = datetime.now(timezone.utc).isoformat()
 
         _ensure_column(conn, "finance_fiscal_years", "adopted_budget", "TEXT NOT NULL DEFAULT '0.00'")
+        _ensure_column(conn, "finance_fiscal_years", "is_previous", "INTEGER NOT NULL DEFAULT 0")
 
         starter_categories = [
             "Curriculum Software",
