@@ -369,6 +369,8 @@ def init_finance_db():
 
         _ensure_column(conn, "finance_fiscal_years", "adopted_budget", "TEXT NOT NULL DEFAULT '0.00'")
         _ensure_column(conn, "finance_fiscal_years", "is_previous", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "finance_fiscal_years", "department_name", "TEXT NULL")
+        _ensure_column(conn, "finance_departments", "finance_enabled", "INTEGER NOT NULL DEFAULT 1")
 
         starter_categories = [
             "Curriculum Software",

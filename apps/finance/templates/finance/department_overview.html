@@ -1,17 +1,14 @@
 {% extends "launchpad_ui/base.html" %}
 
 {% block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
->
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
 {% endblock %}
 
 {% block content %}
 {% set setup_ready = finance_setup_status and finance_setup_status.is_ready %}
 <div class="page-shell finance-shell">
 
-{% include "finance/_finance_tabs.html" %}
+  {% include "finance/_finance_tabs.html" %}
 
   <div class="page-header">
     <div>
@@ -20,90 +17,92 @@
     </div>
 
     {% if can_manage %}
-      <div class="page-header-actions">
-        {% if setup_ready %}
-          <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name) }}">Import</a>
-          <a class="btn btn-primary" href="{{ url_for('finance.record_create', department_name=department_name) }}">Add Record</a>
-          <a class="btn btn-primary" href="{{ url_for('finance.vendor_create', department_name=department_name) }}">Add Vendor</a>
-        {% endif %}
-        <button
-          type="button"
-          class="btn finance-settings-btn"
-          data-finance-modal-open="finance-settings-modal"
-          aria-label="Open Finance Settings"
-        >
-          <span class="finance-settings-btn-icon" aria-hidden="true">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-          </span>
+    <div class="page-header-actions">
+      {% if setup_ready %}
+      <a class="btn finance-import-btn"
+        href="{{ url_for('finance.imports', department_name=department_name) }}">Import</a>
+      <a class="btn btn-primary" href="{{ url_for('finance.record_create', department_name=department_name) }}">Add
+        Record</a>
+      <a class="btn btn-primary" href="{{ url_for('finance.vendor_create', department_name=department_name) }}">Add
+        Vendor</a>
+      {% endif %}
+      <button type="button" class="btn finance-settings-btn" data-finance-modal-open="finance-settings-modal"
+        aria-label="Open Finance Settings">
+        <span class="finance-settings-btn-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z">
+            </path>
+          </svg>
+        </span>
 
-          <span>Finance Setup</span>
-        </button>
-      </div>
+        <span>Finance Setup</span>
+      </button>
+    </div>
     {% endif %}
   </div>
 
   {% if not setup_ready %}
-    <div class="content-card finance-empty">
+  <div class="content-card finance-setup-required-card">
+    <div class="finance-setup-required-icon">!</div>
+
+    <div class="finance-setup-required-content">
       <h3>Finance Setup Required</h3>
-      <p>Before using Budget Overview, imports, records, purchase orders, or reports, create a Current fiscal year and enter its Budget Amount.</p>
+      <p>
+        Before using Budget Overview, imports, records, purchase orders, or reports,
+        create a Current fiscal year and enter its Budget Amount for {{ department_name }}.
+      </p>
 
       {% if finance_setup_status and finance_setup_status.missing_items %}
-        <div class="finance-alert">
-          <strong>Still needed:</strong>
-          <ul>
-            {% for item in finance_setup_status.missing_items %}
-              <li>{{ item|replace('adopted budget', 'Budget Amount') }}</li>
-            {% endfor %}
-          </ul>
-        </div>
+      <div class="finance-setup-required-list">
+        <strong>Still needed:</strong>
+        <ul>
+          {% for item in finance_setup_status.missing_items %}
+          <li>{{ item|replace('adopted budget', 'Budget Amount') }}</li>
+          {% endfor %}
+        </ul>
+      </div>
       {% endif %}
 
       {% if can_manage %}
-        <button type="button" class="btn btn-primary finance-action-button" data-finance-modal-open="finance-settings-modal">
-          Complete Finance Setup
-        </button>
+      <button type="button" class="btn btn-primary finance-action-button"
+        data-finance-modal-open="finance-settings-modal">
+        Complete Finance Setup
+      </button>
       {% endif %}
     </div>
+  </div>
   {% else %}
-    <div class="finance-alert">
-      <strong>Admin note:</strong> {{ explicit_permissions_notice }}
+  <div class="finance-alert">
+    <strong>Admin note:</strong> {{ explicit_permissions_notice }}
+  </div>
+
+  <div class="finance-stats">
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Total Records</div>
+      <div class="finance-stat-value">{{ dashboard_summary.total_records }}</div>
     </div>
 
-    <div class="finance-stats">
-      <div class="finance-stat-card">
-        <div class="finance-stat-label">Total Records</div>
-        <div class="finance-stat-value">{{ dashboard_summary.total_records }}</div>
-      </div>
-
-      <div class="finance-stat-card">
-        <div class="finance-stat-label">Renewals Due in 30 Days</div>
-        <div class="finance-stat-value">{{ dashboard_summary.renewals_due_30 }}</div>
-      </div>
-
-      <div class="finance-stat-card">
-        <div class="finance-stat-label">Active Vendors</div>
-        <div class="finance-stat-value">{{ dashboard_summary.active_vendors }}</div>
-      </div>
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Renewals Due in 30 Days</div>
+      <div class="finance-stat-value">{{ dashboard_summary.renewals_due_30 }}</div>
     </div>
 
-    <div class="content-card">
-      {% if can_view_budget %}
-        <p class="muted">Budget module access is enabled for your account.</p>
-      {% else %}
-        <p class="muted">Budget module access is not assigned for your account.</p>
-      {% endif %}
+    <div class="finance-stat-card">
+      <div class="finance-stat-label">Active Vendors</div>
+      <div class="finance-stat-value">{{ dashboard_summary.active_vendors }}</div>
     </div>
+  </div>
+
+  <div class="content-card">
+    {% if can_view_budget %}
+    <p class="muted">Budget module access is enabled for your account.</p>
+    {% else %}
+    <p class="muted">Budget module access is not assigned for your account.</p>
+    {% endif %}
+  </div>
   {% endif %}
 </div>
 

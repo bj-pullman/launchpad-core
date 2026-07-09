@@ -37,7 +37,8 @@ def _setup_redirect(department_name: str):
 @bp.app_context_processor
 def inject_finance_setup_status():
     try:
-        return {"finance_setup_status": get_finance_setup_status()}
+        department_name = _department_name()
+        return {"finance_setup_status": get_finance_setup_status(department_name)}
     except Exception:
         return {"finance_setup_status": None}
 
@@ -80,6 +81,7 @@ def intercept_fiscal_year_create_with_budget():
 
     try:
         fiscal_year_id = create_fiscal_year(
+            department_name=department_name,
             year_number=year_number,
             start_date=start_date,
             end_date=end_date,
@@ -143,7 +145,7 @@ def require_fiscal_year_setup_for_finance_operations():
     if not department_name:
         return None
 
-    status = get_finance_setup_status()
+    status = get_finance_setup_status(department_name)
     if status["is_ready"]:
         return None
 

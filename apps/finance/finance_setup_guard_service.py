@@ -18,19 +18,29 @@ def _money(value: Any) -> Decimal:
         return Decimal("0.00")
 
 
-def get_finance_setup_status() -> dict[str, Any]:
+def get_finance_setup_status(department_name: str | None = None) -> dict[str, Any]:
+    department_name = (department_name or "").strip()
+
     with get_connection() as conn:
         fiscal_year_count = conn.execute(
-            "SELECT COUNT(*) AS count FROM finance_fiscal_years"
+            """
+            SELECT COUNT(*) AS count
+            FROM finance_fiscal_years
+            WHERE department_name = ?
+            """,
+            (department_name,),
         ).fetchone()["count"]
+
         current_fy = conn.execute(
             """
             SELECT *
             FROM finance_fiscal_years
-            WHERE is_current = 1
+            WHERE department_name = ?
+              AND is_current = 1
             ORDER BY year_number DESC
             LIMIT 1
-            """
+            """,
+            (department_name,),
         ).fetchone()
 
     current = dict(current_fy) if current_fy else None

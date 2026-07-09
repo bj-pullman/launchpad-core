@@ -57,11 +57,24 @@ def _role_limited_years(years: list[dict]) -> list[dict]:
     return sorted(selected.values(), key=lambda item: item["year_number"], reverse=True)
 
 
-def list_fiscal_years(include_closed: bool = True) -> list[dict]:
+def list_fiscal_years(department_name: str, include_closed: bool = True) -> list[dict]:
     with get_connection() as conn:
-        rows = [dict(row) for row in conn.execute("SELECT * FROM finance_fiscal_years ORDER BY year_number DESC").fetchall()]
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT *
+                FROM finance_fiscal_years
+                WHERE department_name = ?
+                ORDER BY year_number DESC
+                """,
+                (department_name,),
+            ).fetchall()
+        ]
+
     if not include_closed:
         return [item for item in rows if item["status"] != "closed"]
+
     return _role_limited_years(rows)
 
 
@@ -135,12 +148,13 @@ def seed_fiscal_year_checklist(fiscal_year_id: int, created_by_user_id: int | No
 
 def fiscal_year_dates_overlap(
     *,
+    department_name: str,
     start_date: str,
     end_date: str,
     exclude_fiscal_year_id: int | None = None,
 ) -> bool:
     with get_connection() as conn:
-        params = [end_date, start_date]
+        params = [department_name, end_date, start_date]
 
         exclude_sql = ""
         if exclude_fiscal_year_id:
@@ -151,7 +165,8 @@ def fiscal_year_dates_overlap(
             f"""
             SELECT id
             FROM finance_fiscal_years
-            WHERE date(start_date) <= date(?)
+            WHERE department_name = ?
+              AND date(start_date) <= date(?)
               AND date(end_date) >= date(?)
               {exclude_sql}
             LIMIT 1
@@ -164,6 +179,7 @@ def fiscal_year_dates_overlap(
 
 def create_fiscal_year(
     *,
+    department_name: str,
     year_number: int,
     start_date: str,
     end_date: str,
@@ -178,14 +194,22 @@ def create_fiscal_year(
     if role_count > 1:
         raise ValueError("A fiscal year can only have one role: Previous, Current, or Next.")
 
+    department_name = normalize_text(department_name)
+    if not department_name:
+        raise ValueError("Department is required.")
+
     if not year_number:
         raise ValueError("Fiscal year is required.")
 
     if not start_date or not end_date:
         raise ValueError("Start date and end date are required.")
 
-    if fiscal_year_dates_overlap(start_date=start_date, end_date=end_date):
-        raise ValueError("Fiscal year dates overlap with an existing fiscal year.")
+    if fiscal_year_dates_overlap(
+        department_name=department_name,
+        start_date=start_date,
+        end_date=end_date,
+    ):
+        raise ValueError("Fiscal year dates overlap with an existing fiscal year for this department.")
 
     now = utc_now_iso()
     code = f"FY{year_number}"
@@ -198,24 +222,27 @@ def create_fiscal_year(
             """
             SELECT COUNT(*) AS count
             FROM finance_fiscal_years
-            WHERE status IN ('planning', 'active', 'closing')
-            """
+            WHERE department_name = ?
+              AND status IN ('planning', 'active', 'closing')
+            """,
+            (department_name,),
         ).fetchone()["count"]
 
         existing = conn.execute(
             """
             SELECT id
             FROM finance_fiscal_years
-            WHERE code = ?
+            WHERE department_name = ?
+              AND code = ?
             """,
-            (code,),
+            (department_name, code),
         ).fetchone()
 
         if existing:
-            raise ValueError(f"{code} already exists.")
+            raise ValueError(f"{code} already exists for {department_name}.")
 
         if open_count >= 3:
-            raise ValueError("Only three open fiscal years are allowed: Previous, Current, and Next.")
+            raise ValueError("Only three open fiscal years are allowed per department: Previous, Current, and Next.")
 
         if make_previous:
             conn.execute(
@@ -223,8 +250,9 @@ def create_fiscal_year(
                 UPDATE finance_fiscal_years
                 SET is_previous = 0,
                     updated_at = ?
+                WHERE department_name = ?
                 """,
-                (now,),
+                (now, department_name),
             )
 
         if make_current:
@@ -233,8 +261,9 @@ def create_fiscal_year(
                 UPDATE finance_fiscal_years
                 SET is_current = 0,
                     updated_at = ?
+                WHERE department_name = ?
                 """,
-                (now,),
+                (now, department_name),
             )
 
         if make_next:
@@ -243,13 +272,15 @@ def create_fiscal_year(
                 UPDATE finance_fiscal_years
                 SET is_next = 0,
                     updated_at = ?
+                WHERE department_name = ?
                 """,
-                (now,),
+                (now, department_name),
             )
 
         cursor = conn.execute(
             """
             INSERT INTO finance_fiscal_years (
+                department_name,
                 code,
                 short_code,
                 year_number,
@@ -264,9 +295,10 @@ def create_fiscal_year(
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'planning', ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planning', ?, ?, ?, ?, ?)
             """,
             (
+                department_name,
                 code,
                 short_code,
                 year_number,
@@ -360,8 +392,9 @@ def set_checklist_item_state(*, checklist_item_id: int, complete: bool = False, 
         conn.commit()
 
 
-def get_fiscal_year_setup_summary() -> dict:
-    years = list_fiscal_years(include_closed=True)
+def get_fiscal_year_setup_summary(department_name: str) -> dict:
+    years = list_fiscal_years(department_name=department_name, include_closed=True)
+
     return {
         "fiscal_years": years,
         "current_fiscal_year": next((item for item in years if item["is_current"]), None),
@@ -383,8 +416,8 @@ def checklist_ready_for_workflow_completion(fiscal_year_id: int, checklist_type:
     return required == 0 and skippable == 0
 
 
-def get_fiscal_year_workflow_context() -> dict:
-    years = list_fiscal_years(include_closed=True)
+def get_fiscal_year_workflow_context(department_name: str) -> dict:
+    years = list_fiscal_years(department_name=department_name, include_closed=True)
 
     current_year = next((item for item in years if item.get("is_current")), None)
     previous_year = next((item for item in years if item.get("is_previous")), None)

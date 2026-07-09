@@ -418,7 +418,7 @@ function initDeleteConfirmations() {
 
 function initSettingsProviderToggles() {
   document.querySelectorAll(".settings-provider-card").forEach((card) => {
-    const toggle = card.querySelector('input[type="checkbox"]');
+    const toggle = card.querySelector(".settings-toggle-row input[type='checkbox']");
     const toggleRow = card.querySelector(".settings-toggle-row");
 
     if (!toggle) {

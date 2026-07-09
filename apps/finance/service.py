@@ -108,6 +108,7 @@ def list_enabled_departments() -> list[dict]:
             SELECT *
             FROM finance_departments
             WHERE is_enabled = 1
+              AND COALESCE(finance_enabled, 1) = 1
             ORDER BY department_name COLLATE NOCASE
             """
         ).fetchall()
@@ -132,6 +133,25 @@ def get_department_record(department_name: str) -> dict | None:
         ).fetchone()
 
     return dict(row) if row else None
+
+def set_department_finance_enabled(department_name: str, enabled: bool) -> None:
+    department_name = normalize_text(department_name)
+    if not department_name:
+        raise ValueError("department_name is required")
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE finance_departments
+            SET finance_enabled = ?,
+                updated_at = ?
+            WHERE department_name = ?
+            """,
+            (1 if enabled else 0, now, department_name),
+        )
+        conn.commit()
 
 
 def list_vendors() -> list[dict]:
@@ -5299,5 +5319,37 @@ def approve_category_import_suggestion(suggestion_id: int):
             WHERE id = ?
             """,
             (now, suggestion_id),
+        )
+        conn.commit()
+
+def list_finance_departments() -> list[dict]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM finance_departments
+            ORDER BY department_name COLLATE NOCASE
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def set_department_finance_enabled(department_name: str, enabled: bool) -> None:
+    department_name = normalize_text(department_name)
+    if not department_name:
+        raise ValueError("department_name is required")
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE finance_departments
+            SET finance_enabled = ?,
+                updated_at = ?
+            WHERE department_name = ?
+            """,
+            (1 if enabled else 0, now, department_name),
         )
         conn.commit()

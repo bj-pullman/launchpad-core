@@ -46,6 +46,11 @@ from apps.staff_status.access_service import (
 )
 
 from apps.finance.notification_service import send_finance_test_email
+from apps.finance.service import (
+    sync_departments_from_users as sync_finance_departments_from_users,
+    list_finance_departments,
+    set_department_finance_enabled,
+)
 
 from apps.snipeops.mapping_service import (
     list_mappings,
@@ -1637,11 +1642,11 @@ def settings_integrations_mosyle():
 def settings_finance():
     active_finance_tab = (
         (request.form.get("active_finance_tab") if request.method == "POST" else request.args.get("tab"))
-        or "notifications"
+        or "departments"
     ).strip().lower()
 
-    if active_finance_tab not in {"notifications", "template"}:
-        active_finance_tab = "notifications"
+    if active_finance_tab not in {"departments", "notifications", "template"}:
+        active_finance_tab = "departments"
 
     if request.method == "POST":
         if not _require_manage_permission(
@@ -1651,6 +1656,26 @@ def settings_finance():
             return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
 
         action = (request.form.get("action") or "save_settings").strip().lower()
+
+        if action == "save_departments":
+            sync_finance_departments_from_users()
+
+            enabled_departments = {
+                item.strip()
+                for item in request.form.getlist("finance_enabled_departments")
+                if item.strip()
+            }
+
+            for department in list_finance_departments():
+                department_name = department["department_name"]
+
+                set_department_finance_enabled(
+                    department_name,
+                    department_name in enabled_departments,
+                )
+
+            flash("Finance department availability saved.", "success")
+            return redirect(url_for("launchpad_ui.settings_finance", tab="departments"))
 
         notifications_enabled = 1 if request.form.get("notifications_enabled") == "1" else 0
         use_record_recipients_first = 1 if request.form.get("use_record_recipients_first") == "1" else 0
@@ -1805,7 +1830,10 @@ def settings_finance():
         preview_context=preview_context,
         preview_subject=preview_subject,
         preview_lines=preview_lines,
+        finance_departments=list_finance_departments(),
     )
+
+
 
 
 @launchpad_ui_bp.route("/settings/integrations/email", methods=["GET", "POST"])

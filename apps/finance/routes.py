@@ -165,7 +165,7 @@ def department_overview(department_name: str):
 
     summary = get_finance_dashboard_summary(department_name)
 
-    fiscal_year_setup = get_fiscal_year_workflow_context()
+    fiscal_year_setup = get_fiscal_year_workflow_context(department_name=department_name)
 
     start_checklists = {}
     close_checklists = {}
@@ -1926,6 +1926,7 @@ def fiscal_years(department_name: str):
 
         try:
             fiscal_year_id = create_fiscal_year(
+                department_name=department_name,
                 year_number=year_number,
                 start_date=start_date,
                 end_date=end_date,
