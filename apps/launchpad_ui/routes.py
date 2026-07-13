@@ -106,9 +106,20 @@ from tasks.scheduler import configure_jobs
 
 
 def _require_manage_permission(permission_key: str, message: str):
+    from flask import session
+    from modules.core.identity.rbac_service import build_user_access_summary
+
+    user_id = session.get("user_id")
+    if user_id:
+        access = build_user_access_summary(user_id)
+
+        if access.get("is_super_admin"):
+            return True
+
     if permission_key not in user_permissions():
         flash(message, "error")
         return False
+
     return True
 
 
@@ -1650,7 +1661,7 @@ def settings_finance():
 
     if request.method == "POST":
         if not _require_manage_permission(
-            "launchpad.settings.finance.manage",
+            "launchpad.settings.finance.admin",
             "You do not have permission to update Finance settings.",
         ):
             return redirect(url_for("launchpad_ui.settings_finance", tab=active_finance_tab))
