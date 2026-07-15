@@ -16,11 +16,6 @@ let ownershipOwnersCache = [];
 let ownershipSelectedUser = null;
 let locationOptionsCache = null;
 
-const managedDeviceCountCache = new Map();
-
-let myManagedDevicesRequestId = 0;
-let ownershipManagedDevicesRequestId = 0;
-
 const sheetDevices = new Map();
 
 function $(id) {
@@ -166,18 +161,40 @@ async function loadMyCarts() {
         el.innerHTML = `<div class="muted">Loading your carts...</div>`;
     }
 
+    setManagedDeviceSummaryValue(
+        "myManagedDeviceTotal",
+        "..."
+    );
+
     try {
-        const data = await apiGet("/api/my-carts", "Unable to load your carts.");
+        const data = await apiGet(
+            "/api/my-carts",
+            "Unable to load your carts."
+        );
+
         myCartsCache = data.carts || [];
 
         renderMyCartsTable(myCartsCache);
-        refreshMyManagedDeviceTotal();
+
+        setManagedDeviceSummaryValue(
+            "myManagedDeviceTotal",
+            Number(data.total_devices_managed || 0)
+        );
 
         if (selectedCart) {
             collapseMyCartsTable();
         }
     } catch (err) {
-        el.innerHTML = `<div class="muted">${escapeHtml(err.message || "Unable to load your carts.")}</div>`;
+        el.innerHTML = `
+            <div class="muted">
+                ${escapeHtml(err.message || "Unable to load your carts.")}
+            </div>
+        `;
+
+        setManagedDeviceSummaryValue(
+            "myManagedDeviceTotal",
+            "Error"
+        );
     }
 }
 
@@ -1846,10 +1863,7 @@ function bindOwnershipManagement() {
 
     $("refreshOwnershipBtn")?.addEventListener(
         "click",
-        () => {
-            managedDeviceCountCache.clear();
-            loadOwnershipOwners();
-        }
+        loadOwnershipOwners
     );
 }
 
@@ -1860,24 +1874,64 @@ async function loadOwnershipOwners() {
 
     if (!el) return;
 
-    el.innerHTML = `<div class="muted">Loading assigned cart owners...</div>`;
+    el.innerHTML = `
+        <div class="muted">
+            Loading assigned cart owners...
+        </div>
+    `;
+
+    setManagedDeviceSummaryValue(
+        "allManagedDeviceTotal",
+        "..."
+    );
 
     if (cartsEl && !ownershipSelectedUser) {
         cartsEl.innerHTML = "";
     }
 
     try {
-        const data = await apiGet("/api/ownership/owners", "Unable to load assigned cart owners.");
+        const data = await apiGet(
+            "/api/ownership/owners",
+            "Unable to load assigned cart owners."
+        );
+
         ownershipOwnersCache = data.owners || [];
-        renderOwnershipOwners(ownershipOwnersCache);
-        refreshOwnershipManagedDeviceTotals();
-        setStatus(`Loaded ${ownershipOwnersCache.length} assigned cart owner(s).`, true);
+
+        renderOwnershipOwners(
+            ownershipOwnersCache
+        );
+
+        setManagedDeviceSummaryValue(
+            "allManagedDeviceTotal",
+            Number(data.total_devices_managed || 0)
+        );
+
+        setStatus(
+            `Loaded ${ownershipOwnersCache.length} assigned cart owner(s).`,
+            true
+        );
     } catch (err) {
-        el.innerHTML = `<div class="muted">${escapeHtml(err.message || "Unable to load assigned cart owners.")}</div>`;
-        setStatus(err.message || "Unable to load assigned cart owners.", false);
+        el.innerHTML = `
+            <div class="muted">
+                ${escapeHtml(
+                    err.message ||
+                    "Unable to load assigned cart owners."
+                )}
+            </div>
+        `;
+
+        setManagedDeviceSummaryValue(
+            "allManagedDeviceTotal",
+            "Error"
+        );
+
+        setStatus(
+            err.message ||
+            "Unable to load assigned cart owners.",
+            false
+        );
     }
 }
-
 
 function renderOwnershipOwners(owners) {
     const el = $("ownershipOwners");
@@ -1892,6 +1946,7 @@ function renderOwnershipOwners(owners) {
         <div class="sheet-wrap compact">
             <table class="media-sheet ownership-table">
                 <thead>
+                    <tr>
                         <th>User</th>
                         <th>Email</th>
                         <th>Carts</th>
@@ -1916,11 +1971,8 @@ function renderOwnershipOwners(owners) {
                                 </span>
                             </td>
                             <td>
-                                <span
-                                    class="managed-device-count-pill"
-                                    data-owner-device-total="${escapeHtml(owner.owner_user_id)}"
-                                >
-                                    ...
+                                <span class="managed-device-count-pill">
+                                    ${escapeHtml(owner.total_devices_managed || 0)}
                                 </span>
                             </td>
                             <td>${escapeHtml(formatFriendlyDateTime(owner.last_updated_at))}</td>
@@ -2067,7 +2119,9 @@ function renderOwnershipUserCarts(owner, carts) {
                                     <td>${renderAdminInlineEditField(cart.id, "room_number", ownership.room_number || "—")}</td>
                                     <td>${renderLocationEditField(cart)}</td>
                                     <td>
-                                        <span class="device-count-badge" data-admin-device-count-cart-id="${escapeHtml(cart.id)}">...</span>
+                                        <span class="device-count-badge">
+                                            ${escapeHtml(cart.device_count || 0)}
+                                        </span>
                                     </td>
                                     <td>
                                         <button class="mini-btn" type="button" data-admin-assign-owner-id="${escapeHtml(cart.id)}">
@@ -2088,7 +2142,6 @@ function renderOwnershipUserCarts(owner, carts) {
     `;
 
     bindOwnershipUserCartEvents(carts);
-    loadAdminVisibleCartDeviceCounts(carts);
 }
 
 
@@ -2123,21 +2176,6 @@ function bindOwnershipUserCartEvents(carts) {
             activateAdminInlineEdit(wrapper, carts);
         });
     });
-}
-
-
-async function loadAdminVisibleCartDeviceCounts(carts) {
-    await Promise.allSettled(carts.map(async cart => {
-        const cell = document.querySelector(`[data-admin-device-count-cart-id="${CSS.escape(String(cart.id))}"]`);
-        if (!cell) return;
-
-        try {
-            const data = await apiGet(`/api/carts/${cart.id}/devices`, "Unable to load device count.");
-            cell.textContent = String((data.devices || []).length);
-        } catch {
-            cell.textContent = "—";
-        }
-    }));
 }
 
 
@@ -2258,11 +2296,8 @@ function drawMyCartsRows(rows) {
                     ${renderLocationEditField(cart)}
                 </td>
                 <td>
-                    <span
-                        class="device-count-badge"
-                        data-device-count-cart-id="${escapeHtml(cart.id)}"
-                    >
-                        ...
+                    <span class="device-count-badge">
+                        ${escapeHtml(cart.device_count || 0)}
                     </span>
                 </td>
                 <td><button class="mini-btn" type="button" data-cart-details-id="${escapeHtml(cart.id)}">Details</button></td>
@@ -2272,21 +2307,6 @@ function drawMyCartsRows(rows) {
 
     bindMyCartTableEvents(rows);
     bindLocationEditButtons(rows);
-    loadVisibleCartDeviceCounts(rows);
-}
-
-async function loadVisibleCartDeviceCounts(carts) {
-    await Promise.allSettled(carts.map(async cart => {
-        const cell = document.querySelector(`[data-device-count-cart-id="${CSS.escape(String(cart.id))}"]`);
-        if (!cell) return;
-
-        try {
-            const data = await apiGet(`/api/carts/${cart.id}/devices`, "Unable to load device count.");
-            cell.textContent = String((data.devices || []).length);
-        } catch {
-            cell.textContent = "—";
-        }
-    }));
 }
 
 function getFilteredMyCarts() {
@@ -2660,31 +2680,6 @@ function formatFriendlyDateTime(value) {
 
 function initManagedDeviceTotals() {
     addManagedDeviceTotalBadges();
-
-    $("refreshMyCartsBtn")?.addEventListener("click", () => {
-        managedDeviceCountCache.clear();
-
-        window.setTimeout(() => {
-            refreshMyManagedDeviceTotal(true);
-        }, 100);
-    });
-
-    $("refreshOwnershipBtn")?.addEventListener("click", () => {
-        managedDeviceCountCache.clear();
-
-        window.setTimeout(() => {
-            refreshOwnershipManagedDeviceTotals(true);
-        }, 100);
-    });
-
-    document.querySelectorAll('[data-tab="ownership-management"]').forEach(tab => {
-        tab.addEventListener("click", () => {
-            window.setTimeout(() => {
-                addManagedDeviceTotalBadges();
-                refreshOwnershipManagedDeviceTotals();
-            }, 100);
-        });
-    });
 }
 
 
@@ -2724,52 +2719,6 @@ function addManagedDeviceTotalBadges() {
     }
 }
 
-async function fetchManagedDeviceCount(cartId, forceRefresh = false) {
-    const cacheKey = String(cartId);
-
-    if (!forceRefresh && managedDeviceCountCache.has(cacheKey)) {
-        return managedDeviceCountCache.get(cacheKey);
-    }
-
-    const data = await apiGet(
-        `/api/carts/${encodeURIComponent(cartId)}/devices`,
-        "Unable to load cart device count."
-    );
-
-    /*
-     * The API only returns assets assigned to the cart.
-     * The cart asset itself is therefore excluded.
-     */
-    const count = Array.isArray(data.devices)
-        ? data.devices.length
-        : 0;
-
-    managedDeviceCountCache.set(cacheKey, count);
-
-    return count;
-}
-
-
-async function calculateManagedDevicesForCarts(carts, forceRefresh = false) {
-    const validCarts = Array.isArray(carts)
-        ? carts.filter(cart => cart && cart.id)
-        : [];
-
-    if (!validCarts.length) {
-        return 0;
-    }
-
-    const counts = await Promise.all(
-        validCarts.map(cart => {
-            return fetchManagedDeviceCount(cart.id, forceRefresh);
-        })
-    );
-
-    return counts.reduce((total, count) => {
-        return total + Number(count || 0);
-    }, 0);
-}
-
 
 function setManagedDeviceSummaryValue(elementId, value) {
     const element = $(elementId);
@@ -2778,140 +2727,4 @@ function setManagedDeviceSummaryValue(elementId, value) {
     if (!valueElement) return;
 
     valueElement.textContent = String(value);
-}
-
-
-async function refreshMyManagedDeviceTotal(forceRefresh = false) {
-    addManagedDeviceTotalBadges();
-
-    const requestId = ++myManagedDevicesRequestId;
-
-    setManagedDeviceSummaryValue(
-        "myManagedDeviceTotal",
-        "..."
-    );
-
-    try {
-        /*
-         * Use the existing cart cache whenever available.
-         * loadMyCarts() has already refreshed this data.
-         */
-        let carts = myCartsCache;
-
-        if (!Array.isArray(carts)) {
-            const data = await apiGet(
-                "/api/my-carts",
-                "Unable to load your carts."
-            );
-
-            carts = data.carts || [];
-        }
-
-        const total = await calculateManagedDevicesForCarts(
-            carts,
-            forceRefresh
-        );
-
-        if (requestId !== myManagedDevicesRequestId) return;
-
-        setManagedDeviceSummaryValue(
-            "myManagedDeviceTotal",
-            total
-        );
-    } catch (err) {
-        console.error(
-            "Unable to load managed-device total.",
-            err
-        );
-
-        if (requestId === myManagedDevicesRequestId) {
-            setManagedDeviceSummaryValue(
-                "myManagedDeviceTotal",
-                "Error"
-            );
-        }
-    }
-}
-
-
-async function refreshOwnershipManagedDeviceTotals(forceRefresh = false) {
-    if (!window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP) return;
-
-    addManagedDeviceTotalBadges();
-
-    const requestId = ++ownershipManagedDevicesRequestId;
-
-    setManagedDeviceSummaryValue(
-        "allManagedDeviceTotal",
-        "..."
-    );
-
-    try {
-        const owners = Array.isArray(ownershipOwnersCache)
-            ? ownershipOwnersCache
-            : [];
-
-        let allUsersTotal = 0;
-
-        for (const owner of owners) {
-            if (requestId !== ownershipManagedDevicesRequestId) return;
-
-            const ownerId = owner.owner_user_id;
-
-            if (!ownerId) continue;
-
-            const data = await apiGet(
-                `/api/ownership/users/${encodeURIComponent(ownerId)}/carts`,
-                "Unable to load user carts."
-            );
-
-            const ownerTotal = await calculateManagedDevicesForCarts(
-                data.carts || [],
-                forceRefresh
-            );
-
-            allUsersTotal += ownerTotal;
-
-            const ownerTotalElement = document.querySelector(
-                `[data-owner-device-total="${cssEscapeValue(ownerId)}"]`
-            );
-
-            if (ownerTotalElement) {
-                ownerTotalElement.textContent = String(ownerTotal);
-            }
-        }
-
-        if (requestId !== ownershipManagedDevicesRequestId) return;
-
-        setManagedDeviceSummaryValue(
-            "allManagedDeviceTotal",
-            allUsersTotal
-        );
-    } catch (err) {
-        console.error(
-            "Unable to load ownership managed-device totals.",
-            err
-        );
-
-        if (requestId === ownershipManagedDevicesRequestId) {
-            setManagedDeviceSummaryValue(
-                "allManagedDeviceTotal",
-                "Error"
-            );
-        }
-    }
-}
-
-
-function cssEscapeValue(value) {
-    const stringValue = String(value);
-
-    if (
-        window.CSS &&
-        typeof window.CSS.escape === "function"
-    ) {
-        return window.CSS.escape(stringValue);
-    }
-
-    return stringValue.replace(/["\\]/g, "\\$&");
 }

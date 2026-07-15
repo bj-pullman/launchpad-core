@@ -120,6 +120,12 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_serial ON catalog_assets(serial)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_name ON catalog_assets(name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_assets_model_id ON catalog_assets(model_id)")
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_catalog_assets_assignment
+            ON catalog_assets(assigned_type, assigned_id)
+            """
+        )
 
         conn.commit()
 
@@ -451,3 +457,49 @@ def list_cart_assets(location_name: str | None = None, limit: int = 500) -> list
         ).fetchall()
 
         return [dict(r) for r in rows]
+    
+def count_assets_assigned_to_assets(asset_ids: list[int]) -> dict[int, int]:
+    """
+    Return device counts for multiple parent assets in one query.
+
+    The returned dictionary uses the parent/cart asset ID as the key
+    and the number of assets assigned to that cart as the value.
+
+    The parent cart itself is not counted.
+    """
+    normalized_ids = sorted({
+        int(asset_id)
+        for asset_id in asset_ids
+        if asset_id is not None
+    })
+
+    if not normalized_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in normalized_ids)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT
+                assigned_id,
+                COUNT(*) AS device_count
+            FROM catalog_assets
+            WHERE lower(COALESCE(assigned_type, '')) = 'asset'
+              AND assigned_id IN ({placeholders})
+            GROUP BY assigned_id
+            """,
+            normalized_ids,
+        ).fetchall()
+
+    counts = {
+        int(row["assigned_id"]): int(row["device_count"] or 0)
+        for row in rows
+        if row["assigned_id"] is not None
+    }
+
+    # Include carts that currently contain zero devices.
+    return {
+        asset_id: counts.get(asset_id, 0)
+        for asset_id in normalized_ids
+    }

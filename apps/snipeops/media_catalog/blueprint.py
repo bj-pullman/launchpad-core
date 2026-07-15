@@ -27,8 +27,10 @@ from apps.snipeops.snipe_catalog.catalog_db import (
     get_asset,
     search_assets,
     get_assets_assigned_to_asset,
+    count_assets_assigned_to_assets,
     list_cart_assets,
 )
+
 from apps.snipeops.snipe_catalog.sync import run_full_sync
 from apps.snipeops.snipe_catalog.snipe_api import fetch_locations, patch_json
 
@@ -151,6 +153,35 @@ def _ownership_payload(row: dict) -> dict:
 
     payload["ownership"] = row
     return payload
+
+def _ownership_rows_with_device_counts(rows: list[dict]) -> list[dict]:
+    """
+    Convert ownership rows to cart payloads and attach device counts
+    using one aggregate catalog query.
+    """
+    cart_ids = [
+        int(row["cart_asset_id"])
+        for row in rows
+        if row.get("cart_asset_id") is not None
+    ]
+
+    device_counts = count_assets_assigned_to_assets(cart_ids)
+
+    payloads = []
+
+    for row in rows:
+        payload = _ownership_payload(row)
+
+        cart_id = payload.get("id")
+        payload["device_count"] = (
+            device_counts.get(int(cart_id), 0)
+            if cart_id is not None
+            else 0
+        )
+
+        payloads.append(payload)
+
+    return payloads
 
 def _safe_filename(value: str) -> str:
     value = (value or "media-catalog-export").strip()
@@ -326,13 +357,25 @@ def api_my_carts():
     user = _current_user_profile()
 
     if not user:
-        return jsonify({"ok": False, "error": "User profile not found.", "carts": []}), 404
+        return jsonify({
+            "ok": False,
+            "error": "User profile not found.",
+            "carts": [],
+            "total_devices_managed": 0,
+        }), 404
 
     rows = list_owned_carts(int(user["id"]))
+    carts = _ownership_rows_with_device_counts(rows)
+
+    total_devices_managed = sum(
+        int(cart.get("device_count") or 0)
+        for cart in carts
+    )
 
     return jsonify({
         "ok": True,
-        "carts": [_ownership_payload(row) for row in rows],
+        "carts": carts,
+        "total_devices_managed": total_devices_managed,
     })
 
 
@@ -703,10 +746,53 @@ def api_update_cart_metadata(cart_id: int):
 @require_permission("snipeops.media_catalog.ownership.view")
 def api_ownership_owners():
     owners = list_cart_owners()
+    owned_cart_rows = list_all_owned_carts()
+
+    cart_ids = [
+        int(row["cart_asset_id"])
+        for row in owned_cart_rows
+        if row.get("cart_asset_id") is not None
+    ]
+
+    device_counts = count_assets_assigned_to_assets(cart_ids)
+
+    totals_by_owner: dict[int, int] = {}
+
+    for row in owned_cart_rows:
+        owner_user_id = row.get("owner_user_id")
+        cart_asset_id = row.get("cart_asset_id")
+
+        if owner_user_id is None or cart_asset_id is None:
+            continue
+
+        owner_id = int(owner_user_id)
+        cart_id = int(cart_asset_id)
+
+        totals_by_owner[owner_id] = (
+            totals_by_owner.get(owner_id, 0)
+            + device_counts.get(cart_id, 0)
+        )
+
+    owner_payloads = []
+
+    for owner in owners:
+        owner_payload = dict(owner)
+        owner_user_id = owner_payload.get("owner_user_id")
+
+        owner_payload["total_devices_managed"] = (
+            totals_by_owner.get(int(owner_user_id), 0)
+            if owner_user_id is not None
+            else 0
+        )
+
+        owner_payloads.append(owner_payload)
+
+    district_total = sum(totals_by_owner.values())
 
     return jsonify({
         "ok": True,
-        "owners": owners,
+        "owners": owner_payloads,
+        "total_devices_managed": district_total,
     })
 
 
@@ -715,10 +801,15 @@ def api_ownership_owners():
 @require_permission("snipeops.media_catalog.ownership.view")
 def api_ownership_user_carts(user_id: int):
     rows = list_owned_carts(user_id)
+    carts = _ownership_rows_with_device_counts(rows)
 
     return jsonify({
         "ok": True,
-        "carts": [_ownership_payload(row) for row in rows],
+        "carts": carts,
+        "total_devices_managed": sum(
+            int(cart.get("device_count") or 0)
+            for cart in carts
+        ),
     })
 
 
