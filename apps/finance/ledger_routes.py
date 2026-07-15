@@ -41,9 +41,12 @@ def _is_import_validate_request() -> bool:
 def _selected_fiscal_year_code() -> str:
     return (request.args.get("fiscal_year_code") or "").strip()
 
-def _current_fiscal_year_code() -> str:
-    fiscal_years = _fiscal_year_options()
-    current_year = next((year for year in fiscal_years if year.get("is_current")), None)
+def _current_fiscal_year_code(department_name: str) -> str:
+    fiscal_years = _fiscal_year_options(department_name)
+    current_year = next(
+        (year for year in fiscal_years if year.get("is_current")),
+        None,
+    )
 
     if current_year:
         return current_year.get("code") or ""
@@ -51,8 +54,11 @@ def _current_fiscal_year_code() -> str:
     return fiscal_years[0].get("code") if fiscal_years else ""
 
 
-def _fiscal_year_options() -> list[dict]:
-    return list_fiscal_years(include_closed=True)
+def _fiscal_year_options(department_name: str) -> list[dict]:
+    return list_fiscal_years(
+        department_name=department_name,
+        include_closed=True,
+    )
 
 
 def _selected_group_by() -> str:
@@ -236,7 +242,7 @@ def ledger(department_name: str):
         active_tab="ledger",
         ledger_page=ledger_page,
         ledgers=ledger_page["rows"],
-        fiscal_years=_fiscal_year_options(),
+        fiscal_years=_fiscal_year_options(department_name),
         selected_fiscal_year_code=selected_fiscal_year_code,
         selected_archive_status=(request.args.get("archive_status") or "active").strip(),
         selected_ledger_kind=(request.args.get("ledger_kind") or "").strip(),
@@ -288,7 +294,9 @@ def purchase_orders(department_name: str):
     selected_fiscal_year_code = _selected_fiscal_year_code()
 
     if not selected_fiscal_year_code:
-        selected_fiscal_year_code = _current_fiscal_year_code()
+        selected_fiscal_year_code = _current_fiscal_year_code(
+            department_name
+        )
 
     selected_status = (request.args.get("status") or "").strip()
     vendor_q = (request.args.get("vendor_q") or "").strip()
@@ -311,7 +319,7 @@ def purchase_orders(department_name: str):
         po_page=po_page,
         purchase_order_summary=po_page["summary"],
         purchase_orders=po_page["rows"],
-        fiscal_years=_fiscal_year_options(),
+        fiscal_years=_fiscal_year_options(department_name),
         selected_fiscal_year_code=selected_fiscal_year_code,
         selected_status=selected_status,
         vendor_q=vendor_q,
@@ -354,7 +362,7 @@ def budget_accounts(department_name: str):
     selected_fiscal_year_code = _selected_fiscal_year_code()
 
     if not selected_fiscal_year_code:
-        current_fy = next((fy for fy in _fiscal_year_options() if fy.get("is_current")), None)
+        current_fy = next((fy for fy in _fiscal_year_options(department_name) if fy.get("is_current")),None,)
         selected_fiscal_year_code = current_fy["code"] if current_fy else ""
 
     q = (request.args.get("q") or "").strip()
@@ -378,7 +386,7 @@ def budget_accounts(department_name: str):
         account_page=account_page,
         account_summary=account_summary,
         budget_accounts=account_page["rows"],
-        fiscal_years=_fiscal_year_options(),
+        fiscal_years=_fiscal_year_options(department_name),
         selected_fiscal_year_code=selected_fiscal_year_code,
         q=q,
         can_manage=can_manage_department(user_id, department_name),

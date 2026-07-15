@@ -1003,3 +1003,181 @@ document.addEventListener("change", function (event) {
 
   endInput.value = endDate.toISOString().slice(0, 10);
 });
+
+document.addEventListener("DOMContentLoaded", function () {
+  initializeFinanceModals();
+});
+
+function initializeFinanceModals() {
+  const modals = Array.from(
+    document.querySelectorAll(".finance-modal")
+  );
+
+  if (!modals.length) {
+    return;
+  }
+
+  /*
+   * Move modals directly under <body>.
+   *
+   * This prevents transformed, positioned, or overflow-hidden
+   * application containers from changing position: fixed behavior.
+   */
+  modals.forEach(function (modal) {
+    document.body.appendChild(modal);
+    modal.setAttribute("aria-hidden", "true");
+  });
+
+  const triggers = document.querySelectorAll(
+    ".finance-modal-trigger"
+  );
+
+  let activeTrigger = null;
+  let activeModal = null;
+
+  function getFocusableElements(modal) {
+    return Array.from(
+      modal.querySelectorAll(
+        [
+          "button:not([disabled])",
+          "select:not([disabled])",
+          "input:not([disabled])",
+          "textarea:not([disabled])",
+          "a[href]",
+          "[tabindex]:not([tabindex='-1'])"
+        ].join(",")
+      )
+    ).filter(function (element) {
+      return element.offsetParent !== null;
+    });
+  }
+
+  function openModal(modal, trigger) {
+    if (!modal) {
+      return;
+    }
+
+    if (activeModal && activeModal !== modal) {
+      closeModal(activeModal, false);
+    }
+
+    activeTrigger = trigger || null;
+    activeModal = modal;
+
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+
+    document.body.classList.add(
+      "finance-modal-open"
+    );
+
+    const focusableElements =
+      getFocusableElements(modal);
+
+    if (focusableElements.length) {
+      window.requestAnimationFrame(function () {
+        focusableElements[0].focus();
+      });
+    }
+  }
+
+  function closeModal(modal, restoreFocus = true) {
+    if (!modal) {
+      return;
+    }
+
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+
+    document.body.classList.remove(
+      "finance-modal-open"
+    );
+
+    activeModal = null;
+
+    if (restoreFocus && activeTrigger) {
+      activeTrigger.focus();
+    }
+
+    activeTrigger = null;
+  }
+
+  triggers.forEach(function (trigger) {
+    trigger.addEventListener("click", function () {
+      const modalId = trigger.dataset.modalTarget;
+
+      if (!modalId) {
+        return;
+      }
+
+      const modal = document.getElementById(
+        modalId
+      );
+
+      openModal(modal, trigger);
+    });
+  });
+
+  document.addEventListener("click", function (event) {
+    const closeControl = event.target.closest(
+      "[data-modal-close]"
+    );
+
+    if (!closeControl) {
+      return;
+    }
+
+    const modal = closeControl.closest(
+      ".finance-modal"
+    );
+
+    closeModal(modal);
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (!activeModal) {
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeModal(activeModal);
+      return;
+    }
+
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    const focusableElements =
+      getFocusableElements(activeModal);
+
+    if (!focusableElements.length) {
+      event.preventDefault();
+      return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement =
+      focusableElements[
+        focusableElements.length - 1
+      ];
+
+    if (
+      event.shiftKey &&
+      document.activeElement === firstElement
+    ) {
+      event.preventDefault();
+      lastElement.focus();
+      return;
+    }
+
+    if (
+      !event.shiftKey &&
+      document.activeElement === lastElement
+    ) {
+      event.preventDefault();
+      firstElement.focus();
+    }
+  });
+}

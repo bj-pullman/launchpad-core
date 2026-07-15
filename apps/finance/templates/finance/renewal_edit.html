@@ -1,0 +1,243 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+
+  <div class="finance-back-row">
+    <a
+      href="{{ url_for(
+        'finance.renewal_detail',
+        renewal_id=renewal.id
+      ) }}"
+      class="finance-back-link"
+    >
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+
+      <span>{{ renewal.renewal_name }}</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>Edit Renewal</h1>
+      <p class="page-subtitle">
+        Update permanent information that continues across fiscal years.
+      </p>
+    </div>
+  </div>
+
+  <form method="post" class="finance-form">
+    <div class="content-card">
+      <div class="finance-form-grid">
+        <div class="finance-field finance-field-span-2">
+          <label for="renewal_name">Renewal Name</label>
+          <input
+            id="renewal_name"
+            name="renewal_name"
+            type="text"
+            required
+            value="{{ request.form.get(
+              'renewal_name',
+              renewal.renewal_name
+            ) }}"
+          >
+        </div>
+
+        <div class="finance-field">
+          <label for="primary_vendor_id">
+            Primary Vendor
+          </label>
+
+          <select
+            id="primary_vendor_id"
+            name="primary_vendor_id"
+          >
+            <option value="">No vendor selected</option>
+
+            {% set selected_vendor =
+              request.form.get(
+                'primary_vendor_id',
+                renewal.primary_vendor_id
+              )|int
+            %}
+
+            {% for vendor in vendors %}
+              <option
+                value="{{ vendor.id }}"
+                {% if selected_vendor == vendor.id %}
+                  selected
+                {% endif %}
+              >
+                {{ vendor.friendly_name or vendor.vendor_name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="finance-field">
+          <label for="category_id">Category</label>
+
+          <select id="category_id" name="category_id">
+            <option value="">No category selected</option>
+
+            {% set selected_category =
+              request.form.get(
+                'category_id',
+                renewal.category_id
+              )|int
+            %}
+
+            {% for category in categories %}
+              <option
+                value="{{ category.id }}"
+                {% if selected_category == category.id %}
+                  selected
+                {% endif %}
+              >
+                {{ category.category_name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="finance-field">
+          <label for="status">Status</label>
+
+          <select id="status" name="status">
+            {% set selected_status =
+              request.form.get(
+                'status',
+                renewal.status
+              )
+            %}
+
+            {% for status in renewal_statuses %}
+              <option
+                value="{{ status }}"
+                {% if selected_status == status %}
+                  selected
+                {% endif %}
+              >
+                {{ status|replace("_", " ")|title }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="finance-field">
+          <label for="default_notification_days">
+            Notification Days Before
+          </label>
+
+          <input
+            id="default_notification_days"
+            name="default_notification_days"
+            type="number"
+            min="0"
+            value="{{ request.form.get(
+              'default_notification_days',
+              renewal.default_notification_days
+            ) }}"
+          >
+        </div>
+
+        <div class="finance-field finance-field-span-3">
+          <label for="purpose">Purpose</label>
+
+          <textarea
+            id="purpose"
+            name="purpose"
+            rows="3"
+          >{{ request.form.get(
+            'purpose',
+            renewal.purpose or ''
+          ) }}</textarea>
+        </div>
+
+        <div class="finance-field finance-field-span-3">
+          <label for="notification_recipients">
+            Notification Recipients
+          </label>
+
+          <input
+            id="notification_recipients"
+            name="notification_recipients"
+            type="text"
+            value="{{ request.form.get(
+              'notification_recipients',
+              renewal.notification_recipients or ''
+            ) }}"
+          >
+        </div>
+
+        <div class="finance-field finance-field-span-3">
+          <label class="finance-checkbox-label">
+            <input
+              type="checkbox"
+              name="expected_renewal_hint"
+              value="1"
+              {% if request.form.get(
+                'expected_renewal_hint',
+                '1' if renewal.expected_renewal_hint else ''
+              ) == '1' %}
+                checked
+              {% endif %}
+            >
+
+            <span>This is expected to renew.</span>
+          </label>
+        </div>
+
+        <div class="finance-field finance-field-span-3">
+          <label for="notes">Notes</label>
+
+          <textarea
+            id="notes"
+            name="notes"
+            rows="4"
+          >{{ request.form.get(
+            'notes',
+            renewal.notes or ''
+          ) }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="finance-form-actions">
+      <a
+        class="btn btn-ghost"
+        href="{{ url_for(
+          'finance.renewal_detail',
+          renewal_id=renewal.id
+        ) }}"
+      >
+        Cancel
+      </a>
+
+      <button class="btn btn-primary" type="submit">
+        Save Renewal
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

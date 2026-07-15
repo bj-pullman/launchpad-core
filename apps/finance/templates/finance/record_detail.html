@@ -1,105 +1,170 @@
 {% extends "launchpad_ui/base.html" %}
 
 {% block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
->
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="page-shell finance-shell">
-    <div class="finance-back-row">
-        <a href="{{ url_for('finance.records', department_name=department_name) }}" class="finance-back-link">
-            <span class="finance-back-link-icon" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M15 18l-6-6 6-6"/>
-            </svg>
-            </span>
-            <span>Records</span>
-        </a>
+  <div class="finance-back-row">
+    <a href="{{ url_for('finance.records', department_name=department_name) }}" class="finance-back-link">
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      <span>Records</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ record.title }}</h1>
+      <p class="page-subtitle">{{ department_name }} record detail.</p>
     </div>
+    <div class="page-header-actions">
+      {% if can_manage %}
+      {% if record.status == "archived" %}
+      <form method="post" action="{{ url_for('finance.record_restore_archived', record_id=record.id) }}"
+        class="finance-inline-form" data-confirm="Restore this archived record?" data-confirm-action="confirm">
+        <button type="submit" class="btn btn-secondary">Restore</button>
+      </form>
+      {% elif record.status == "deleted" %}
+      <form method="post" action="{{ url_for('finance.record_restore_deleted', record_id=record.id) }}"
+        class="finance-inline-form" data-confirm="Restore this deleted record?" data-confirm-action="confirm">
+        <button type="submit" class="btn btn-secondary">Restore</button>
+      </form>
+      {% else %}
+      <form method="post" action="{{ url_for('finance.record_archive', record_id=record.id) }}"
+        class="finance-inline-form" data-confirm="Archive this record?" data-confirm-action="confirm">
+        <button type="submit" class="btn btn-secondary">Archive</button>
+      </form>
+      {% endif %}
 
-    <div class="page-header">
-        <div>
-            <h1>{{ record.title }}</h1>
-            <p class="page-subtitle">{{ department_name }} record detail.</p>
-        </div>
-        <div class="page-header-actions">
-            {% if can_manage %}
-                {% if record.status == "archived" %}
-                <form
-                    method="post"
-                    action="{{ url_for('finance.record_restore_archived', record_id=record.id) }}"
-                    class="finance-inline-form"
-                    data-confirm="Restore this archived record?"
-                    data-confirm-action="confirm"
-                >
-                    <button type="submit" class="btn btn-secondary">Restore</button>
-                </form>
-                {% elif record.status == "deleted" %}
-                <form
-                    method="post"
-                    action="{{ url_for('finance.record_restore_deleted', record_id=record.id) }}"
-                    class="finance-inline-form"
-                    data-confirm="Restore this deleted record?"
-                    data-confirm-action="confirm"
-                >
-                    <button type="submit" class="btn btn-secondary">Restore</button>
-                </form>
-                {% else %}
-                <form
-                    method="post"
-                    action="{{ url_for('finance.record_archive', record_id=record.id) }}"
-                    class="finance-inline-form"
-                    data-confirm="Archive this record?"
-                    data-confirm-action="confirm"
-                >
-                    <button type="submit" class="btn btn-secondary">Archive</button>
-                </form>
-                {% endif %}
+      {% if record.status != "deleted" %}
+      <a class="btn btn-primary" href="{{ url_for('finance.record_edit', record_id=record.id) }}">Edit Record</a>
+      {% endif %}
 
-                {% if record.status != "deleted" %}
-                <a class="btn btn-primary" href="{{ url_for('finance.record_edit', record_id=record.id) }}">Edit Record</a>
-                {% endif %}
-
-                {% if record.status != "deleted" %}
-                <form
-                    method="post"
-                    action="{{ url_for('finance.record_delete', record_id=record.id) }}"
-                    class="finance-inline-form"
-                    data-confirm="Delete this record? It will move to Deleted and be retained for 30 days."
-                    data-confirm-action="delete"
-                >
-                    <button type="submit" class="btn btn-danger">Delete</button>
-                </form>
-                {% endif %}
-            {% endif %}
-        </div>
+      {% if record.status != "deleted" %}
+      <form method="post" action="{{ url_for('finance.record_delete', record_id=record.id) }}"
+        class="finance-inline-form"
+        data-confirm="Delete this record? It will move to Deleted and be retained for 30 days."
+        data-confirm-action="delete">
+        <button type="submit" class="btn btn-danger">Delete</button>
+      </form>
+      {% endif %}
+      {% endif %}
     </div>
+  </div>
 
   <div class="content-card">
     <div class="table-wrap">
       <table class="data-table">
         <tbody>
-          <tr><th>Type</th><td>{{ record.record_type|title }}</td></tr>
-          <tr><th>Vendor</th><td>{{ record.friendly_name or record.vendor_name or "—" }}</td></tr>
-          <tr><th>Category</th><td>{{ record.category_name or "—" }}</td></tr>
-          <tr><th>PO Number</th><td>{{ record.po_number or "—" }}</td></tr>
-          <tr><th>Purchase Date</th><td>{{ record.purchase_date|localdate if record.purchase_date else "—" }}</td></tr>
-          <tr><th>Term Length</th><td>{% if record.term_length and record.term_unit %}{{ record.term_length }} {{ record.term_unit|title }}{% else %}—{% endif %}</td></tr>
-          <tr><th>Start Date Source</th><td>{% if record.use_purchase_date_as_start %}Purchase Date{% else %}Service Start Date{% endif %}</td></tr>
-          <tr><th>Expiration Date</th><td>{{ record.expiration_date|localdate if record.expiration_date else "—" }}</td></tr>
-          <tr><th>Renewal Date</th><td>{{ record.renewal_date|localdate if record.renewal_date else "—" }}</td></tr>
-          <tr><th>Notify Days Before</th><td>{{ record.notify_days_before }}</td></tr>
-          <tr><th>Notification Recipients</th><td>{{ record.notification_recipients or "—" }}</td></tr>
-          <tr><th>Account Code</th><td>{{ record.account_code or "—" }}</td></tr>
-          <tr><th>Cost</th><td>{{ record.cost if record.cost is not none else "—" }}</td></tr>
-          <tr><th>Status</th><td>{{ record.status|replace("_", " ")|title }}</td></tr>
-          <tr><th>Notes</th><td>{{ record.notes or "—" }}</td></tr>
+          <tr>
+            <th>Type</th>
+            <td>{{ record.record_type|title }}</td>
+          </tr>
+          <tr>
+            <th>Vendor</th>
+            <td>{{ record.friendly_name or record.vendor_name or "—" }}</td>
+          </tr>
+          <tr>
+            <th>Category</th>
+            <td>{{ record.category_name or "—" }}</td>
+          </tr>
+          <tr>
+            <th>PO Number</th>
+            <td>{{ record.po_number or "—" }}</td>
+          </tr>
+          <tr>
+            <th>Purchase Date</th>
+            <td>{{ record.purchase_date|localdate if record.purchase_date else "—" }}</td>
+          </tr>
+          <tr>
+            <th>Term Length</th>
+            <td>{% if record.term_length and record.term_unit %}{{ record.term_length }} {{ record.term_unit|title }}{%
+              else %}—{% endif %}</td>
+          </tr>
+          <tr>
+            <th>Start Date Source</th>
+            <td>{% if record.use_purchase_date_as_start %}Purchase Date{% else %}Service Start Date{% endif %}</td>
+          </tr>
+          <tr>
+            <th>Expiration Date</th>
+            <td>{{ record.expiration_date|localdate if record.expiration_date else "—" }}</td>
+          </tr>
+          <tr>
+            <th>Renewal Date</th>
+            <td>{{ record.renewal_date|localdate if record.renewal_date else "—" }}</td>
+          </tr>
+          <tr>
+            <th>Notify Days Before</th>
+            <td>{{ record.notify_days_before }}</td>
+          </tr>
+          <tr>
+            <th>Notification Recipients</th>
+            <td>{{ record.notification_recipients or "—" }}</td>
+          </tr>
+          <tr>
+            <th>Account Code</th>
+            <td>{{ record.account_code or "—" }}</td>
+          </tr>
+          <tr>
+            <th>Cost</th>
+            <td>{{ record.cost | currency if record.cost is not none else "—" }}</td>
+          </tr>
+          <tr>
+            <th>Status</th>
+            <td>{{ record.status|replace("_", " ")|title }}</td>
+          </tr>
+          <tr>
+            <th>Notes</th>
+            <td>{{ record.notes or "—" }}</td>
+          </tr>
         </tbody>
       </table>
     </div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">Renewal</h3>
+        <p class="finance-section-subtitle">
+          Renewal association for this financial Record.
+        </p>
+      </div>
+    </div>
+
+    {% if renewal_link %}
+    <div class="finance-renewal-link-summary">
+      <div>
+        <strong>
+          <a class="table-link" href="{{ url_for('finance.renewal_detail', renewal_id=renewal_link.renewal_id) }}">
+            {{ renewal_link.renewal_name }}
+          </a>
+        </strong>
+
+        <div class="finance-meta">
+          {{ renewal_link.fiscal_year_label }}
+          ·
+          {{ renewal_link.relationship_type|replace("_", " ")|title }}
+          ·
+          {{ renewal_link.link_source|replace("_", " ")|title }}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="finance-empty">
+      <h3>Not linked to a Renewal</h3>
+      <p>
+        This Record can be linked from a Renewal's
+        Find Financial Activity page.
+      </p>
+    </div>
+    {% endif %}
   </div>
 
   <div class="content-card">
@@ -111,144 +176,131 @@
     </div>
 
     {% if can_manage %}
-      <form
-        method="post"
-        action="{{ url_for('finance.upload_attachment', record_id=record.id) }}"
-        enctype="multipart/form-data"
-        class="finance-form"
-        novalidate
-      >
-        <div class="finance-form-grid">
-          <div class="finance-field">
-            <label for="document_type">Document Type</label>
-              <select id="document_type" name="document_type" required>
-                <option value="" selected disabled>Choose type</option>
-                <option value="contract">Contract</option>
-                <option value="invoice">Invoice</option>
-                <option value="quote">Quote</option>
-                <option value="renewal_notice">Renewal Notice</option>
-                <option value="purchase_order">Purchase Order</option>
-                <option value="other">Other</option>
-              </select>
-          </div>
-
-          <div class="finance-field finance-field-span-3">
-            <label for="attachment_files">Attachments</label>
-            <div class="finance-file-upload">
-              <label class="finance-file-label">
-                <span class="finance-file-button">Choose Files</span>
-                <span class="finance-file-name" id="finance-file-name">No files selected</span>
-                <input
-                  type="file"
-                  id="attachment_files"
-                  name="attachment_files"
-                  accept=".pdf,.csv,.xml,.txt,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp"
-                  multiple
-                >
-              </label>
-            </div>
-            <div class="finance-mapping-help">
-              Supported: PDF, CSV, XML, TXT, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG, WEBP
-            </div>
-          </div>
+    <form method="post" action="{{ url_for('finance.upload_attachment', record_id=record.id) }}"
+      enctype="multipart/form-data" class="finance-form" novalidate>
+      <div class="finance-form-grid">
+        <div class="finance-field">
+          <label for="document_type">Document Type</label>
+          <select id="document_type" name="document_type" required>
+            <option value="" selected disabled>Choose type</option>
+            <option value="contract">Contract</option>
+            <option value="invoice">Invoice</option>
+            <option value="quote">Quote</option>
+            <option value="renewal_notice">Renewal Notice</option>
+            <option value="purchase_order">Purchase Order</option>
+            <option value="other">Other</option>
+          </select>
         </div>
 
-        <div class="finance-form-actions">
-          <button type="submit" class="btn btn-primary finance-action-button">Upload PDF</button>
+        <div class="finance-field finance-field-span-3">
+          <label for="attachment_files">Attachments</label>
+          <div class="finance-file-upload">
+            <label class="finance-file-label">
+              <span class="finance-file-button">Choose Files</span>
+              <span class="finance-file-name" id="finance-file-name">No files selected</span>
+              <input type="file" id="attachment_files" name="attachment_files"
+                accept=".pdf,.csv,.xml,.txt,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" multiple>
+            </label>
+          </div>
+          <div class="finance-mapping-help">
+            Supported: PDF, CSV, XML, TXT, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG, WEBP
+          </div>
         </div>
-      </form>
+      </div>
+
+      <div class="finance-form-actions">
+        <button type="submit" class="btn btn-primary finance-action-button">Upload PDF</button>
+      </div>
+    </form>
     {% endif %}
 
     {% if attachments %}
-      <div class="table-wrap" style="margin-top: 16px;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Type</th>
-              <th>Uploaded</th>
-              <th>File Type</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for attachment in attachments %}
-              <tr>
-                <td>{{ attachment.file_name }}</td>
-                <td>{{ attachment.document_type|replace("_", " ")|title }}</td>
-                <td>{{ attachment.uploaded_at|localtime if attachment.uploaded_at else "—" }}</td>
-                <td>{{ attachment.file_name.rsplit('.', 1)[-1]|upper if '.' in attachment.file_name else 'FILE' }}</td>
-                <td class="actions-col">
-                    <a class="table-link" href="{{ url_for('finance.view_attachment', attachment_id=attachment.id) }}" target="_blank" rel="noopener noreferrer">View</a>
-                    <span class="finance-action-separator">|</span>
-                    <a class="table-link" href="{{ url_for('finance.download_attachment', attachment_id=attachment.id) }}">Download</a>
+    <div class="table-wrap" style="margin-top: 16px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Type</th>
+            <th>Uploaded</th>
+            <th>File Type</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for attachment in attachments %}
+          <tr>
+            <td>{{ attachment.file_name }}</td>
+            <td>{{ attachment.document_type|replace("_", " ")|title }}</td>
+            <td>{{ attachment.uploaded_at|localtime if attachment.uploaded_at else "—" }}</td>
+            <td>{{ attachment.file_name.rsplit('.', 1)[-1]|upper if '.' in attachment.file_name else 'FILE' }}</td>
+            <td class="actions-col">
+              <a class="table-link" href="{{ url_for('finance.view_attachment', attachment_id=attachment.id) }}"
+                target="_blank" rel="noopener noreferrer">View</a>
+              <span class="finance-action-separator">|</span>
+              <a class="table-link"
+                href="{{ url_for('finance.download_attachment', attachment_id=attachment.id) }}">Download</a>
 
-                    {% if can_manage %}
-                        <span class="finance-action-separator">|</span>
-                            <form
-                                method="post"
-                                action="{{ url_for('finance.delete_attachment_route', attachment_id=attachment.id) }}"
-                                class="finance-inline-form"
-                                data-confirm="Delete this attachment?"
-                                data-confirm-action="delete"
-                                >
-                                <button type="submit" class="table-link finance-inline-button finance-inline-danger">
-                                    Delete
-                                </button>
-                            </form>
-                    {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+              {% if can_manage %}
+              <span class="finance-action-separator">|</span>
+              <form method="post" action="{{ url_for('finance.delete_attachment_route', attachment_id=attachment.id) }}"
+                class="finance-inline-form" data-confirm="Delete this attachment?" data-confirm-action="delete">
+                <button type="submit" class="table-link finance-inline-button finance-inline-danger">
+                  Delete
+                </button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
-      <div class="finance-empty">
-        <h3>No attachments yet</h3>
-        <p>No PDF files have been uploaded for this record.</p>
-      </div>
+    <div class="finance-empty">
+      <h3>No attachments yet</h3>
+      <p>No PDF files have been uploaded for this record.</p>
+    </div>
     {% endif %}
   </div>
 
-    <div class="content-card">
-        <div class="finance-section-header">
-            <div>
-                <h3 class="finance-section-title">History</h3>
-                <p class="finance-section-subtitle">Changes and activity for this record.</p>
-            </div>
-        </div>
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">History</h3>
+        <p class="finance-section-subtitle">Changes and activity for this record.</p>
+      </div>
+    </div>
 
     {% if history %}
-        <div class="table-wrap">
-            <table class="data-table finance-history-table">
-                <thead>
-                <tr>
-                    <th>Event</th>
-                    <th>Summary</th>
-                    <th>Changed By</th>
-                    <th>Changed At</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for item in history %}
-                    <tr>
-                    <td class="finance-history-event">{{ item.event_type|replace("_", " ")|title }}</td>
-                    <td class="finance-history-summary">{{ item.summary or "—" }}</td>
-                    <td class="finance-history-meta">{{ item.changed_by_user_id or "—" }}</td>
-                    <td class="finance-history-meta">{{ item.changed_at|localtime if item.changed_at else "—" }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% else %}
-        <div class="finance-empty">
-            <h3>No history yet</h3>
-            <p>No activity has been recorded for this item yet.</p>
-        </div>
-    {% endif %}
+    <div class="table-wrap">
+      <table class="data-table finance-history-table">
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Summary</th>
+            <th>Changed By</th>
+            <th>Changed At</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in history %}
+          <tr>
+            <td class="finance-history-event">{{ item.event_type|replace("_", " ")|title }}</td>
+            <td class="finance-history-summary">{{ item.summary or "—" }}</td>
+            <td class="finance-history-meta">{{ item.changed_by_user_id or "—" }}</td>
+            <td class="finance-history-meta">{{ item.changed_at|localtime if item.changed_at else "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+    {% else %}
+    <div class="finance-empty">
+      <h3>No history yet</h3>
+      <p>No activity has been recorded for this item yet.</p>
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}
 

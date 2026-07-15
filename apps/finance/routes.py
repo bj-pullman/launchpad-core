@@ -108,6 +108,35 @@ from .fiscal_year_service import (
     update_fiscal_year,
 )
 
+from .renewal_service import (
+    VALID_CYCLE_STATUSES,
+    VALID_RENEWAL_STATUSES,
+    VALID_RELATIONSHIP_TYPES,
+    create_renewal,
+    create_renewal_cycle,
+    get_default_fiscal_year,
+    get_renewal_by_id,
+    list_fiscal_year_options,
+    list_renewal_history,
+    list_renewals_for_department,
+    find_renewal_candidates,
+    get_record_renewal_link,
+    get_renewal_cycle_by_id,
+    link_record_to_renewal_cycle,
+    link_transaction_to_renewal_cycle,
+    reject_renewal_candidate,
+    unlink_record_from_renewal_cycle,
+    unlink_transaction_from_renewal_cycle,
+    find_or_create_cycle_for_activity_date,
+    get_record_for_renewal_link,
+    get_transaction_for_renewal_link,
+    delete_empty_renewal_cycle,
+    update_record_renewal_link,
+    update_renewal,
+    update_renewal_cycle,
+    update_transaction_renewal_link,
+)
+
 @bp.route("/")
 @login_required
 def index():
@@ -247,31 +276,918 @@ def renewals(department_name: str):
         abort(403)
 
     q = (request.args.get("q") or "").strip()
-    vendor_q = (request.args.get("vendor_q") or "").strip()
-    category_id = request.args.get("category_id", type=int)
-    page = request.args.get("page", default=1, type=int)
+    status = (request.args.get("status") or "").strip()
 
-    record_page = list_renewal_records_for_department(
+    renewal_rows = list_renewals_for_department(
         department_name,
         q=q,
-        category_id=category_id,
-        vendor_q=vendor_q,
-        page=page,
-        per_page=100,
+        status=status,
     )
 
     return render_template(
         "finance/renewals.html",
         department_name=department_name,
         active_tab="renewals",
-        records=record_page["rows"],
-        record_page=record_page,
-        categories=list_categories(),
+        renewals=renewal_rows,
         selected_q=q,
-        selected_vendor_q=vendor_q,
-        selected_category_id=category_id,
+        selected_status=status,
+        renewal_statuses=sorted(VALID_RENEWAL_STATUSES),
         can_manage=can_manage_department(user_id, department_name),
         can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route("/<department_name>/renewals/new", methods=["GET", "POST"])
+@login_required
+def renewal_create(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    fiscal_years = list_fiscal_year_options()
+    default_fiscal_year = get_default_fiscal_year()
+
+    if request.method == "POST":
+        try:
+            fiscal_year_id = request.form.get("fiscal_year_id", type=int)
+
+            renewal_id, _cycle_id = create_renewal(
+                renewal_name=(request.form.get("renewal_name") or "").strip(),
+                department_name=department_name,
+                primary_vendor_id=request.form.get("primary_vendor_id", type=int),
+                category_id=request.form.get("category_id", type=int),
+                purpose=(request.form.get("purpose") or "").strip(),
+                status=(request.form.get("status") or "active").strip(),
+                expected_renewal_hint=(
+                    request.form.get("expected_renewal_hint") == "1"
+                ),
+                default_notification_days=(
+                    request.form.get("default_notification_days", type=int)
+                    or 30
+                ),
+                notification_recipients=(
+                    request.form.get("notification_recipients") or ""
+                ).strip(),
+                notes=(request.form.get("notes") or "").strip(),
+                fiscal_year_id=fiscal_year_id,
+                fiscal_year_label=(
+                    request.form.get("fiscal_year_label") or ""
+                ).strip(),
+                cycle_status=(
+                    request.form.get("cycle_status")
+                    or "awaiting_activity"
+                ).strip(),
+                renewal_date=(
+                    request.form.get("renewal_date") or ""
+                ).strip(),
+                service_start_date=(
+                    request.form.get("service_start_date") or ""
+                ).strip(),
+                service_end_date=(
+                    request.form.get("service_end_date") or ""
+                ).strip(),
+                expected_cost=(
+                    request.form.get("expected_cost") or ""
+                ).strip(),
+                created_by_user_id=user_id,
+            )
+
+            flash("Renewal created successfully.", "success")
+            return redirect(
+                url_for(
+                    "finance.renewal_detail",
+                    renewal_id=renewal_id,
+                )
+            )
+
+        except ValueError as exc:
+            flash(str(exc), "error")
+
+    return render_template(
+        "finance/renewal_form.html",
+        department_name=department_name,
+        active_tab="renewals",
+        vendors=list_vendors_all(),
+        categories=list_categories(),
+        fiscal_years=fiscal_years,
+        default_fiscal_year=default_fiscal_year,
+        renewal_statuses=sorted(VALID_RENEWAL_STATUSES),
+        cycle_statuses=sorted(VALID_CYCLE_STATUSES),
+        can_manage=True,
+        can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route("/renewals/<int:renewal_id>")
+@login_required
+def renewal_detail(renewal_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    if not renewal:
+        abort(404)
+
+    department_name = renewal["department_name"]
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    return render_template(
+        "finance/renewal_detail.html",
+        renewal=renewal,
+        history=list_renewal_history(renewal_id),
+        department_name=department_name,
+        active_tab="renewals",
+        can_manage=can_manage_department(user_id, department_name),
+        can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/new",
+    methods=["GET", "POST"],
+)
+@login_required
+def renewal_cycle_create(renewal_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    if not renewal:
+        abort(404)
+
+    department_name = renewal["department_name"]
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    if not can_manage_department(user_id, department_name):
+        abort(403)
+
+    fiscal_years = list_fiscal_year_options()
+    default_fiscal_year = get_default_fiscal_year()
+
+    if request.method == "POST":
+        try:
+            create_renewal_cycle(
+                renewal_id=renewal_id,
+                fiscal_year_id=request.form.get(
+                    "fiscal_year_id",
+                    type=int,
+                ),
+                fiscal_year_label=(
+                    request.form.get("fiscal_year_label") or ""
+                ).strip(),
+                cycle_status=(
+                    request.form.get("cycle_status")
+                    or "awaiting_activity"
+                ).strip(),
+                renewal_date=(
+                    request.form.get("renewal_date") or ""
+                ).strip(),
+                service_start_date=(
+                    request.form.get("service_start_date") or ""
+                ).strip(),
+                service_end_date=(
+                    request.form.get("service_end_date") or ""
+                ).strip(),
+                expected_cost=(
+                    request.form.get("expected_cost") or ""
+                ).strip(),
+                created_by_user_id=user_id,
+            )
+
+            flash("Renewal cycle created successfully.", "success")
+            return redirect(
+                url_for(
+                    "finance.renewal_detail",
+                    renewal_id=renewal_id,
+                )
+            )
+
+        except ValueError as exc:
+            flash(str(exc), "error")
+
+    return render_template(
+        "finance/renewal_cycle_form.html",
+        renewal=renewal,
+        department_name=department_name,
+        active_tab="renewals",
+        fiscal_years=fiscal_years,
+        default_fiscal_year=default_fiscal_year,
+        cycle_statuses=sorted(VALID_CYCLE_STATUSES),
+        can_manage=True,
+        can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/activity"
+)
+@login_required
+def renewal_cycle_activity(renewal_id: int, cycle_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    department_name = renewal["department_name"]
+
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
+    minimum_score = request.args.get(
+        "minimum_score",
+        default=35,
+        type=int,
+    )
+    minimum_score = max(0, min(minimum_score, 100))
+
+    candidates = find_renewal_candidates(
+        renewal_id=renewal_id,
+        renewal_cycle_id=cycle_id,
+        minimum_score=minimum_score,
+    )
+
+    return render_template(
+        "finance/renewal_activity.html",
+        renewal=renewal,
+        cycle=cycle,
+        candidates=candidates,
+        minimum_score=minimum_score,
+        relationship_types=sorted(
+            VALID_RELATIONSHIP_TYPES
+        ),
+        department_name=department_name,
+        active_tab="renewals",
+        can_manage=can_manage_department(
+            user_id,
+            department_name,
+        ),
+        can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/records/<int:record_id>/link",
+    methods=["POST"],
+)
+@login_required
+def renewal_link_record(
+    renewal_id: int,
+    cycle_id: int,
+    record_id: int,
+):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    if not can_manage_department(
+        user_id,
+        renewal["department_name"],
+    ):
+        abort(403)
+
+    try:
+        confidence_score = request.form.get(
+            "confidence_score",
+            type=float,
+        )
+
+        record = get_record_for_renewal_link(record_id)
+        if not record:
+            abort(404)
+
+        target_cycle = find_or_create_cycle_for_activity_date(
+            renewal_id=renewal_id,
+            selected_cycle_id=cycle_id,
+            purchase_date=record.get("purchase_date"),
+            changed_by_user_id=user_id,
+        )
+
+        link_record_to_renewal_cycle(
+            renewal_cycle_id=target_cycle["id"],
+            finance_record_id=record_id,
+            relationship_type=(
+                request.form.get("relationship_type")
+                or "primary_purchase"
+            ),
+            counts_toward_cost=(
+                request.form.get("counts_toward_cost") == "1"
+            ),
+            link_source=(
+                "confirmed_suggestion"
+                if confidence_score is not None
+                else "manual"
+            ),
+            confidence_score=confidence_score,
+            linked_by_user_id=user_id,
+        )
+
+        flash(
+            "Record linked to "
+            f"{renewal['renewal_name']} "
+            f"for {target_cycle['fiscal_year_label']}.",
+            "success",
+        )
+
+    except ValueError as exc:
+        flash(str(exc), "error")
+
+    return redirect(
+        url_for(
+            "finance.renewal_detail",
+            renewal_id=renewal_id,
+        )
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/transactions/<int:transaction_id>/link",
+    methods=["POST"],
+)
+@login_required
+def renewal_link_transaction(
+    renewal_id: int,
+    cycle_id: int,
+    transaction_id: int,
+):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    if not can_manage_department(
+        user_id,
+        renewal["department_name"],
+    ):
+        abort(403)
+
+    try:
+        confidence_score = request.form.get(
+            "confidence_score",
+            type=float,
+        )
+
+        transaction = get_transaction_for_renewal_link(
+            transaction_id
+        )
+        if not transaction:
+            abort(404)
+
+        target_cycle = find_or_create_cycle_for_activity_date(
+            renewal_id=renewal_id,
+            selected_cycle_id=cycle_id,
+            purchase_date=transaction.get("purchase_date"),
+            changed_by_user_id=user_id,
+        )
+
+        link_transaction_to_renewal_cycle(
+            renewal_cycle_id=target_cycle["id"],
+            finance_transaction_id=transaction_id,
+            relationship_type=(
+                request.form.get("relationship_type")
+                or "primary_purchase"
+            ),
+            counts_toward_cost=(
+                request.form.get("counts_toward_cost") == "1"
+            ),
+            link_source=(
+                "confirmed_suggestion"
+                if confidence_score is not None
+                else "manual"
+            ),
+            confidence_score=confidence_score,
+            linked_by_user_id=user_id,
+        )
+
+        flash(
+            "Ledger transaction linked to "
+            f"{renewal['renewal_name']} "
+            f"for {target_cycle['fiscal_year_label']}.",
+            "success",
+        )
+
+    except ValueError as exc:
+        flash(str(exc), "error")
+
+    return redirect(
+        url_for(
+            "finance.renewal_detail",
+            renewal_id=renewal_id,
+        )
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/candidates/<candidate_type>/<int:candidate_id>/reject",
+    methods=["POST"],
+)
+@login_required
+def renewal_reject_candidate(
+    renewal_id: int,
+    cycle_id: int,
+    candidate_type: str,
+    candidate_id: int,
+):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    if not can_manage_department(
+        user_id,
+        renewal["department_name"],
+    ):
+        abort(403)
+
+    try:
+        reject_renewal_candidate(
+            renewal_id=renewal_id,
+            renewal_cycle_id=cycle_id,
+            candidate_type=candidate_type,
+            candidate_id=candidate_id,
+            reason=(request.form.get("reason") or "").strip(),
+            decided_by_user_id=user_id,
+        )
+
+        flash(
+            "Candidate rejected. Launchpad will preserve "
+            "this decision.",
+            "success",
+        )
+
+    except ValueError as exc:
+        flash(str(exc), "error")
+
+    return redirect(
+        url_for(
+            "finance.renewal_cycle_activity",
+            renewal_id=renewal_id,
+            cycle_id=cycle_id,
+        )
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/records/<int:record_id>/unlink",
+    methods=["POST"],
+)
+@login_required
+def renewal_unlink_record(
+    renewal_id: int,
+    cycle_id: int,
+    record_id: int,
+):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    if not can_manage_department(
+        user_id,
+        renewal["department_name"],
+    ):
+        abort(403)
+
+    if unlink_record_from_renewal_cycle(
+        renewal_cycle_id=cycle_id,
+        finance_record_id=record_id,
+        changed_by_user_id=user_id,
+    ):
+        flash("Record unlinked.", "success")
+    else:
+        flash("Record link was not found.", "error")
+
+    return redirect(
+        url_for(
+            "finance.renewal_detail",
+            renewal_id=renewal_id,
+        )
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/edit",
+    methods=["GET", "POST"],
+)
+@login_required
+def renewal_edit(renewal_id: int):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    if not renewal:
+        abort(404)
+
+    department_name = renewal["department_name"]
+
+    if not can_manage_department(
+        user_id,
+        department_name,
+    ):
+        abort(403)
+
+    if request.method == "POST":
+        try:
+            update_renewal(
+                renewal_id=renewal_id,
+                renewal_name=(
+                    request.form.get("renewal_name") or ""
+                ).strip(),
+                primary_vendor_id=request.form.get(
+                    "primary_vendor_id",
+                    type=int,
+                ),
+                category_id=request.form.get(
+                    "category_id",
+                    type=int,
+                ),
+                purpose=(
+                    request.form.get("purpose") or ""
+                ).strip(),
+                status=(
+                    request.form.get("status") or "active"
+                ).strip(),
+                expected_renewal_hint=(
+                    request.form.get(
+                        "expected_renewal_hint"
+                    )
+                    == "1"
+                ),
+                default_notification_days=(
+                    request.form.get(
+                        "default_notification_days",
+                        type=int,
+                    )
+                    or 30
+                ),
+                notification_recipients=(
+                    request.form.get(
+                        "notification_recipients"
+                    )
+                    or ""
+                ).strip(),
+                notes=(
+                    request.form.get("notes") or ""
+                ).strip(),
+                changed_by_user_id=user_id,
+            )
+
+            flash(
+                "Renewal updated successfully.",
+                "success",
+            )
+
+            return redirect(
+                url_for(
+                    "finance.renewal_detail",
+                    renewal_id=renewal_id,
+                )
+            )
+
+        except ValueError as exc:
+            flash(str(exc), "error")
+
+    return render_template(
+        "finance/renewal_edit.html",
+        renewal=renewal,
+        department_name=department_name,
+        active_tab="renewals",
+        vendors=list_vendors_all(),
+        categories=list_categories(),
+        renewal_statuses=sorted(
+            VALID_RENEWAL_STATUSES
+        ),
+        can_manage=True,
+        can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/edit",
+    methods=["GET", "POST"],
+)
+@login_required
+def renewal_cycle_edit(
+    renewal_id: int,
+    cycle_id: int,
+):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    department_name = renewal["department_name"]
+
+    if not can_manage_department(
+        user_id,
+        department_name,
+    ):
+        abort(403)
+
+    if request.method == "POST":
+        try:
+            update_renewal_cycle(
+                cycle_id=cycle_id,
+                fiscal_year_id=request.form.get(
+                    "fiscal_year_id",
+                    type=int,
+                ),
+                fiscal_year_label=(
+                    request.form.get(
+                        "fiscal_year_label"
+                    )
+                    or ""
+                ).strip(),
+                cycle_status=(
+                    request.form.get("cycle_status")
+                    or "awaiting_activity"
+                ).strip(),
+                renewal_date=(
+                    request.form.get("renewal_date")
+                    or ""
+                ).strip(),
+                service_start_date=(
+                    request.form.get(
+                        "service_start_date"
+                    )
+                    or ""
+                ).strip(),
+                service_end_date=(
+                    request.form.get(
+                        "service_end_date"
+                    )
+                    or ""
+                ).strip(),
+                expected_cost=(
+                    request.form.get("expected_cost")
+                    or ""
+                ).strip(),
+                decision=(
+                    request.form.get("decision")
+                    or ""
+                ).strip(),
+                decision_notes=(
+                    request.form.get(
+                        "decision_notes"
+                    )
+                    or ""
+                ).strip(),
+                changed_by_user_id=user_id,
+            )
+
+            flash(
+                "Annual cycle updated successfully.",
+                "success",
+            )
+
+            return redirect(
+                url_for(
+                    "finance.renewal_detail",
+                    renewal_id=renewal_id,
+                )
+            )
+
+        except ValueError as exc:
+            flash(str(exc), "error")
+
+    return render_template(
+        "finance/renewal_cycle_edit.html",
+        renewal=renewal,
+        cycle=cycle,
+        department_name=department_name,
+        active_tab="renewals",
+        fiscal_years=list_fiscal_year_options(),
+        cycle_statuses=sorted(
+            VALID_CYCLE_STATUSES
+        ),
+        can_manage=True,
+        can_view_budget=has_budget_view(user_id),
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/delete",
+    methods=["POST"],
+)
+@login_required
+def renewal_cycle_delete(
+    renewal_id: int,
+    cycle_id: int,
+):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    if not can_manage_department(
+        user_id,
+        renewal["department_name"],
+    ):
+        abort(403)
+
+    try:
+        delete_empty_renewal_cycle(
+            cycle_id=cycle_id,
+            changed_by_user_id=user_id,
+        )
+        flash("Annual cycle deleted.", "success")
+
+    except ValueError as exc:
+        flash(str(exc), "error")
+
+    return redirect(
+        url_for(
+            "finance.renewal_detail",
+            renewal_id=renewal_id,
+        )
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/records/<int:record_id>/update-link",
+    methods=["POST"],
+)
+@login_required
+def renewal_update_record_link(
+    renewal_id: int,
+    cycle_id: int,
+    record_id: int,
+):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    if not can_manage_department(
+        user_id,
+        renewal["department_name"],
+    ):
+        abort(403)
+
+    try:
+        target_cycle_id = request.form.get(
+            "target_cycle_id",
+            type=int,
+        ) or cycle_id
+
+        update_record_renewal_link(
+            finance_record_id=record_id,
+            current_cycle_id=cycle_id,
+            target_cycle_id=target_cycle_id,
+            relationship_type=(
+                request.form.get("relationship_type")
+                or "primary_purchase"
+            ),
+            counts_toward_cost=(
+                request.form.get("counts_toward_cost")
+                == "1"
+            ),
+            changed_by_user_id=user_id,
+        )
+
+        flash(
+            "Record Renewal link updated.",
+            "success",
+        )
+
+    except ValueError as exc:
+        flash(str(exc), "error")
+
+    return redirect(
+        url_for(
+            "finance.renewal_detail",
+            renewal_id=renewal_id,
+        )
+    )
+
+@bp.route(
+    "/renewals/<int:renewal_id>/cycles/<int:cycle_id>/transactions/<int:transaction_id>/update-link",
+    methods=["POST"],
+)
+@login_required
+def renewal_update_transaction_link(
+    renewal_id: int,
+    cycle_id: int,
+    transaction_id: int,
+):
+    user_id = session.get("user_id")
+    if not user_id:
+        abort(403)
+
+    renewal = get_renewal_by_id(renewal_id)
+    cycle = get_renewal_cycle_by_id(cycle_id)
+
+    if not renewal or not cycle:
+        abort(404)
+
+    if cycle["renewal_id"] != renewal_id:
+        abort(404)
+
+    if not can_manage_department(
+        user_id,
+        renewal["department_name"],
+    ):
+        abort(403)
+
+    try:
+        target_cycle_id = request.form.get(
+            "target_cycle_id",
+            type=int,
+        ) or cycle_id
+
+        update_transaction_renewal_link(
+            finance_transaction_id=transaction_id,
+            current_cycle_id=cycle_id,
+            target_cycle_id=target_cycle_id,
+            relationship_type=(
+                request.form.get("relationship_type")
+                or "primary_purchase"
+            ),
+            counts_toward_cost=(
+                request.form.get("counts_toward_cost")
+                == "1"
+            ),
+            changed_by_user_id=user_id,
+        )
+
+        flash(
+            "Transaction Renewal link updated.",
+            "success",
+        )
+
+    except ValueError as exc:
+        flash(str(exc), "error")
+
+    return redirect(
+        url_for(
+            "finance.renewal_detail",
+            renewal_id=renewal_id,
+        )
     )
 
 @bp.route("/<department_name>/records/archived")
@@ -467,7 +1383,11 @@ def record_detail(record_id: int):
         ),
         attachments=list_attachments_for_record(record_id),
         history=list_history_for_record(record_id),
-        can_manage=can_manage_department(user_id, record["department_name"]),
+        renewal_link=get_record_renewal_link(record_id),
+        can_manage=can_manage_department(
+            user_id,
+            record["department_name"],
+        ),
     )
 
 

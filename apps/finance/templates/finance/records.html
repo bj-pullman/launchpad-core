@@ -152,7 +152,7 @@
                 <td>{{ record.friendly_name or record.vendor_name or "—" }}</td>
                 <td>{{ record.category_name or "—" }}</td>
                 <td>{{ record.renewal_date|localdate if record.renewal_date else "—" }}</td>
-                <td>{{ record.cost if record.cost is not none else "—" }}</td>
+                <td>{{ record.cost|currency if record.cost is not none else "—" }}</td>
               </tr>
             {% endfor %}
           </tbody>

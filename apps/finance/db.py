@@ -339,6 +339,121 @@ def init_finance_db():
                 UNIQUE(fiscal_year_id, checklist_type, item_key)
             );
 
+            CREATE TABLE IF NOT EXISTS finance_renewals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                renewal_name TEXT NOT NULL,
+                department_name TEXT NOT NULL,
+                primary_vendor_id INTEGER NULL,
+                category_id INTEGER NULL,
+                purpose TEXT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                expected_renewal_hint INTEGER NOT NULL DEFAULT 0,
+                default_notification_days INTEGER NOT NULL DEFAULT 30,
+                notification_recipients TEXT NULL,
+                notes TEXT NULL,
+                created_by_user_id INTEGER NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                discontinued_at TEXT NULL,
+                discontinued_reason TEXT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_renewal_cycles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                renewal_id INTEGER NOT NULL,
+                fiscal_year_id INTEGER NULL,
+                fiscal_year_label TEXT NOT NULL,
+                cycle_status TEXT NOT NULL DEFAULT 'awaiting_activity',
+                renewal_date TEXT NULL,
+                service_start_date TEXT NULL,
+                service_end_date TEXT NULL,
+                expected_cost TEXT NULL,
+                decision TEXT NULL,
+                decision_notes TEXT NULL,
+                finalized_at TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(renewal_id, fiscal_year_label)
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_renewal_record_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                renewal_cycle_id INTEGER NOT NULL,
+                finance_record_id INTEGER NOT NULL,
+                relationship_type TEXT NOT NULL DEFAULT 'primary_purchase',
+                counts_toward_cost INTEGER NOT NULL DEFAULT 1,
+                link_source TEXT NOT NULL DEFAULT 'manual',
+                confidence_score REAL NULL,
+                linked_by_user_id INTEGER NULL,
+                linked_at TEXT NOT NULL,
+                UNIQUE(renewal_cycle_id, finance_record_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_renewal_transaction_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                renewal_cycle_id INTEGER NOT NULL,
+                finance_transaction_id INTEGER NOT NULL,
+                relationship_type TEXT NOT NULL DEFAULT 'primary_purchase',
+                counts_toward_cost INTEGER NOT NULL DEFAULT 1,
+                link_source TEXT NOT NULL DEFAULT 'manual',
+                confidence_score REAL NULL,
+                linked_by_user_id INTEGER NULL,
+                linked_at TEXT NOT NULL,
+                UNIQUE(renewal_cycle_id, finance_transaction_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_renewal_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                renewal_id INTEGER NOT NULL,
+                renewal_cycle_id INTEGER NULL,
+                event_type TEXT NOT NULL,
+                summary TEXT NULL,
+                source_type TEXT NOT NULL DEFAULT 'manual',
+                confidence_score REAL NULL,
+                changed_by_user_id INTEGER NULL,
+                changed_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS finance_renewal_match_decisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                renewal_id INTEGER NOT NULL,
+                renewal_cycle_id INTEGER NULL,
+                candidate_type TEXT NOT NULL,
+                candidate_id INTEGER NOT NULL,
+                decision TEXT NOT NULL,
+                decision_scope TEXT NOT NULL DEFAULT 'candidate',
+                reason TEXT NULL,
+                decided_by_user_id INTEGER NULL,
+                decided_at TEXT NOT NULL,
+                UNIQUE(renewal_id, candidate_type, candidate_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_finance_renewal_match_decisions
+            ON finance_renewal_match_decisions(
+                renewal_id,
+                candidate_type,
+                candidate_id,
+                decision
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_finance_renewals_department
+            ON finance_renewals(department_name, status, renewal_name);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_renewals_vendor
+            ON finance_renewals(primary_vendor_id, status);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_renewal_cycles_renewal
+            ON finance_renewal_cycles(renewal_id, fiscal_year_label);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_renewal_record_links_cycle
+            ON finance_renewal_record_links(renewal_cycle_id, finance_record_id);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_renewal_transaction_links_cycle
+            ON finance_renewal_transaction_links(renewal_cycle_id, finance_transaction_id);
+
+            CREATE INDEX IF NOT EXISTS idx_finance_renewal_history_renewal
+            ON finance_renewal_history(renewal_id, changed_at DESC);
+
             CREATE INDEX IF NOT EXISTS idx_finance_fiscal_years_status
             ON finance_fiscal_years(status, is_current, is_next);
 

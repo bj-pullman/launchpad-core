@@ -1,0 +1,1125 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+
+  <div class="finance-back-row">
+    <a
+      href="{{ url_for(
+        'finance.renewals',
+        department_name=department_name
+      ) }}"
+      class="finance-back-link"
+    >
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+
+      <span>Renewals</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>{{ renewal.renewal_name }}</h1>
+
+      <p class="page-subtitle">
+        {{ renewal.vendor_friendly_name or renewal.vendor_name or "No vendor selected" }}
+        ·
+        {{ renewal.category_name or "Uncategorized" }}
+        ·
+        {{ renewal.status|replace("_", " ")|title }}
+      </p>
+    </div>
+
+    {% if can_manage %}
+      <div class="page-header-actions">
+        <a
+          class="btn btn-secondary"
+          href="{{ url_for(
+            'finance.renewal_edit',
+            renewal_id=renewal.id
+          ) }}"
+        >
+          Edit Renewal
+        </a>
+
+        <a
+          class="btn btn-primary"
+          href="{{ url_for(
+            'finance.renewal_cycle_create',
+            renewal_id=renewal.id
+          ) }}"
+        >
+          Add Annual Cycle
+        </a>
+      </div>
+    {% endif %}
+  </div>
+
+  {% set metrics = renewal.metrics %}
+  {% set current_cycle = metrics.current_cycle %}
+
+  <div class="finance-renewal-metrics">
+    <div class="content-card finance-renewal-metric">
+      <div class="finance-meta">Current Cost</div>
+
+      <div class="finance-renewal-metric-value">
+        ${{ metrics.current_cost }}
+      </div>
+
+      {% if current_cycle %}
+        <div class="finance-meta">
+          {{ current_cycle.fiscal_year_label }}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="content-card finance-renewal-metric">
+      <div class="finance-meta">Cost Change</div>
+
+      <div class="finance-renewal-metric-value">
+        {% if metrics.cost_change_percent is not none %}
+          {% if metrics.cost_change_percent > 0 %}+{% endif %}
+          {{ metrics.cost_change_percent }}%
+        {% else %}
+          —
+        {% endif %}
+      </div>
+
+      <div class="finance-meta">
+        Compared with the prior tracked cycle
+      </div>
+    </div>
+
+    <div class="content-card finance-renewal-metric">
+      <div class="finance-meta">Years Tracked</div>
+
+      <div class="finance-renewal-metric-value">
+        {{ metrics.years_tracked }}
+      </div>
+
+      <div class="finance-meta">
+        Cycles containing recorded or expected cost
+      </div>
+    </div>
+
+    <div class="content-card finance-renewal-metric">
+      <div class="finance-meta">Tracked Cost</div>
+
+      <div class="finance-renewal-metric-value">
+        ${{ metrics.tracked_cost }}
+      </div>
+
+      <div class="finance-meta">
+        Total across {{ metrics.years_tracked }} recorded cycle(s).
+        This may not represent the product's complete historical cost.
+      </div>
+    </div>
+  </div>
+
+  {% if renewal.department_breakdown %}
+    <div class="content-card">
+      <div class="finance-section-header">
+        <div>
+          <h3 class="finance-section-title">
+            Cost by Department
+          </h3>
+
+          <p class="finance-section-subtitle">
+            Departments are derived from linked financial activity.
+            They are not manually configured.
+          </p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Department</th>
+              <th>Tracked Cost</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for department in renewal.department_breakdown %}
+              <tr>
+                <td>{{ department.department_name }}</td>
+                <td>${{ department.total }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">
+          Renewal Information
+        </h3>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <tbody>
+          <tr>
+            <th>Vendor</th>
+            <td>
+              {{ renewal.vendor_friendly_name or renewal.vendor_name or "—" }}
+            </td>
+          </tr>
+
+          <tr>
+            <th>Category</th>
+            <td>{{ renewal.category_name or "—" }}</td>
+          </tr>
+
+          <tr>
+            <th>Purpose</th>
+            <td>{{ renewal.purpose or "—" }}</td>
+          </tr>
+
+          <tr>
+            <th>Expected Renewal Hint</th>
+            <td>
+              {{ "Yes" if renewal.expected_renewal_hint else "No" }}
+            </td>
+          </tr>
+
+          <tr>
+            <th>Notification Days</th>
+            <td>{{ renewal.default_notification_days }}</td>
+          </tr>
+
+          <tr>
+            <th>Notification Recipients</th>
+            <td>{{ renewal.notification_recipients or "—" }}</td>
+          </tr>
+
+          <tr>
+            <th>Notes</th>
+            <td>{{ renewal.notes or "—" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">
+          Annual History
+        </h3>
+
+        <p class="finance-section-subtitle">
+          Cost history is based on linked qualifying activity.
+          Expected cost is shown until activity is linked.
+        </p>
+      </div>
+    </div>
+
+    {% if renewal.cycles %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fiscal Year</th>
+              <th>Cost</th>
+              <th>Change</th>
+              <th>Status</th>
+              <th>Renewal Date</th>
+              <th>Service Period</th>
+              <th>Decision</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for cycle in renewal.cycles %}
+              <tr>
+                <td>
+                  {{ cycle.fiscal_year_label or "Unassigned" }}
+                </td>
+
+                <td>
+                  {% if cycle.display_cost %}
+                    ${{ cycle.display_cost }}
+                  {% else %}
+                    —
+                  {% endif %}
+
+                  {% if cycle.actual_cost_decimal == 0
+                        and cycle.expected_cost %}
+                    <div class="finance-meta">
+                      Expected
+                    </div>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if cycle.cost_change_percent is not none %}
+                    {% if cycle.cost_change_percent > 0 %}+{% endif %}
+                    {{ cycle.cost_change_percent }}%
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                <td>
+                  {{ cycle.cycle_status|replace("_", " ")|title }}
+                </td>
+
+                <td>
+                  {{ cycle.renewal_date|localdate if cycle.renewal_date else "—" }}
+                </td>
+
+                <td>
+                  {% if cycle.service_start_date or cycle.service_end_date %}
+                    {{ cycle.service_start_date|localdate if cycle.service_start_date else "—" }}
+                    –
+                    {{ cycle.service_end_date|localdate if cycle.service_end_date else "—" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                <td>
+                  {{ cycle.decision|replace("_", " ")|title if cycle.decision else "—" }}
+                </td>
+
+                <td>
+                  <div class="finance-table-actions">
+                    <a
+                      class="table-link"
+                      href="{{ url_for(
+                        'finance.renewal_cycle_activity',
+                        renewal_id=renewal.id,
+                        cycle_id=cycle.id
+                      ) }}"
+                    >
+                      Link Activity
+                    </a>
+
+                    {% if can_manage %}
+                      <span class="finance-action-separator">
+                        |
+                      </span>
+
+                      <a
+                        class="table-link"
+                        href="{{ url_for(
+                          'finance.renewal_cycle_edit',
+                          renewal_id=renewal.id,
+                          cycle_id=cycle.id
+                        ) }}"
+                      >
+                        Edit
+                      </a>
+
+                      {% if not cycle.activity.records
+                            and not cycle.activity.transactions %}
+                        <span class="finance-action-separator">
+                          |
+                        </span>
+
+                        <form
+                          method="post"
+                          action="{{ url_for(
+                            'finance.renewal_cycle_delete',
+                            renewal_id=renewal.id,
+                            cycle_id=cycle.id
+                          ) }}"
+                          class="finance-inline-form"
+                          data-confirm="Delete this empty annual cycle?"
+                          data-confirm-action="delete"
+                        >
+                          <button
+                            type="submit"
+                            class="table-link finance-inline-button finance-inline-danger"
+                          >
+                            Delete
+                          </button>
+                        </form>
+                      {% endif %}
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No annual cycles</h3>
+
+        <p>
+          This Renewal does not have an annual cycle yet.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">
+          Financial Activity
+        </h3>
+
+        <p class="finance-section-subtitle">
+          Linked Records and Ledger transactions remain separate
+          while contributing to Renewal statistics.
+        </p>
+      </div>
+    </div>
+
+    {% set activity_state = namespace(found=false) %}
+
+    {% for cycle in renewal.cycles %}
+      {% if cycle.activity.records or cycle.activity.transactions %}
+        {% set activity_state.found = true %}
+
+        <div class="finance-renewal-cycle-activity">
+          <div class="finance-section-header">
+            <div>
+              <h4>{{ cycle.fiscal_year_label }}</h4>
+
+              <p class="finance-meta">
+                {{ cycle.cycle_status|replace("_", " ")|title }}
+              </p>
+            </div>
+
+            {% if can_manage %}
+              <a
+                class="btn btn-secondary"
+                href="{{ url_for(
+                  'finance.renewal_cycle_activity',
+                  renewal_id=renewal.id,
+                  cycle_id=cycle.id
+                ) }}"
+              >
+                Find Financial Activity
+              </a>
+            {% endif %}
+          </div>
+
+          {% if cycle.activity.records %}
+            <h4>Records</h4>
+
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Record</th>
+                    <th>Department</th>
+                    <th>Vendor</th>
+                    <th>PO</th>
+                    <th>Date</th>
+                    <th>Cost</th>
+                    <th>Relationship</th>
+                    <th>Source</th>
+                    <th>Counts</th>
+
+                    {% if can_manage %}
+                      <th>Action</th>
+                    {% endif %}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for record in cycle.activity.records %}
+                    <tr>
+                      <td>
+                        <a
+                          class="table-link"
+                          href="{{ url_for(
+                            'finance.record_detail',
+                            record_id=record.id
+                          ) }}"
+                        >
+                          {{ record.title }}
+                        </a>
+                      </td>
+
+                      <td>
+                        {{ record.department_name or "—" }}
+                      </td>
+
+                      <td>
+                        {{ record.vendor_friendly_name or record.vendor_name or "—" }}
+                      </td>
+
+                      <td>
+                        {{ record.po_number or "—" }}
+                      </td>
+
+                      <td>
+                        {{ record.purchase_date|localdate if record.purchase_date else "—" }}
+                      </td>
+
+                      <td>
+                        ${{ record.cost or "0.00" }}
+                      </td>
+
+                      <td>
+                        {{ record.relationship_type|replace("_", " ")|title }}
+                      </td>
+
+                      <td>
+                        {{ record.link_source|replace("_", " ")|title }}
+
+                        {% if record.confidence_score is not none %}
+                          <div class="finance-meta">
+                            {{ record.confidence_score|round|int }}%
+                          </div>
+                        {% endif %}
+                      </td>
+
+                      <td>
+                        {{ "Yes" if record.counts_toward_cost else "No" }}
+                      </td>
+
+                      {% if can_manage %}
+                        <td class="finance-actions-cell">
+                          <button
+                            type="button"
+                            class="btn btn-secondary finance-modal-trigger"
+                            data-modal-target="record-link-modal-{{ cycle.id }}-{{ record.id }}"
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      {% endif %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% if can_manage %}
+              {% for record in cycle.activity.records %}
+                <div
+                  id="record-link-modal-{{ cycle.id }}-{{ record.id }}"
+                  class="finance-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="record-link-modal-title-{{ cycle.id }}-{{ record.id }}"
+                  hidden
+                >
+                  <div
+                    class="finance-modal-backdrop"
+                    data-modal-close
+                  ></div>
+
+                  <div class="finance-modal-dialog">
+                    <div class="finance-modal-header">
+                      <div>
+                        <h3
+                          id="record-link-modal-title-{{ cycle.id }}-{{ record.id }}"
+                          class="finance-modal-title"
+                        >
+                          Manage Record Link
+                        </h3>
+
+                        <p class="finance-modal-subtitle">
+                          {{ record.title }}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="finance-modal-close"
+                        data-modal-close
+                        aria-label="Close"
+                      >
+                        &times;
+                      </button>
+                    </div>
+
+                    <div class="finance-modal-body">
+                      <dl class="finance-modal-summary">
+                        <div>
+                          <dt>Vendor</dt>
+                          <dd>
+                            {{ record.vendor_friendly_name or record.vendor_name or "—" }}
+                          </dd>
+                        </div>
+
+                        <div>
+                          <dt>Department</dt>
+                          <dd>
+                            {{ record.department_name or "—" }}
+                          </dd>
+                        </div>
+
+                        <div>
+                          <dt>PO</dt>
+                          <dd>
+                            {{ record.po_number or "—" }}
+                          </dd>
+                        </div>
+
+                        <div>
+                          <dt>Cost</dt>
+                          <dd>
+                            ${{ record.cost or "0.00" }}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <form
+                        method="post"
+                        action="{{ url_for(
+                          'finance.renewal_update_record_link',
+                          renewal_id=renewal.id,
+                          cycle_id=cycle.id,
+                          record_id=record.id
+                        ) }}"
+                        class="finance-modal-form"
+                      >
+                        <div class="finance-field">
+                          <label
+                            for="record_cycle_{{ cycle.id }}_{{ record.id }}"
+                          >
+                            Annual Cycle
+                          </label>
+
+                          <select
+                            id="record_cycle_{{ cycle.id }}_{{ record.id }}"
+                            name="target_cycle_id"
+                          >
+                            {% for target_cycle in renewal.cycles %}
+                              <option
+                                value="{{ target_cycle.id }}"
+                                {% if target_cycle.id == cycle.id %}
+                                  selected
+                                {% endif %}
+                              >
+                                {{ target_cycle.fiscal_year_label }}
+                              </option>
+                            {% endfor %}
+                          </select>
+                        </div>
+
+                        <div class="finance-field">
+                          <label
+                            for="record_relationship_{{ cycle.id }}_{{ record.id }}"
+                          >
+                            Relationship
+                          </label>
+
+                          <select
+                            id="record_relationship_{{ cycle.id }}_{{ record.id }}"
+                            name="relationship_type"
+                          >
+                            {% for relationship in [
+                              'primary_purchase',
+                              'campus_purchase',
+                              'additional_licenses',
+                              'adjustment',
+                              'credit',
+                              'implementation',
+                              'training',
+                              'supporting_purchase',
+                              'other'
+                            ] %}
+                              <option
+                                value="{{ relationship }}"
+                                {% if record.relationship_type == relationship %}
+                                  selected
+                                {% endif %}
+                              >
+                                {{ relationship|replace("_", " ")|title }}
+                              </option>
+                            {% endfor %}
+                          </select>
+                        </div>
+
+                        <label class="finance-checkbox-label">
+                          <input
+                            type="checkbox"
+                            name="counts_toward_cost"
+                            value="1"
+                            {% if record.counts_toward_cost %}
+                              checked
+                            {% endif %}
+                          >
+
+                          <span>
+                            Count toward Renewal cost
+                          </span>
+                        </label>
+
+                        <div class="finance-modal-actions">
+                          <button
+                            type="button"
+                            class="btn btn-ghost"
+                            data-modal-close
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            type="submit"
+                            class="btn btn-primary"
+                          >
+                            Save Changes
+                          </button>
+                        </div>
+                      </form>
+
+                      <div class="finance-modal-danger-zone">
+                        <div>
+                          <strong>Unlink Record</strong>
+
+                          <p>
+                            The Record will remain in Finance but
+                            will no longer contribute to this Renewal.
+                          </p>
+                        </div>
+
+                        <form
+                          method="post"
+                          action="{{ url_for(
+                            'finance.renewal_unlink_record',
+                            renewal_id=renewal.id,
+                            cycle_id=cycle.id,
+                            record_id=record.id
+                          ) }}"
+                          data-confirm="Unlink this Record?"
+                          data-confirm-action="confirm"
+                        >
+                          <button
+                            type="submit"
+                            class="btn btn-danger"
+                          >
+                            Unlink Record
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            {% endif %}
+          {% endif %}
+
+          {% if cycle.activity.transactions %}
+            <h4>Ledger Transactions</h4>
+
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>Department</th>
+                    <th>Vendor</th>
+                    <th>PO</th>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Relationship</th>
+                    <th>Source</th>
+                    <th>Counts</th>
+
+                    {% if can_manage %}
+                      <th>Action</th>
+                    {% endif %}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for transaction in cycle.activity.transactions %}
+                    <tr>
+                      <td>
+                        {{ transaction.description or "Ledger transaction" }}
+                      </td>
+
+                      <td>
+                        {{ transaction.department_name or "—" }}
+                      </td>
+
+                      <td>
+                        {{ transaction.vendor_friendly_name or transaction.vendor_name or "—" }}
+                      </td>
+
+                      <td>
+                        {{ transaction.po_number or "—" }}
+                      </td>
+
+                      <td>
+                        {{ transaction.purchase_date|localdate if transaction.purchase_date else "—" }}
+                      </td>
+
+                      <td>
+                        ${{ transaction.amount }}
+                      </td>
+
+                      <td>
+                        {{ transaction.relationship_type|replace("_", " ")|title }}
+                      </td>
+
+                      <td>
+                        {{ transaction.link_source|replace("_", " ")|title }}
+
+                        {% if transaction.confidence_score is not none %}
+                          <div class="finance-meta">
+                            {{ transaction.confidence_score|round|int }}%
+                          </div>
+                        {% endif %}
+                      </td>
+
+                      <td>
+                        {{ "Yes" if transaction.counts_toward_cost else "No" }}
+                      </td>
+
+                      {% if can_manage %}
+                        <td class="finance-actions-cell">
+                          <button
+                            type="button"
+                            class="btn btn-secondary finance-modal-trigger"
+                            data-modal-target="transaction-link-modal-{{ cycle.id }}-{{ transaction.id }}"
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      {% endif %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% if can_manage %}
+              {% for transaction in cycle.activity.transactions %}
+                <div
+                  id="transaction-link-modal-{{ cycle.id }}-{{ transaction.id }}"
+                  class="finance-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="transaction-link-modal-title-{{ cycle.id }}-{{ transaction.id }}"
+                  hidden
+                >
+                  <div
+                    class="finance-modal-backdrop"
+                    data-modal-close
+                  ></div>
+
+                  <div class="finance-modal-dialog">
+                    <div class="finance-modal-header">
+                      <div>
+                        <h3
+                          id="transaction-link-modal-title-{{ cycle.id }}-{{ transaction.id }}"
+                          class="finance-modal-title"
+                        >
+                          Manage Transaction Link
+                        </h3>
+
+                        <p class="finance-modal-subtitle">
+                          {{ transaction.description or "Ledger transaction" }}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="finance-modal-close"
+                        data-modal-close
+                        aria-label="Close"
+                      >
+                        &times;
+                      </button>
+                    </div>
+
+                    <div class="finance-modal-body">
+                      <dl class="finance-modal-summary">
+                        <div>
+                          <dt>Vendor</dt>
+                          <dd>
+                            {{ transaction.vendor_friendly_name or transaction.vendor_name or "—" }}
+                          </dd>
+                        </div>
+
+                        <div>
+                          <dt>Department</dt>
+                          <dd>
+                            {{ transaction.department_name or "—" }}
+                          </dd>
+                        </div>
+
+                        <div>
+                          <dt>PO</dt>
+                          <dd>
+                            {{ transaction.po_number or "—" }}
+                          </dd>
+                        </div>
+
+                        <div>
+                          <dt>Amount</dt>
+                          <dd>
+                            ${{ transaction.amount }}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <form
+                        method="post"
+                        action="{{ url_for(
+                          'finance.renewal_update_transaction_link',
+                          renewal_id=renewal.id,
+                          cycle_id=cycle.id,
+                          transaction_id=transaction.id
+                        ) }}"
+                        class="finance-modal-form"
+                      >
+                        <div class="finance-field">
+                          <label
+                            for="transaction_cycle_{{ cycle.id }}_{{ transaction.id }}"
+                          >
+                            Annual Cycle
+                          </label>
+
+                          <select
+                            id="transaction_cycle_{{ cycle.id }}_{{ transaction.id }}"
+                            name="target_cycle_id"
+                          >
+                            {% for target_cycle in renewal.cycles %}
+                              <option
+                                value="{{ target_cycle.id }}"
+                                {% if target_cycle.id == cycle.id %}
+                                  selected
+                                {% endif %}
+                              >
+                                {{ target_cycle.fiscal_year_label }}
+                              </option>
+                            {% endfor %}
+                          </select>
+                        </div>
+
+                        <div class="finance-field">
+                          <label
+                            for="transaction_relationship_{{ cycle.id }}_{{ transaction.id }}"
+                          >
+                            Relationship
+                          </label>
+
+                          <select
+                            id="transaction_relationship_{{ cycle.id }}_{{ transaction.id }}"
+                            name="relationship_type"
+                          >
+                            {% for relationship in [
+                              'primary_purchase',
+                              'campus_purchase',
+                              'additional_licenses',
+                              'adjustment',
+                              'credit',
+                              'implementation',
+                              'training',
+                              'supporting_purchase',
+                              'other'
+                            ] %}
+                              <option
+                                value="{{ relationship }}"
+                                {% if transaction.relationship_type == relationship %}
+                                  selected
+                                {% endif %}
+                              >
+                                {{ relationship|replace("_", " ")|title }}
+                              </option>
+                            {% endfor %}
+                          </select>
+                        </div>
+
+                        <label class="finance-checkbox-label">
+                          <input
+                            type="checkbox"
+                            name="counts_toward_cost"
+                            value="1"
+                            {% if transaction.counts_toward_cost %}
+                              checked
+                            {% endif %}
+                          >
+
+                          <span>
+                            Count toward Renewal cost
+                          </span>
+                        </label>
+
+                        <div class="finance-modal-actions">
+                          <button
+                            type="button"
+                            class="btn btn-ghost"
+                            data-modal-close
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            type="submit"
+                            class="btn btn-primary"
+                          >
+                            Save Changes
+                          </button>
+                        </div>
+                      </form>
+
+                      <div class="finance-modal-danger-zone">
+                        <div>
+                          <strong>Unlink Transaction</strong>
+
+                          <p>
+                            The transaction will remain in the Ledger
+                            but will no longer contribute to this Renewal.
+                          </p>
+                        </div>
+
+                        <form
+                          method="post"
+                          action="{{ url_for(
+                            'finance.renewal_unlink_transaction',
+                            renewal_id=renewal.id,
+                            cycle_id=cycle.id,
+                            transaction_id=transaction.id
+                          ) }}"
+                          data-confirm="Unlink this Ledger transaction?"
+                          data-confirm-action="confirm"
+                        >
+                          <button
+                            type="submit"
+                            class="btn btn-danger"
+                          >
+                            Unlink Transaction
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            {% endif %}
+          {% endif %}
+        </div>
+      {% endif %}
+    {% endfor %}
+
+    {% if not activity_state.found %}
+      <div class="finance-empty">
+        <h3>No linked activity yet</h3>
+
+        <p>
+          Select an annual cycle and search for matching Records and
+          Ledger transactions.
+        </p>
+
+        {% if can_manage and renewal.cycles %}
+          <a
+            class="btn btn-primary"
+            href="{{ url_for(
+              'finance.renewal_cycle_activity',
+              renewal_id=renewal.id,
+              cycle_id=renewal.cycles[0].id
+            ) }}"
+          >
+            Find Financial Activity
+          </a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">
+          History
+        </h3>
+
+        <p class="finance-section-subtitle">
+          Human decisions and automated suggestions will remain
+          auditable here.
+        </p>
+      </div>
+    </div>
+
+    {% if history %}
+      <div class="table-wrap">
+        <table class="data-table finance-history-table">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Cycle</th>
+              <th>Summary</th>
+              <th>Source</th>
+              <th>Changed By</th>
+              <th>Changed At</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for item in history %}
+              <tr>
+                <td>
+                  {{ item.event_type|replace("_", " ")|title }}
+                </td>
+
+                <td>
+                  {{ item.fiscal_year_label or "—" }}
+                </td>
+
+                <td>
+                  {{ item.summary or "—" }}
+                </td>
+
+                <td>
+                  {{ item.source_type|replace("_", " ")|title }}
+                </td>
+
+                <td>
+                  {{ item.changed_by_user_id or "—" }}
+                </td>
+
+                <td>
+                  {{ item.changed_at|localtime if item.changed_at else "—" }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No history yet</h3>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script
+  src="{{ url_for('finance.static', filename='finance/finance.js') }}"
+></script>
+{% endblock %}

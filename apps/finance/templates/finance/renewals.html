@@ -1,107 +1,175 @@
-{% extends "finance/records.html" %}
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
 
 {% block content %}
 <div class="page-shell finance-shell">
-
-{% include "finance/_finance_tabs.html" %}
+  {% include "finance/_finance_tabs.html" %}
 
   <div class="page-header">
     <div>
       <h1>{{ department_name }} Renewals</h1>
-      <p class="page-subtitle">Active finance records marked as renewals.</p>
+      <p class="page-subtitle">
+        Historical recurring services, subscriptions, agreements, and
+        other ongoing financial commitments.
+      </p>
     </div>
+
+    {% if can_manage %}
+      <div class="page-header-actions">
+        <a
+          class="btn btn-primary"
+          href="{{ url_for('finance.renewal_create', department_name=department_name) }}"
+        >
+          Add Renewal
+        </a>
+      </div>
+    {% endif %}
   </div>
 
   <div class="content-card finance-filter-card">
     <form method="get" class="finance-record-filters">
       <div class="form-field">
-        <label>Search Anything</label>
-        <input type="text" name="q" value="{{ selected_q or '' }}" placeholder="Title, PO, account, notes...">
+        <label for="q">Search</label>
+        <input
+          id="q"
+          type="text"
+          name="q"
+          value="{{ selected_q or '' }}"
+          placeholder="Renewal, vendor, category, purpose..."
+        >
       </div>
 
       <div class="form-field">
-        <label>Category</label>
-        <select name="category_id">
-          <option value="">All Categories</option>
-          {% for category in categories %}
-            <option value="{{ category.id }}" {% if selected_category_id == category.id %}selected{% endif %}>
-              {{ category.category_name }}
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          <option value="">All Statuses</option>
+
+          {% for status in renewal_statuses %}
+            <option
+              value="{{ status }}"
+              {% if selected_status == status %}selected{% endif %}
+            >
+              {{ status|replace("_", " ")|title }}
             </option>
           {% endfor %}
         </select>
       </div>
 
-      <div class="form-field">
-        <label>Vendor Contains</label>
-        <input type="text" name="vendor_q" value="{{ selected_vendor_q or '' }}" placeholder="Vendor name...">
-      </div>
-
       <div class="finance-filter-actions">
-        <button class="btn btn-primary">Filter</button>
-        <a class="btn btn-ghost" href="{{ url_for('finance.renewals', department_name=department_name) }}">Reset</a>
+        <button class="btn btn-primary" type="submit">Filter</button>
+
+        <a
+          class="btn btn-ghost"
+          href="{{ url_for('finance.renewals', department_name=department_name) }}"
+        >
+          Reset
+        </a>
       </div>
     </form>
   </div>
 
   <div class="content-card">
-    {% if records %}
-      <p class="finance-pagination-meta finance-pagination-meta-top">
-        Showing page {{ record_page.page }} of {{ record_page.total_pages }}
-        · {{ record_page.total }} renewal(s)
-      </p>
-
+    {% if renewals %}
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Item / Service</th>
+              <th>Renewal</th>
               <th>Vendor</th>
-              <th>Category</th>
-              <th>Renewal Date</th>
-              <th>Expiration Date</th>
-              <th>Cost</th>
+              <th>Current Cost</th>
+              <th>Change</th>
+              <th>Years Tracked</th>
+              <th>Tracked Cost</th>
+              <th>Current Cycle</th>
+              <th>Status</th>
             </tr>
           </thead>
+
           <tbody>
-            {% for record in records %}
-              <tr class="finance-row-link" data-href="{{ url_for('finance.record_detail', record_id=record.id) }}">
+            {% for renewal in renewals %}
+              {% set metrics = renewal.metrics %}
+              {% set current_cycle = metrics.current_cycle %}
+
+              <tr
+                class="finance-row-link"
+                data-href="{{ url_for('finance.renewal_detail', renewal_id=renewal.id) }}"
+              >
                 <td>
-                  <div class="finance-record-title">{{ record.title }}</div>
-                  <div class="finance-meta">{{ record.record_type|title }}</div>
+                  <div class="finance-record-title">
+                    {{ renewal.renewal_name }}
+                  </div>
+
+                  <div class="finance-meta">
+                    {{ renewal.category_name or "Uncategorized" }}
+                  </div>
                 </td>
-                <td>{{ record.friendly_name or record.vendor_name or "—" }}</td>
-                <td>{{ record.category_name or "—" }}</td>
-                <td>{{ record.renewal_date|localdate if record.renewal_date else "—" }}</td>
-                <td>{{ record.expiration_date|localdate if record.expiration_date else "—" }}</td>
-                <td>{{ record.cost if record.cost is not none else "—" }}</td>
+
+                <td>
+                  {{ renewal.vendor_friendly_name or renewal.vendor_name or "—" }}
+                </td>
+
+                <td>
+                  ${{ metrics.current_cost }}
+                </td>
+
+                <td>
+                  {% if metrics.cost_change_percent is not none %}
+                    {% if metrics.cost_change_percent > 0 %}+{% endif %}
+                    {{ metrics.cost_change_percent }}%
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                <td>
+                  {{ metrics.years_tracked }}
+                </td>
+
+                <td>
+                  ${{ metrics.tracked_cost }}
+                </td>
+
+                <td>
+                  {% if current_cycle %}
+                    <div>{{ current_cycle.fiscal_year_label }}</div>
+                    <div class="finance-meta">
+                      {{ current_cycle.cycle_status|replace("_", " ")|title }}
+                    </div>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                <td>
+                  {{ renewal.status|replace("_", " ")|title }}
+                </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-
-      {% if record_page.total_pages > 1 %}
-        <div class="finance-pagination">
-          <div class="finance-pagination-meta">
-            Showing page {{ record_page.page }} of {{ record_page.total_pages }}
-            · {{ record_page.total }} renewal(s)
-          </div>
-
-          <div class="finance-pagination-actions">
-            {% if record_page.has_prev %}
-              <a class="btn" href="{{ url_for('finance.renewals', department_name=department_name, q=selected_q or '', category_id=selected_category_id or '', vendor_q=selected_vendor_q or '', page=record_page.prev_page) }}">Previous</a>
-            {% endif %}
-
-            {% if record_page.has_next %}
-              <a class="btn btn-primary" href="{{ url_for('finance.renewals', department_name=department_name, q=selected_q or '', category_id=selected_category_id or '', vendor_q=selected_vendor_q or '', page=record_page.next_page) }}">Next</a>
-            {% endif %}
-          </div>
-        </div>
-      {% endif %}
     {% else %}
       <div class="finance-empty">
-        <h3>No renewals found</h3>
-        <p>There are no active renewal records for this department yet.</p>
+        <h3>No Renewals found</h3>
+        <p>
+          Create a Renewal before its financial activity arrives, or
+          create one later from a detected recurring purchasing pattern.
+        </p>
+
+        {% if can_manage %}
+          <a
+            class="btn btn-primary"
+            href="{{ url_for('finance.renewal_create', department_name=department_name) }}"
+          >
+            Add Renewal
+          </a>
+        {% endif %}
       </div>
     {% endif %}
   </div>

@@ -1,0 +1,104 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+    {% include "finance/_finance_tabs.html" %}
+
+    <div class="finance-back-row">
+        <a href="{{ url_for('finance.renewal_detail', renewal_id=renewal.id) }}" class="finance-back-link">
+            <span class="finance-back-link-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 18l-6-6 6-6" />
+                </svg>
+            </span>
+
+            <span>{{ renewal.renewal_name }}</span>
+        </a>
+    </div>
+
+    <div class="page-header">
+        <div>
+            <h1>Add Annual Cycle</h1>
+            <p class="page-subtitle">{{ renewal.renewal_name }}</p>
+        </div>
+    </div>
+
+    <form method="post" class="finance-form">
+        <div class="content-card">
+            <div class="finance-form-grid">
+                <div class="finance-field">
+                    <label for="fiscal_year_id">Fiscal Year</label>
+                    <select id="fiscal_year_id" name="fiscal_year_id">
+                        <option value="">Use custom label</option>
+
+                        {% for year in fiscal_years %}
+                        <option value="{{ year.id }}" {% if request.form.get('fiscal_year_id') %} {% if
+                            request.form.get('fiscal_year_id')|int==year.id %} selected {% endif %} {% elif
+                            default_fiscal_year and default_fiscal_year.id==year.id %} selected {% endif %}>
+                            {{ year.friendly_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="finance-field">
+                    <label for="fiscal_year_label">Custom Year Label</label>
+                    <input id="fiscal_year_label" name="fiscal_year_label" type="text"
+                        value="{{ request.form.get('fiscal_year_label', '') }}" placeholder="2027-28">
+                </div>
+
+                <div class="finance-field">
+                    <label for="cycle_status">Cycle Status</label>
+                    <select id="cycle_status" name="cycle_status">
+                        {% for status in cycle_statuses %}
+                        <option value="{{ status }}" {% if request.form.get('cycle_status', 'awaiting_activity'
+                            )==status %} selected {% endif %}>
+                            {{ status|replace("_", " ")|title }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="finance-field">
+                    <label for="expected_cost">Expected Cost</label>
+                    <input id="expected_cost" name="expected_cost" type="text" inputmode="decimal"
+                        value="{{ request.form.get('expected_cost', '') }}">
+                </div>
+
+                <div class="finance-field">
+                    <label for="renewal_date">Renewal Date</label>
+                    <input id="renewal_date" name="renewal_date" type="date"
+                        value="{{ request.form.get('renewal_date', '') }}">
+                </div>
+
+                <div class="finance-field">
+                    <label for="service_start_date">Service Start</label>
+                    <input id="service_start_date" name="service_start_date" type="date"
+                        value="{{ request.form.get('service_start_date', '') }}">
+                </div>
+
+                <div class="finance-field">
+                    <label for="service_end_date">Service End</label>
+                    <input id="service_end_date" name="service_end_date" type="date"
+                        value="{{ request.form.get('service_end_date', '') }}">
+                </div>
+            </div>
+        </div>
+
+        <div class="finance-form-actions">
+            <a class="btn btn-ghost" href="{{ url_for('finance.renewal_detail', renewal_id=renewal.id) }}">
+                Cancel
+            </a>
+
+            <button class="btn btn-primary" type="submit">
+                Add Cycle
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

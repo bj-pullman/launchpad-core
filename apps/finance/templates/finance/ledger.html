@@ -11,11 +11,14 @@
   <div class="page-header">
     <div>
       <h1>{{ department_name }} Ledger</h1>
-      <p class="page-subtitle">ERP audit trail activity grouped by fiscal year, transaction code, purchase order, budget account, and linked Finance Record.</p>
+      <p class="page-subtitle">ERP audit trail activity grouped by fiscal year, transaction code, purchase order, budget
+        account, and linked Finance Record.</p>
     </div>
     {% if can_manage %}
     <div class="page-header-actions">
-      <a class="btn finance-import-btn" href="{{ url_for('finance.imports', department_name=department_name, import_type='transactions') }}">Import Ledger</a>
+      <a class="btn finance-import-btn"
+        href="{{ url_for('finance.imports', department_name=department_name, import_type='transactions') }}">Import
+        Ledger</a>
     </div>
     {% endif %}
   </div>
@@ -27,9 +30,9 @@
         <select name="fiscal_year_code">
           <option value="">All Fiscal Years</option>
           {% for fy in fiscal_years %}
-            <option value="{{ fy.code }}" {% if selected_fiscal_year_code == fy.code %}selected{% endif %}>
-              {{ fy.code }}{% if fy.is_current %} - Current{% endif %}
-            </option>
+          <option value="{{ fy.code }}" {% if selected_fiscal_year_code==fy.code %}selected{% endif %}>
+            {{ fy.code }}{% if fy.is_current %} - Current{% endif %}
+          </option>
           {% endfor %}
         </select>
       </div>
@@ -37,13 +40,15 @@
         <label>Ledger Kind</label>
         <select name="ledger_kind">
           <option value="">All</option>
-          <option value="budget" {% if selected_ledger_kind == 'budget' %}selected{% endif %}>Budget</option>
-          <option value="encumbrance" {% if selected_ledger_kind == 'encumbrance' %}selected{% endif %}>Encumbrance</option>
-          <option value="expenditure" {% if selected_ledger_kind == 'expenditure' %}selected{% endif %}>Expenditure</option>
-          <option value="journal" {% if selected_ledger_kind == 'journal' %}selected{% endif %}>Journal</option>
-          <option value="payroll" {% if selected_ledger_kind == 'payroll' %}selected{% endif %}>Payroll</option>
-          <option value="receipt" {% if selected_ledger_kind == 'receipt' %}selected{% endif %}>Receipt</option>
-          <option value="other" {% if selected_ledger_kind == 'other' %}selected{% endif %}>Other</option>
+          <option value="budget" {% if selected_ledger_kind=='budget' %}selected{% endif %}>Budget</option>
+          <option value="encumbrance" {% if selected_ledger_kind=='encumbrance' %}selected{% endif %}>Encumbrance
+          </option>
+          <option value="expenditure" {% if selected_ledger_kind=='expenditure' %}selected{% endif %}>Expenditure
+          </option>
+          <option value="journal" {% if selected_ledger_kind=='journal' %}selected{% endif %}>Journal</option>
+          <option value="payroll" {% if selected_ledger_kind=='payroll' %}selected{% endif %}>Payroll</option>
+          <option value="receipt" {% if selected_ledger_kind=='receipt' %}selected{% endif %}>Receipt</option>
+          <option value="other" {% if selected_ledger_kind=='other' %}selected{% endif %}>Other</option>
         </select>
       </div>
       <div class="form-field">
@@ -73,7 +78,8 @@
     <div class="finance-section-header">
       <div>
         <h2 class="finance-section-title">Ledger Transactions</h2>
-        <p class="finance-section-subtitle">Showing page {{ ledger_page.page }} of {{ ledger_page.total_pages }} · {{ ledger_page.total }} transaction(s)</p>
+        <p class="finance-section-subtitle">Showing page {{ ledger_page.page }} of {{ ledger_page.total_pages }} · {{
+          ledger_page.total }} transaction(s)</p>
       </div>
     </div>
 
@@ -96,15 +102,23 @@
         </thead>
         <tbody>
           {% for item in ledgers %}
-          <tr class="finance-row-link" data-href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">
+          <tr class="finance-row-link"
+            data-href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">
             <td>{{ item.fiscal_year_code or "—" }}</td>
             <td>{{ item.purchase_date or "—" }}</td>
-            <td><span class="finance-pill">{{ item.transaction_code or "—" }}</span><div class="finance-meta">{{ item.ledger_kind|replace("_", " ")|title }}</div></td>
-            <td><div class="finance-record-title">{{ item.vendor_friendly_name or item.vendor_name or item.matched_vendor_name or "—" }}</div><div class="finance-meta">{{ item.description or item.title or "No description" }}</div></td>
+            <td><span class="finance-pill">{{ item.transaction_code or "—" }}</span>
+              <div class="finance-meta">{{ item.ledger_kind|replace("_", " ")|title }}</div>
+            </td>
+            <td>
+              <div class="finance-record-title">{{ item.vendor_friendly_name or item.vendor_name or
+                item.matched_vendor_name or "—" }}</div>
+              <div class="finance-meta">{{ item.description or item.title or "No description" }}</div>
+            </td>
             <td>{{ item.po_number or "—" }}</td>
-            <td>{{ item.account_code or "—" }}<div class="finance-meta">{{ item.budget_unit or "" }}</div></td>
-            <td>${{ "{:,.2f}".format(item.expenditure_amount|float) }}</td>
-            <td>${{ "{:,.2f}".format(item.encumbrance_amount|float) }}</td>
+            <td>{{ item.account_code or "—" }}<div class="finance-meta">{{ item.budget_unit or "" }}</div>
+            </td>
+            <td>{{ item.expenditure_amount|currency }}</td>
+            <td>{{ item.encumbrance_amount|currency }}</td>
             <td>{{ item.linked_record_title or "Unlinked" }}</td>
             <td><span class="finance-pill">{{ item.review_status|replace("_", " ")|title }}</span></td>
           </tr>

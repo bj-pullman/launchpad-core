@@ -1,0 +1,416 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('finance.static', filename='finance/finance.css') }}"
+>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell finance-shell">
+  {% include "finance/_finance_tabs.html" %}
+
+  <div class="finance-back-row">
+    <a
+      href="{{ url_for(
+        'finance.renewal_detail',
+        renewal_id=renewal.id
+      ) }}"
+      class="finance-back-link"
+    >
+      <span class="finance-back-link-icon" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </span>
+
+      <span>{{ renewal.renewal_name }}</span>
+    </a>
+  </div>
+
+  <div class="page-header">
+    <div>
+      <h1>Find Financial Activity</h1>
+
+      <p class="page-subtitle">
+        {{ renewal.renewal_name }}
+        ·
+        {{ cycle.fiscal_year_label }}
+      </p>
+    </div>
+  </div>
+
+  <div class="content-card">
+    <form method="get" class="finance-record-filters">
+      <div class="form-field">
+        <label for="minimum_score">
+          Minimum Confidence Score
+        </label>
+
+        <input
+          id="minimum_score"
+          name="minimum_score"
+          type="number"
+          min="0"
+          max="100"
+          value="{{ minimum_score }}"
+        >
+      </div>
+
+      <div class="finance-filter-actions">
+        <button class="btn btn-primary" type="submit">
+          Apply
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">
+          Suggested Records
+        </h3>
+
+        <p class="finance-section-subtitle">
+          Scores are suggestions. Linking a Record is always a
+          human-confirmed action.
+        </p>
+      </div>
+    </div>
+
+    {% if candidates.records %}
+      <div class="finance-match-list">
+        {% for record in candidates.records %}
+          <article class="finance-match-card">
+            <div class="finance-match-score">
+              <strong>{{ record.match.score }}%</strong>
+
+              <span>
+                {{ record.match.confidence_label }}
+              </span>
+            </div>
+
+            <div class="finance-match-main">
+              <a
+                class="finance-match-title"
+                href="{{ url_for(
+                  'finance.record_detail',
+                  record_id=record.id
+                ) }}"
+              >
+                {{ record.title }}
+              </a>
+
+              <div class="finance-match-meta">
+                <span>
+                  {{ record.vendor_friendly_name or record.vendor_name or "No vendor" }}
+                </span>
+
+                <span>
+                  {{ record.department_name or "No department" }}
+                </span>
+
+                {% if record.po_number %}
+                  <span>PO {{ record.po_number }}</span>
+                {% endif %}
+
+                {% if record.purchase_date %}
+                  <span>
+                    {{ record.purchase_date|localdate }}
+                  </span>
+                {% endif %}
+
+                <span>
+                  ${{ record.cost or "0.00" }}
+                </span>
+              </div>
+            </div>
+
+            <div class="finance-match-evidence">
+              {% if record.match.evidence %}
+                {% for evidence in record.match.evidence %}
+                  <div class="finance-match-evidence-item">
+                    <strong>+{{ evidence.points }}</strong>
+                    <span>{{ evidence.label }}</span>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="finance-meta">
+                  No detailed scoring evidence available.
+                </div>
+              {% endif %}
+            </div>
+
+            {% if can_manage %}
+              <div class="finance-match-actions">
+                <form
+                  method="post"
+                  action="{{ url_for(
+                    'finance.renewal_link_record',
+                    renewal_id=renewal.id,
+                    cycle_id=cycle.id,
+                    record_id=record.id
+                  ) }}"
+                >
+                  <input
+                    type="hidden"
+                    name="confidence_score"
+                    value="{{ record.match.score }}"
+                  >
+
+                  <div class="finance-field">
+                    <label
+                      for="record_relationship_type_{{ record.id }}"
+                    >
+                      Relationship
+                    </label>
+
+                    <select
+                      id="record_relationship_type_{{ record.id }}"
+                      name="relationship_type"
+                    >
+                      {% for relationship in relationship_types %}
+                        <option value="{{ relationship }}">
+                          {{ relationship|replace("_", " ")|title }}
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <label class="finance-checkbox-label">
+                    <input
+                      type="checkbox"
+                      name="counts_toward_cost"
+                      value="1"
+                      checked
+                    >
+
+                    <span>Count toward cost</span>
+                  </label>
+
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                  >
+                    Link Record
+                  </button>
+                </form>
+
+                <form
+                  method="post"
+                  action="{{ url_for(
+                    'finance.renewal_reject_candidate',
+                    renewal_id=renewal.id,
+                    cycle_id=cycle.id,
+                    candidate_type='record',
+                    candidate_id=record.id
+                  ) }}"
+                  data-confirm="Reject this suggested Record match?"
+                  data-confirm-action="confirm"
+                >
+                  <button
+                    class="btn btn-ghost finance-inline-danger"
+                    type="submit"
+                  >
+                    Reject
+                  </button>
+                </form>
+              </div>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No suggested Records</h3>
+
+        <p>
+          No unlinked Records met the current confidence threshold.
+          Lower the minimum score to view weaker potential matches.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="content-card">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">
+          Suggested Ledger Transactions
+        </h3>
+
+        <p class="finance-section-subtitle">
+          Transactions remain individually auditable even when
+          several campuses contribute to one Renewal.
+        </p>
+      </div>
+    </div>
+
+    {% if candidates.transactions %}
+      <div class="finance-match-list">
+        {% for transaction in candidates.transactions %}
+          <article class="finance-match-card">
+            <div class="finance-match-score">
+              <strong>
+                {{ transaction.match.score }}%
+              </strong>
+
+              <span>
+                {{ transaction.match.confidence_label }}
+              </span>
+            </div>
+
+            <div class="finance-match-main">
+              <div class="finance-match-title">
+                {{ transaction.description or "Ledger transaction" }}
+              </div>
+
+              <div class="finance-match-meta">
+                <span>
+                  {{ transaction.vendor_friendly_name or transaction.vendor_name or "No vendor" }}
+                </span>
+
+                <span>
+                  {{ transaction.department_name or "No department" }}
+                </span>
+
+                {% if transaction.po_number %}
+                  <span>PO {{ transaction.po_number }}</span>
+                {% endif %}
+
+                {% if transaction.purchase_date %}
+                  <span>
+                    {{ transaction.purchase_date|localdate }}
+                  </span>
+                {% endif %}
+
+                <span>
+                  ${{ transaction.amount }}
+                </span>
+              </div>
+            </div>
+
+            <div class="finance-match-evidence">
+              {% if transaction.match.evidence %}
+                {% for evidence in transaction.match.evidence %}
+                  <div class="finance-match-evidence-item">
+                    <strong>+{{ evidence.points }}</strong>
+                    <span>{{ evidence.label }}</span>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="finance-meta">
+                  No detailed scoring evidence available.
+                </div>
+              {% endif %}
+            </div>
+
+            {% if can_manage %}
+              <div class="finance-match-actions">
+                <form
+                  method="post"
+                  action="{{ url_for(
+                    'finance.renewal_link_transaction',
+                    renewal_id=renewal.id,
+                    cycle_id=cycle.id,
+                    transaction_id=transaction.id
+                  ) }}"
+                >
+                  <input
+                    type="hidden"
+                    name="confidence_score"
+                    value="{{ transaction.match.score }}"
+                  >
+
+                  <div class="finance-field">
+                    <label
+                      for="transaction_relationship_type_{{ transaction.id }}"
+                    >
+                      Relationship
+                    </label>
+
+                    <select
+                      id="transaction_relationship_type_{{ transaction.id }}"
+                      name="relationship_type"
+                    >
+                      {% for relationship in relationship_types %}
+                        <option value="{{ relationship }}">
+                          {{ relationship|replace("_", " ")|title }}
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <label class="finance-checkbox-label">
+                    <input
+                      type="checkbox"
+                      name="counts_toward_cost"
+                      value="1"
+                      checked
+                    >
+
+                    <span>Count toward cost</span>
+                  </label>
+
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                  >
+                    Link Transaction
+                  </button>
+                </form>
+
+                <form
+                  method="post"
+                  action="{{ url_for(
+                    'finance.renewal_reject_candidate',
+                    renewal_id=renewal.id,
+                    cycle_id=cycle.id,
+                    candidate_type='transaction',
+                    candidate_id=transaction.id
+                  ) }}"
+                  data-confirm="Reject this suggested transaction match?"
+                  data-confirm-action="confirm"
+                >
+                  <button
+                    class="btn btn-ghost finance-inline-danger"
+                    type="submit"
+                  >
+                    Reject
+                  </button>
+                </form>
+              </div>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="finance-empty">
+        <h3>No suggested transactions</h3>
+
+        <p>
+          No unlinked Ledger transactions met the current confidence
+          threshold. Lower the minimum score to view weaker potential
+          matches.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script
+  src="{{ url_for('finance.static', filename='finance/finance.js') }}"
+></script>
+{% endblock %}

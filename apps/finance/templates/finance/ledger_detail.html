@@ -10,8 +10,9 @@
   <div class="finance-back-row">
     <a href="{{ url_for('finance.ledger', department_name=department_name) }}" class="finance-back-link">
       <span class="finance-back-link-icon" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M15 18l-6-6 6-6"/>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
         </svg>
       </span>
       <span>Ledger</span>
@@ -63,7 +64,8 @@
 
       <div class="finance-ledger-detail-item finance-ledger-detail-item-wide">
         <span>Vendor</span>
-        <strong>{{ ledger_transaction.vendor_friendly_name or ledger_transaction.vendor_name or ledger_transaction.matched_vendor_name or "-" }}</strong>
+        <strong>{{ ledger_transaction.vendor_friendly_name or ledger_transaction.vendor_name or
+          ledger_transaction.matched_vendor_name or "-" }}</strong>
       </div>
 
       <div class="finance-ledger-detail-item">
@@ -93,48 +95,50 @@
 
     <div class="finance-linked-items-grid">
       {% if linked_purchase_order %}
-        <a
-          class="finance-linked-item-card finance-linked-item-clickable"
-          href="{{ url_for('finance.purchase_order_detail', purchase_order_id=linked_purchase_order.id) }}"
-        >
-          <div class="finance-linked-item-header">
-            <h3>Purchase Order</h3>
-            <span class="finance-pill">Open PO</span>
-          </div>
+      <a class="finance-linked-item-card finance-linked-item-clickable"
+        href="{{ url_for('finance.purchase_order_detail', purchase_order_id=linked_purchase_order.id) }}">
+        <div class="finance-linked-item-header">
+          <h3>Purchase Order</h3>
+          <span class="finance-pill">Open PO</span>
+        </div>
 
-          <div class="finance-linked-item-body">
-            <div><span>Base PO</span><strong>{{ linked_purchase_order.base_po_number or linked_purchase_order.po_number }}</strong></div>
-            <div><span>Vendor</span><strong>{{ linked_purchase_order.vendor_name or "-" }}</strong></div>
-            <div><span>Status</span><strong>{{ linked_purchase_order.status|replace("_", " ")|title if linked_purchase_order.status else "-" }}</strong></div>
-            <div><span>Open Encumbrance</span><strong>${{ "{:,.2f}".format(linked_purchase_order.remaining_encumbrance|float) }}</strong></div>
+        <div class="finance-linked-item-body">
+          <div><span>Base PO</span><strong>{{ linked_purchase_order.base_po_number or linked_purchase_order.po_number
+              }}</strong></div>
+          <div><span>Vendor</span><strong>{{ linked_purchase_order.vendor_name or "-" }}</strong></div>
+          <div><span>Status</span><strong>{{ linked_purchase_order.status|replace("_", " ")|title if
+              linked_purchase_order.status else "-" }}</strong></div>
+          <div><span>Open Encumbrance</span><strong>{{ linked_purchase_order.remaining_encumbrance|currency }}</strong>
           </div>
-        </a>
+        </div>
+      </a>
       {% endif %}
 
       {% if linked_record %}
-        <a
-          class="finance-linked-item-card finance-linked-item-clickable"
-          href="{{ url_for('finance.record_detail', record_id=linked_record.id) }}"
-        >
-          <div class="finance-linked-item-header">
-            <h3>Finance Record</h3>
-            <span class="finance-pill">{{ linked_record.record_type|replace("_", " ")|title if linked_record.record_type else "Record" }}</span>
-          </div>
+      <a class="finance-linked-item-card finance-linked-item-clickable"
+        href="{{ url_for('finance.record_detail', record_id=linked_record.id) }}">
+        <div class="finance-linked-item-header">
+          <h3>Finance Record</h3>
+          <span class="finance-pill">{{ linked_record.record_type|replace("_", " ")|title if linked_record.record_type
+            else "Record" }}</span>
+        </div>
 
-          <div class="finance-linked-item-body">
-            <div><span>Title</span><strong>{{ linked_record.title }}</strong></div>
-            <div><span>Status</span><strong>{{ linked_record.status|replace("_", " ")|title }}</strong></div>
-            <div><span>Vendor</span><strong>{{ linked_record.vendor_name or "-" }}</strong></div>
-            <div><span>Cost</span><strong>${{ "{:,.2f}".format(linked_record.cost|float) }}</strong></div>
-          </div>
-        </a>
+        <div class="finance-linked-item-body">
+          <div><span>Title</span><strong>{{ linked_record.title }}</strong></div>
+          <div><span>Status</span><strong>{{ linked_record.status|replace("_", " ")|title }}</strong></div>
+          <div><span>Vendor</span><strong>{{ linked_record.vendor_name or "-" }}</strong></div>
+          <div><span>Cost</span><strong>
+              {{ linked_record.cost|currency if linked_record.cost is not none else "—" }}
+            </strong></div>
+        </div>
+      </a>
       {% endif %}
 
       {% if not linked_purchase_order and not linked_record %}
-        <div class="finance-empty finance-empty-compact">
-          <h3>No linked PO or Record</h3>
-          <p>This is normal for some day-to-day ledger activity.</p>
-        </div>
+      <div class="finance-empty finance-empty-compact">
+        <h3>No linked PO or Record</h3>
+        <p>This is normal for some day-to-day ledger activity.</p>
+      </div>
       {% endif %}
     </div>
   </div>
