@@ -16,6 +16,11 @@ let ownershipOwnersCache = [];
 let ownershipSelectedUser = null;
 let locationOptionsCache = null;
 
+const managedDeviceCountCache = new Map();
+
+let myManagedDevicesRequestId = 0;
+let ownershipManagedDevicesRequestId = 0;
+
 const sheetDevices = new Map();
 
 function $(id) {
@@ -115,6 +120,7 @@ async function initMediaCatalog() {
     bindMediaTabs();
     bindOwnershipManagement();
     bindExportButtons();
+    initManagedDeviceTotals();
 
     renderSheetEmpty("Select a cart to load assigned devices.");
     setDeviceCount("—");
@@ -165,6 +171,7 @@ async function loadMyCarts() {
         myCartsCache = data.carts || [];
 
         renderMyCartsTable(myCartsCache);
+        refreshMyManagedDeviceTotal();
 
         if (selectedCart) {
             collapseMyCartsTable();
@@ -1625,19 +1632,177 @@ function openCartDetails(cart) {
 }
 
 function bindMediaTabs() {
-    document.querySelectorAll(".settings-tab").forEach(tab => {
+    const defaultTab = "cart-management";
+
+    const tabs = Array.from(
+        document.querySelectorAll(
+            ".media-catalog-tabs .settings-tab"
+        )
+    );
+
+    const panels = Array.from(
+        document.querySelectorAll(
+            ".media-catalog-tab-stack .settings-tab-panel"
+        )
+    );
+
+    if (!tabs.length || !panels.length) return;
+
+    function tabExists(tabName) {
+        return (
+            tabs.some(tab => tab.dataset.tab === tabName) &&
+            panels.some(panel => panel.dataset.panel === tabName)
+        );
+    }
+
+    function getTabFromHash() {
+        const hashTab = window.location.hash
+            .replace(/^#/, "")
+            .trim();
+
+        return tabExists(hashTab)
+            ? hashTab
+            : defaultTab;
+    }
+
+    function loadTabContent(tabName) {
+        if (
+            tabName === "ownership-management" &&
+            window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP
+        ) {
+            loadOwnershipOwners();
+        }
+    }
+
+    function activateMediaTab(
+        tabName,
+        {
+            updateUrl = true,
+            loadContent = true
+        } = {}
+    ) {
+        const target = tabExists(tabName)
+            ? tabName
+            : defaultTab;
+
+        tabs.forEach(tab => {
+            const isActive =
+                tab.dataset.tab === target;
+
+            tab.classList.toggle("active", isActive);
+
+            tab.setAttribute(
+                "aria-selected",
+                isActive ? "true" : "false"
+            );
+
+            tab.setAttribute(
+                "tabindex",
+                isActive ? "0" : "-1"
+            );
+        });
+
+        panels.forEach(panel => {
+            const isActive =
+                panel.dataset.panel === target;
+
+            panel.classList.toggle("active", isActive);
+            panel.hidden = !isActive;
+        });
+
+        if (updateUrl) {
+            const nextUrl =
+                target === defaultTab
+                    ? `${window.location.pathname}${window.location.search}`
+                    : `${window.location.pathname}${window.location.search}#${target}`;
+
+            /*
+             * replaceState avoids adding a new browser-history
+             * entry every time the user changes tabs.
+             */
+            window.history.replaceState(
+                null,
+                "",
+                nextUrl
+            );
+        }
+
+        if (loadContent) {
+            loadTabContent(target);
+        }
+    }
+
+    tabs.forEach((tab, index) => {
+        tab.setAttribute("role", "tab");
+
         tab.addEventListener("click", () => {
-            const target = tab.dataset.tab;
+            activateMediaTab(tab.dataset.tab);
+        });
 
-            document.querySelectorAll(".settings-tab").forEach(item => {
-                item.classList.toggle("active", item === tab);
-            });
+        tab.addEventListener("keydown", event => {
+            if (
+                ![
+                    "ArrowLeft",
+                    "ArrowRight",
+                    "Home",
+                    "End"
+                ].includes(event.key)
+            ) {
+                return;
+            }
 
-            document.querySelectorAll(".settings-tab-panel").forEach(panel => {
-                panel.classList.toggle("active", panel.dataset.panel === target);
-            });
+            event.preventDefault();
+
+            let nextIndex = index;
+
+            if (event.key === "ArrowRight") {
+                nextIndex =
+                    (index + 1) % tabs.length;
+            }
+
+            if (event.key === "ArrowLeft") {
+                nextIndex =
+                    (index - 1 + tabs.length) %
+                    tabs.length;
+            }
+
+            if (event.key === "Home") {
+                nextIndex = 0;
+            }
+
+            if (event.key === "End") {
+                nextIndex = tabs.length - 1;
+            }
+
+            const nextTab = tabs[nextIndex];
+
+            activateMediaTab(
+                nextTab.dataset.tab
+            );
+
+            nextTab.focus();
         });
     });
+
+    panels.forEach(panel => {
+        panel.setAttribute(
+            "role",
+            "tabpanel"
+        );
+    });
+
+    /*
+     * A browser refresh retains the hash.
+     * A new visit through the Media Catalog menu normally has
+     * no hash and therefore opens Cart Management.
+     */
+    activateMediaTab(
+        getTabFromHash(),
+        {
+            updateUrl: false,
+            loadContent: true
+        }
+    );
 }
 
 function bindExportButtons() {
@@ -1675,13 +1840,17 @@ function bindExportButtons() {
 
 
 function bindOwnershipManagement() {
-    if (!window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP) return;
+    if (!window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP) {
+        return;
+    }
 
-    $("refreshOwnershipBtn")?.addEventListener("click", loadOwnershipOwners);
-
-    document.querySelectorAll('[data-tab="ownership-management"]').forEach(tab => {
-        tab.addEventListener("click", loadOwnershipOwners);
-    });
+    $("refreshOwnershipBtn")?.addEventListener(
+        "click",
+        () => {
+            managedDeviceCountCache.clear();
+            loadOwnershipOwners();
+        }
+    );
 }
 
 
@@ -1701,6 +1870,7 @@ async function loadOwnershipOwners() {
         const data = await apiGet("/api/ownership/owners", "Unable to load assigned cart owners.");
         ownershipOwnersCache = data.owners || [];
         renderOwnershipOwners(ownershipOwnersCache);
+        refreshOwnershipManagedDeviceTotals();
         setStatus(`Loaded ${ownershipOwnersCache.length} assigned cart owner(s).`, true);
     } catch (err) {
         el.innerHTML = `<div class="muted">${escapeHtml(err.message || "Unable to load assigned cart owners.")}</div>`;
@@ -1725,6 +1895,7 @@ function renderOwnershipOwners(owners) {
                         <th>User</th>
                         <th>Email</th>
                         <th>Carts</th>
+                        <th>Total Devices Managed</th>
                         <th>Last Updated</th>
                         <th>Actions</th>
                     </tr>
@@ -1742,6 +1913,14 @@ function renderOwnershipOwners(owners) {
                             <td>
                                 <span class="cart-count-pill">
                                     ${escapeHtml(owner.cart_count || 0)}
+                                </span>
+                            </td>
+                            <td>
+                                <span
+                                    class="managed-device-count-pill"
+                                    data-owner-device-total="${escapeHtml(owner.owner_user_id)}"
+                                >
+                                    ...
                                 </span>
                             </td>
                             <td>${escapeHtml(formatFriendlyDateTime(owner.last_updated_at))}</td>
@@ -2477,4 +2656,262 @@ function formatFriendlyDateTime(value) {
             minute: "2-digit",
         });
     }
+}
+
+function initManagedDeviceTotals() {
+    addManagedDeviceTotalBadges();
+
+    $("refreshMyCartsBtn")?.addEventListener("click", () => {
+        managedDeviceCountCache.clear();
+
+        window.setTimeout(() => {
+            refreshMyManagedDeviceTotal(true);
+        }, 100);
+    });
+
+    $("refreshOwnershipBtn")?.addEventListener("click", () => {
+        managedDeviceCountCache.clear();
+
+        window.setTimeout(() => {
+            refreshOwnershipManagedDeviceTotals(true);
+        }, 100);
+    });
+
+    document.querySelectorAll('[data-tab="ownership-management"]').forEach(tab => {
+        tab.addEventListener("click", () => {
+            window.setTimeout(() => {
+                addManagedDeviceTotalBadges();
+                refreshOwnershipManagedDeviceTotals();
+            }, 100);
+        });
+    });
+}
+
+
+function addManagedDeviceTotalBadges() {
+    const myCartsActions = document.querySelector(
+        '[data-panel="cart-management"] > .media-panel:first-child .media-section-head .media-section-actions'
+    );
+
+    if (myCartsActions && !$("myManagedDeviceTotal")) {
+        const badge = document.createElement("div");
+
+        badge.id = "myManagedDeviceTotal";
+        badge.className = "managed-device-summary";
+        badge.innerHTML = `
+            <span>Total Devices Managed</span>
+            <strong aria-live="polite">—</strong>
+        `;
+
+        myCartsActions.prepend(badge);
+    }
+
+    const ownershipActions = document.querySelector(
+        '[data-panel="ownership-management"] > .media-panel .media-section-head .media-section-actions'
+    );
+
+    if (ownershipActions && !$("allManagedDeviceTotal")) {
+        const badge = document.createElement("div");
+
+        badge.id = "allManagedDeviceTotal";
+        badge.className = "managed-device-summary";
+        badge.innerHTML = `
+            <span>Total Devices Managed</span>
+            <strong aria-live="polite">—</strong>
+        `;
+
+        ownershipActions.prepend(badge);
+    }
+}
+
+async function fetchManagedDeviceCount(cartId, forceRefresh = false) {
+    const cacheKey = String(cartId);
+
+    if (!forceRefresh && managedDeviceCountCache.has(cacheKey)) {
+        return managedDeviceCountCache.get(cacheKey);
+    }
+
+    const data = await apiGet(
+        `/api/carts/${encodeURIComponent(cartId)}/devices`,
+        "Unable to load cart device count."
+    );
+
+    /*
+     * The API only returns assets assigned to the cart.
+     * The cart asset itself is therefore excluded.
+     */
+    const count = Array.isArray(data.devices)
+        ? data.devices.length
+        : 0;
+
+    managedDeviceCountCache.set(cacheKey, count);
+
+    return count;
+}
+
+
+async function calculateManagedDevicesForCarts(carts, forceRefresh = false) {
+    const validCarts = Array.isArray(carts)
+        ? carts.filter(cart => cart && cart.id)
+        : [];
+
+    if (!validCarts.length) {
+        return 0;
+    }
+
+    const counts = await Promise.all(
+        validCarts.map(cart => {
+            return fetchManagedDeviceCount(cart.id, forceRefresh);
+        })
+    );
+
+    return counts.reduce((total, count) => {
+        return total + Number(count || 0);
+    }, 0);
+}
+
+
+function setManagedDeviceSummaryValue(elementId, value) {
+    const element = $(elementId);
+    const valueElement = element?.querySelector("strong");
+
+    if (!valueElement) return;
+
+    valueElement.textContent = String(value);
+}
+
+
+async function refreshMyManagedDeviceTotal(forceRefresh = false) {
+    addManagedDeviceTotalBadges();
+
+    const requestId = ++myManagedDevicesRequestId;
+
+    setManagedDeviceSummaryValue(
+        "myManagedDeviceTotal",
+        "..."
+    );
+
+    try {
+        /*
+         * Use the existing cart cache whenever available.
+         * loadMyCarts() has already refreshed this data.
+         */
+        let carts = myCartsCache;
+
+        if (!Array.isArray(carts)) {
+            const data = await apiGet(
+                "/api/my-carts",
+                "Unable to load your carts."
+            );
+
+            carts = data.carts || [];
+        }
+
+        const total = await calculateManagedDevicesForCarts(
+            carts,
+            forceRefresh
+        );
+
+        if (requestId !== myManagedDevicesRequestId) return;
+
+        setManagedDeviceSummaryValue(
+            "myManagedDeviceTotal",
+            total
+        );
+    } catch (err) {
+        console.error(
+            "Unable to load managed-device total.",
+            err
+        );
+
+        if (requestId === myManagedDevicesRequestId) {
+            setManagedDeviceSummaryValue(
+                "myManagedDeviceTotal",
+                "Error"
+            );
+        }
+    }
+}
+
+
+async function refreshOwnershipManagedDeviceTotals(forceRefresh = false) {
+    if (!window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP) return;
+
+    addManagedDeviceTotalBadges();
+
+    const requestId = ++ownershipManagedDevicesRequestId;
+
+    setManagedDeviceSummaryValue(
+        "allManagedDeviceTotal",
+        "..."
+    );
+
+    try {
+        const owners = Array.isArray(ownershipOwnersCache)
+            ? ownershipOwnersCache
+            : [];
+
+        let allUsersTotal = 0;
+
+        for (const owner of owners) {
+            if (requestId !== ownershipManagedDevicesRequestId) return;
+
+            const ownerId = owner.owner_user_id;
+
+            if (!ownerId) continue;
+
+            const data = await apiGet(
+                `/api/ownership/users/${encodeURIComponent(ownerId)}/carts`,
+                "Unable to load user carts."
+            );
+
+            const ownerTotal = await calculateManagedDevicesForCarts(
+                data.carts || [],
+                forceRefresh
+            );
+
+            allUsersTotal += ownerTotal;
+
+            const ownerTotalElement = document.querySelector(
+                `[data-owner-device-total="${cssEscapeValue(ownerId)}"]`
+            );
+
+            if (ownerTotalElement) {
+                ownerTotalElement.textContent = String(ownerTotal);
+            }
+        }
+
+        if (requestId !== ownershipManagedDevicesRequestId) return;
+
+        setManagedDeviceSummaryValue(
+            "allManagedDeviceTotal",
+            allUsersTotal
+        );
+    } catch (err) {
+        console.error(
+            "Unable to load ownership managed-device totals.",
+            err
+        );
+
+        if (requestId === ownershipManagedDevicesRequestId) {
+            setManagedDeviceSummaryValue(
+                "allManagedDeviceTotal",
+                "Error"
+            );
+        }
+    }
+}
+
+
+function cssEscapeValue(value) {
+    const stringValue = String(value);
+
+    if (
+        window.CSS &&
+        typeof window.CSS.escape === "function"
+    ) {
+        return window.CSS.escape(stringValue);
+    }
+
+    return stringValue.replace(/["\\]/g, "\\$&");
 }

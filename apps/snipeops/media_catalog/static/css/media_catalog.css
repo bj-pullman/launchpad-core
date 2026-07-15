@@ -1605,3 +1605,477 @@ body[data-theme="light"] .cart-count-pill {
     border-color: #86efac;
     color: #166534;
 }
+
+/* =========================================================
+   Media Catalog Managed Device Totals
+   ========================================================= */
+
+.managed-device-summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+
+    min-height: 2.4rem;
+    padding: 0.5rem 0.85rem;
+
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    border-radius: 12px;
+    background: rgba(16, 185, 129, 0.12);
+    color: #6ee7b7;
+
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.managed-device-summary strong {
+    color: inherit;
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.managed-device-count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 2.35rem;
+    padding: 0.25rem 0.65rem;
+
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.12);
+    color: #6ee7b7;
+
+    font-size: 0.85rem;
+    font-weight: 850;
+    line-height: 1;
+}
+
+body[data-theme="light"] .managed-device-summary,
+body[data-theme="light"] .managed-device-count-pill {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+}
+
+
+/* =========================================================
+   Media Catalog Section Headers
+   ========================================================= */
+
+[data-panel="cart-management"]
+> .media-panel:first-child
+> .media-section-head,
+
+[data-panel="ownership-management"]
+> .media-panel
+> .media-section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+[data-panel="cart-management"]
+> .media-panel:first-child
+> .media-section-head
+> div:first-child,
+
+[data-panel="ownership-management"]
+> .media-panel
+> .media-section-head
+> div:first-child {
+    flex: 1 1 300px;
+    min-width: 0;
+}
+
+[data-panel="cart-management"]
+> .media-panel:first-child
+> .media-section-head
+> .media-section-actions,
+
+[data-panel="ownership-management"]
+> .media-panel
+> .media-section-head
+> .media-section-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+
+    flex: 0 1 auto;
+    max-width: 100%;
+    margin-left: auto;
+}
+
+[data-panel="cart-management"]
+.media-section-actions
+.media-btn,
+
+[data-panel="ownership-management"]
+.media-section-actions
+.media-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.4rem;
+}
+
+
+/* =========================================================
+   Media Catalog Tabs
+   ========================================================= */
+
+.media-catalog-tabs {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: nowrap;
+
+    width: 100%;
+    max-width: 100%;
+    gap: 0.35rem;
+    padding: 0.35rem;
+
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+}
+
+.media-catalog-tabs .settings-tab {
+    flex: 0 0 auto;
+    min-width: max-content;
+    white-space: nowrap;
+}
+
+
+/* =========================================================
+   Ownership Management Table
+   ========================================================= */
+
+[data-panel="ownership-management"] > .media-panel {
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+}
+
+#ownershipOwners {
+    width: 100%;
+    min-width: 0;
+}
+
+#ownershipOwners .sheet-wrap.compact {
+    width: 100%;
+    max-width: 100%;
+
+    height: auto;
+    max-height: none;
+
+    overflow-x: auto;
+    overflow-y: visible;
+
+    -webkit-overflow-scrolling: touch;
+}
+
+#ownershipOwners .ownership-table {
+    width: 100%;
+    min-width: 900px;
+}
+
+#ownershipOwners .ownership-table th,
+#ownershipOwners .ownership-table td {
+    vertical-align: middle;
+}
+
+#ownershipOwners .ownership-table th:nth-child(3),
+#ownershipOwners .ownership-table td:nth-child(3),
+
+#ownershipOwners .ownership-table th:nth-child(4),
+#ownershipOwners .ownership-table td:nth-child(4) {
+    text-align: center;
+}
+
+#ownershipOwners .ownership-table td:last-child {
+    white-space: nowrap;
+}
+
+
+/* =========================================================
+   Cart Management Table Containment
+   ========================================================= */
+
+[data-panel="cart-management"],
+[data-panel="cart-management"] > .media-panel,
+#myCarts,
+#myCartsExpandedView {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.my-carts-sheet-wrap {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+
+    overflow-x: auto;
+    overflow-y: visible;
+
+    -webkit-overflow-scrolling: touch;
+}
+
+.my-carts-table {
+    width: 100%;
+    min-width: 1000px;
+}
+
+
+/* =========================================================
+   Medium Screens
+   ========================================================= */
+
+@media (max-width: 1050px) {
+    [data-panel="cart-management"]
+    > .media-panel:first-child
+    > .media-section-head
+    > .media-section-actions,
+
+    [data-panel="ownership-management"]
+    > .media-panel
+    > .media-section-head
+    > .media-section-actions {
+        flex: 1 1 100%;
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-start;
+    }
+
+    .managed-device-summary {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+
+    [data-panel="cart-management"]
+    .media-section-actions
+    .media-btn,
+
+    [data-panel="ownership-management"]
+    .media-section-actions
+    .media-btn {
+        flex: 1 1 180px;
+    }
+}
+
+
+/* =========================================================
+   Tablet and Phone Screens
+   ========================================================= */
+
+@media (max-width: 760px) {
+    .media-page,
+    .media-catalog-tab-stack,
+    .settings-tab-panel,
+    .media-panel {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    /*
+     * Always keep all three tabs visible.
+     * This replaces the previous mobile one-column tab layout.
+     */
+    .media-catalog-tabs {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+
+        width: 100%;
+        gap: 0.25rem;
+        padding: 0.3rem;
+
+        overflow: visible;
+    }
+
+    .media-catalog-tabs .settings-tab {
+        width: 100%;
+        min-width: 0;
+        min-height: 2.65rem;
+
+        padding: 0.55rem 0.3rem;
+
+        font-size: 0.82rem;
+        line-height: 1.1;
+        text-align: center;
+        white-space: normal;
+        overflow-wrap: normal;
+    }
+
+    [data-panel="cart-management"]
+    > .media-panel:first-child
+    > .media-section-head,
+
+    [data-panel="ownership-management"]
+    > .media-panel
+    > .media-section-head {
+        display: block;
+    }
+
+    [data-panel="cart-management"]
+    > .media-panel:first-child
+    > .media-section-head
+    > .media-section-actions,
+
+    [data-panel="ownership-management"]
+    > .media-panel
+    > .media-section-head
+    > .media-section-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+
+        width: 100%;
+        margin-top: 1rem;
+        margin-left: 0;
+        gap: 0.5rem;
+    }
+
+    .managed-device-summary,
+    [data-panel="cart-management"]
+    .media-section-actions
+    .media-btn,
+
+    [data-panel="ownership-management"]
+    .media-section-actions
+    .media-btn {
+        width: 100%;
+        min-width: 0;
+        min-height: 2.7rem;
+        margin: 0;
+    }
+
+    .managed-device-summary {
+        white-space: normal;
+        text-align: center;
+    }
+
+    /*
+     * Cart table remains a true table and scrolls inside
+     * its own wrapper rather than widening the page.
+     */
+    .my-carts-sheet-wrap {
+        overflow-x: auto;
+        overflow-y: visible;
+    }
+
+    .my-carts-table {
+        min-width: 950px;
+    }
+
+    /*
+     * Ownership table is reduced to its essential columns.
+     */
+    #ownershipOwners .ownership-table {
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(2),
+    #ownershipOwners .ownership-table td:nth-child(2),
+
+    #ownershipOwners .ownership-table th:nth-child(5),
+    #ownershipOwners .ownership-table td:nth-child(5) {
+        display: none;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(1),
+    #ownershipOwners .ownership-table td:nth-child(1) {
+        width: 34%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(3),
+    #ownershipOwners .ownership-table td:nth-child(3) {
+        width: 14%;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(4),
+    #ownershipOwners .ownership-table td:nth-child(4) {
+        width: 26%;
+        white-space: normal;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(6),
+    #ownershipOwners .ownership-table td:nth-child(6) {
+        width: 26%;
+    }
+
+    #ownershipOwners .ownership-table th,
+    #ownershipOwners .ownership-table td {
+        padding: 0.55rem 0.45rem;
+        font-size: 0.8rem;
+    }
+
+    #ownershipOwners .ownership-table td:last-child {
+        white-space: normal;
+    }
+
+    #ownershipOwners .ownership-table td:last-child .mini-btn {
+        display: flex;
+        width: 100%;
+        min-height: 2rem;
+
+        margin: 0 0 0.35rem;
+        padding: 0.35rem 0.4rem;
+
+        justify-content: center;
+
+        font-size: 0.74rem;
+    }
+
+    #ownershipOwners
+    .ownership-table
+    td:last-child
+    .mini-btn:last-child {
+        margin-bottom: 0;
+    }
+}
+
+
+/* =========================================================
+   Very Small Screens
+   ========================================================= */
+
+@media (max-width: 480px) {
+    .media-panel {
+        padding: 0.85rem;
+    }
+
+    .media-catalog-tabs .settings-tab {
+        padding-left: 0.2rem;
+        padding-right: 0.2rem;
+        font-size: 0.76rem;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(1),
+    #ownershipOwners .ownership-table td:nth-child(1) {
+        width: 36%;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(3),
+    #ownershipOwners .ownership-table td:nth-child(3) {
+        width: 13%;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(4),
+    #ownershipOwners .ownership-table td:nth-child(4) {
+        width: 27%;
+    }
+
+    #ownershipOwners .ownership-table th:nth-child(6),
+    #ownershipOwners .ownership-table td:nth-child(6) {
+        width: 24%;
+    }
+}
