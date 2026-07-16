@@ -26,7 +26,8 @@
       <a class="btn btn-primary" href="{{ url_for('finance.vendor_create', department_name=department_name) }}">Add
         Vendor</a>
       {% endif %}
-      <button type="button" class="btn finance-settings-btn" data-finance-modal-open="finance-settings-modal"
+      <button type="button" class="btn finance-settings-btn finance-modal-trigger"
+        data-modal-target="finance-settings-modal" data-finance-modal-open="finance-settings-modal"
         aria-label="Open Finance Settings">
         <span class="finance-settings-btn-icon" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -67,8 +68,8 @@
       {% endif %}
 
       {% if can_manage %}
-      <button type="button" class="btn btn-primary finance-action-button"
-        data-finance-modal-open="finance-settings-modal">
+      <button type="button" class="btn btn-primary finance-action-button finance-modal-trigger"
+        data-modal-target="finance-settings-modal" data-finance-modal-open="finance-settings-modal">
         Complete Finance Setup
       </button>
       {% endif %}
