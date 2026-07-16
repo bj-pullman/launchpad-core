@@ -1,13 +1,15 @@
 {% if can_manage %}
-<div class="finance-modal-backdrop" id="finance-settings-modal" hidden>
-  <div class="finance-modal" role="dialog" aria-modal="true" aria-labelledby="finance-settings-title">
+<div class="finance-modal" id="finance-settings-modal" role="dialog" aria-modal="true" aria-labelledby="finance-settings-title" hidden>
+  <div class="finance-modal-backdrop" data-modal-close></div>
+
+  <div class="finance-modal-dialog">
     <div class="finance-modal-header">
       <div>
-        <h2 id="finance-settings-title">Finance Setup</h2>
-        <p>Manage fiscal years, fiscal year roles, and closeout status.</p>
+        <h2 id="finance-settings-title" class="finance-modal-title">Finance Setup</h2>
+        <p class="finance-modal-subtitle">Manage fiscal years, fiscal year roles, and closeout status.</p>
       </div>
 
-      <button type="button" class="finance-modal-close" data-finance-modal-close aria-label="Close Finance Setup">
+      <button type="button" class="finance-modal-close" data-modal-close aria-label="Close Finance Setup">
         ×
       </button>
     </div>
