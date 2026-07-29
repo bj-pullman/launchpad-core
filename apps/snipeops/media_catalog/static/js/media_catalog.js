@@ -115,6 +115,7 @@ async function initMediaCatalog() {
     bindMediaTabs();
     bindOwnershipManagement();
     bindExportButtons();
+    bindRecentActivityFilter();
     initManagedDeviceTotals();
 
     renderSheetEmpty("Select a cart to load assigned devices.");
@@ -311,8 +312,21 @@ function renderMyCartsTable(carts) {
             </div>
 
             <div class="media-section-actions">
-                <button id="expandMyCartsBtn" class="media-btn ghost" type="button">Expand My Carts</button>
-                <button id="deselectCartBtn" class="media-btn ghost" type="button">Deselect Cart</button>
+                <button
+                    id="expandMyCartsBtn"
+                    class="media-btn primary-action"
+                    type="button"
+                >
+                    Expand My Carts
+                </button>
+
+                <button
+                    id="deselectCartBtn"
+                    class="media-btn danger"
+                    type="button"
+                >
+                    Deselect Cart
+                </button>
             </div>
         </div>
     `;
@@ -656,7 +670,7 @@ async function selectCart(cart) {
 
         renderSheet();
         setDeviceCount(sheetDevices.size);
-        setStatus(`Loaded ${sheetDevices.size} device(s) in this cart.`, true);
+        setStatus("", true);
         updateActiveCartSummary();
         $("deviceInput")?.focus();
     } catch (err) {
@@ -911,7 +925,7 @@ function openDeviceChoice(devices) {
     });
 }
 
-async function requestAddDevice(device, force) {
+async function requestAddDevice(device) {
     if (!selectedCart) {
         setStatus("Select a cart first.", false);
         return;
@@ -922,58 +936,94 @@ async function requestAddDevice(device, force) {
         return;
     }
 
-    const assignedId = device.assigned_id ? String(device.assigned_id) : "";
-    const cartId = String(selectedCart.id);
-    const assignedName = device.assigned_name || "";
+    /*
+     * The server handles existing assignments as a move:
+     * check in from the original cart, then check out to the selected cart.
+     */
+    await addDeviceToCart(device);
+}
 
-    if (!force && assignedName && assignedId !== cartId) {
-        openConfirmModal({
-            title: "Move Device?",
-            message: `This device is currently assigned to ${assignedName}. Move it to ${selectedCart.asset_tag || selectedCart.name}?`,
-            buttonText: "Move Device",
-            action: async () => addDeviceToCart(device, true)
-        });
+
+async function refreshMediaCatalogViews() {
+    const refreshTasks = [
+        loadMyCarts()
+    ];
+
+    if ($("ownershipOwners")) {
+        refreshTasks.push(loadOwnershipOwners());
+    }
+
+    await Promise.allSettled(refreshTasks);
+}
+
+
+async function addDeviceToCart(device) {
+    if (!selectedCart) {
+        setStatus("Select a cart first.", false);
         return;
     }
 
-    await addDeviceToCart(device, force);
-}
+    const destinationCart = selectedCart;
 
-async function addDeviceToCart(device, force) {
     setStatus("Assigning device to cart...", true);
 
     try {
         const data = await apiPost(
             "/api/add-to-cart",
             {
-                cart_id: selectedCart.id,
-                device_id: device.id,
-                force: force
+                cart_id: destinationCart.id,
+                device_id: device.id
             },
             "Unable to add device to cart."
         );
 
-        if (data.needs_confirmation) {
-            openConfirmModal({
-                title: "Move Device?",
-                message: data.message || "This device is assigned elsewhere. Move it to this cart?",
-                buttonText: "Move Device",
-                action: async () => addDeviceToCart(device, true)
-            });
-            return;
-        }
-
         const deviceInput = $("deviceInput");
+
         if (deviceInput) {
             deviceInput.value = "";
+            deviceInput.focus();
         }
 
+        await refreshMediaCatalogViews();
+
+        selectedCart = data.cart || destinationCart;
         await selectCart(selectedCart);
-        prependRecent("add_to_cart", device, selectedCart, true, data.message || "Device assigned to cart.");
-        setStatus("Device assigned to cart.", true);
+
+        prependRecent(
+            data.moved ? "moved_to_cart" : "add_to_cart",
+            data.device || device,
+            selectedCart,
+            true,
+            data.message || "Device assigned to cart."
+        );
+
+        setStatus(
+            data.message || "Device assigned to cart.",
+            true
+        );
     } catch (err) {
-        prependRecent("add_failed", device, selectedCart, false, err.message || "Unable to add device to cart.");
-        setStatus(err.message || "Unable to add device to cart.", false);
+        /*
+         * Reload the active view even after failure. A check-in may have
+         * succeeded before a destination checkout failed.
+         */
+        await refreshMediaCatalogViews();
+
+        if (selectedCart) {
+            await selectCart(selectedCart);
+        }
+
+        prependRecent(
+            "add_failed",
+            device,
+            destinationCart,
+            false,
+            err.message || "Unable to add device to cart."
+        );
+
+        setStatus(
+            err.message || "Unable to add device to cart.",
+            false
+        );
     }
 }
 
@@ -990,27 +1040,64 @@ function requestRemoveDevice(deviceId) {
 }
 
 async function removeFromCart(device) {
+    if (!device) return;
+
+    const removedFromCart = selectedCart;
+
     setStatus("Removing device from cart...", true);
 
     try {
         const data = await apiPost(
             "/api/remove-from-cart",
-            { device_id: device.id },
+            {
+                device_id: device.id
+            },
             "Unable to remove device from cart."
         );
-
-        const removedFromCart = selectedCart;
 
         sheetDevices.delete(String(device.id));
         renderSheet();
         setDeviceCount(sheetDevices.size);
 
-        prependRecent("remove_from_cart", device, removedFromCart, true, data.message || "Device removed from cart.");
-        setStatus(`Device removed. ${sheetDevices.size} device(s) remain in this cart.`, true);
+        await refreshMediaCatalogViews();
 
+        if (removedFromCart) {
+            selectedCart = removedFromCart;
+            await selectCart(removedFromCart);
+        }
+
+        prependRecent(
+            "remove_from_cart",
+            data.device || device,
+            removedFromCart,
+            true,
+            data.message || "Device removed from cart."
+        );
+
+        setStatus(
+            data.message ||
+            `Device removed. ${sheetDevices.size} device(s) remain in this cart.`,
+            true
+        );
     } catch (err) {
-        prependRecent("remove_failed", device, selectedCart, false, err.message || "Unable to remove device from cart.");
-        setStatus(err.message || "Unable to remove device from cart.", false);
+        await refreshMediaCatalogViews();
+
+        if (selectedCart) {
+            await selectCart(selectedCart);
+        }
+
+        prependRecent(
+            "remove_failed",
+            device,
+            removedFromCart,
+            false,
+            err.message || "Unable to remove device from cart."
+        );
+
+        setStatus(
+            err.message || "Unable to remove device from cart.",
+            false
+        );
     }
 }
 
@@ -1256,26 +1343,65 @@ function prependRecent(action, device, cart, ok, message) {
     tbody.prepend(tr);
 }
 
-function requestMoveDeviceToCart(device, destinationCart) {
+async function moveDeviceToCart(device, destinationCart) {
     if (!device || !destinationCart) return;
 
-    openConfirmModal({
-        title: "Move Device?",
-        message: `Move asset ${device.asset_tag || device.serial || device.id} to ${destinationCart.asset_tag || destinationCart.name}?`,
-        buttonText: "Move Device",
-        action: async () => {
-            const previousCart = selectedCart;
+    const sourceCart = selectedCart;
 
-            selectedCart = destinationCart;
-            await addDeviceToCart(device, true);
+    setStatus("Moving device to destination cart...", true);
 
-            pendingMoveDevice = null;
+    try {
+        const data = await apiPost(
+            "/api/add-to-cart",
+            {
+                cart_id: destinationCart.id,
+                device_id: device.id
+            },
+            "Unable to move device."
+        );
 
-            if (previousCart && String(previousCart.id) !== String(destinationCart.id)) {
-                await selectCart(destinationCart);
-            }
+        await refreshMediaCatalogViews();
+
+        selectedCart = data.cart || destinationCart;
+        await selectCart(selectedCart);
+
+        prependRecent(
+            "moved_to_cart",
+            data.device || device,
+            selectedCart,
+            true,
+            data.message || "Device moved to destination cart."
+        );
+
+        setStatus(
+            data.message || "Device moved to destination cart.",
+            true
+        );
+    } catch (err) {
+        await refreshMediaCatalogViews();
+
+        /*
+         * Reload the source cart because the device may have been checked
+         * in successfully before the destination checkout failed.
+         */
+        if (sourceCart) {
+            selectedCart = sourceCart;
+            await selectCart(sourceCart);
         }
-    });
+
+        prependRecent(
+            "move_failed",
+            device,
+            destinationCart,
+            false,
+            err.message || "Unable to move device."
+        );
+
+        setStatus(
+            err.message || "Unable to move device.",
+            false
+        );
+    }
 }
 
 function bindMoveDeviceModal() {
@@ -1865,6 +1991,52 @@ function bindOwnershipManagement() {
         "click",
         loadOwnershipOwners
     );
+}
+
+function bindRecentActivityFilter() {
+    const filter = $("recentResultFilter");
+    const body = $("recentBody");
+    const emptyState = $("recentActivityEmpty");
+
+    if (!filter || !body) {
+        return;
+    }
+
+    function applyRecentActivityFilter() {
+        const selectedResult = filter.value;
+        const rows = Array.from(
+            body.querySelectorAll("tr[data-result]")
+        );
+
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const rowResult = row.dataset.result;
+            const shouldShow =
+                selectedResult === "all" ||
+                rowResult === selectedResult;
+
+            row.classList.toggle("hidden", !shouldShow);
+
+            if (shouldShow) {
+                visibleCount += 1;
+            }
+        });
+
+        if (emptyState) {
+            emptyState.classList.toggle(
+                "hidden",
+                visibleCount !== 0
+            );
+        }
+    }
+
+    filter.addEventListener(
+        "change",
+        applyRecentActivityFilter
+    );
+
+    applyRecentActivityFilter();
 }
 
 

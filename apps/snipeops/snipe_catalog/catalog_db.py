@@ -391,6 +391,85 @@ def get_asset(asset_id: int) -> dict | None:
 
         return dict(row) if row else None
 
+def update_asset_assignment(
+    asset_id: int,
+    *,
+    assigned_type: str | None,
+    assigned_id: int | None,
+    assigned_name: str | None,
+) -> dict | None:
+    """
+    Immediately update the cached assignment state for an asset.
+
+    Media Catalog writes assignments directly to Snipe-IT, but reads its
+    cart contents from the local catalog database. Updating the normalized
+    assignment columns here keeps the UI consistent without requiring a
+    full catalog sync after every cart operation.
+    """
+    now = _now_iso()
+
+    with _connect() as conn:
+        existing = conn.execute(
+            """
+            SELECT raw_json
+            FROM catalog_assets
+            WHERE id = ?
+            """,
+            (int(asset_id),),
+        ).fetchone()
+
+        if not existing:
+            return None
+
+        raw_data = {}
+
+        try:
+            raw_data = json.loads(existing["raw_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            raw_data = {}
+
+        if assigned_id is None:
+            raw_data["assigned_to"] = None
+        else:
+            raw_data["assigned_to"] = {
+                "id": int(assigned_id),
+                "type": assigned_type or "asset",
+                "name": assigned_name or "",
+            }
+
+        conn.execute(
+            """
+            UPDATE catalog_assets
+            SET assigned_type = ?,
+                assigned_id = ?,
+                assigned_name = ?,
+                raw_json = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                assigned_type,
+                int(assigned_id) if assigned_id is not None else None,
+                assigned_name,
+                json.dumps(raw_data),
+                now,
+                int(asset_id),
+            ),
+        )
+
+        conn.commit()
+
+        row = conn.execute(
+            """
+            SELECT *
+            FROM catalog_assets
+            WHERE id = ?
+            """,
+            (int(asset_id),),
+        ).fetchone()
+
+        return dict(row) if row else None
+
 
 def get_assets_assigned_to_asset(parent_asset_id: int) -> list[dict]:
     with _connect() as conn:

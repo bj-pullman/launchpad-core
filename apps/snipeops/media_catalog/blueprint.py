@@ -29,6 +29,7 @@ from apps.snipeops.snipe_catalog.catalog_db import (
     get_assets_assigned_to_asset,
     count_assets_assigned_to_assets,
     list_cart_assets,
+    update_asset_assignment,
 )
 
 from apps.snipeops.snipe_catalog.sync import run_full_sync
@@ -474,52 +475,123 @@ def api_add_to_cart():
     try:
         cart_id = int(body.get("cart_id") or 0)
         device_id = int(body.get("device_id") or 0)
-        force = bool(body.get("force"))
-    except Exception:
-        return jsonify({"ok": False, "error": "Invalid cart or device id."}), 400
+    except (TypeError, ValueError):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid cart or device id.",
+        }), 400
 
     cart = get_asset(cart_id)
     device = get_asset(device_id)
     actor_user = _current_user_profile()
 
     if not cart or not device:
-        return jsonify({"ok": False, "error": "Cart or device not found."}), 404
-
-    current_assigned_name = device.get("assigned_name") or ""
-    current_assigned_id = int(device.get("assigned_id") or 0)
-
-    if current_assigned_name and current_assigned_id != int(cart["id"]) and not force:
         return jsonify({
             "ok": False,
-            "needs_confirmation": True,
-            "message": (
-                f'This device is currently assigned to "{current_assigned_name}". '
-                f'Do you want to move it to "{cart.get("name") or cart.get("asset_tag")}"?'
-            ),
-            "device": _asset_payload(device),
-            "cart": _asset_payload(cart),
-        }), 409
+            "error": "Cart or device not found.",
+        }), 404
+
+    if int(device["id"]) == int(cart["id"]):
+        return jsonify({
+            "ok": False,
+            "error": "A cart cannot be assigned to itself.",
+        }), 400
+
+    current_assigned_id = None
 
     try:
-        if force and current_assigned_id and current_assigned_id != int(cart["id"]):
+        if device.get("assigned_id") is not None:
+            current_assigned_id = int(device["assigned_id"])
+    except (TypeError, ValueError):
+        current_assigned_id = None
+
+    current_assigned_name = device.get("assigned_name") or ""
+    destination_cart_id = int(cart["id"])
+
+    already_in_destination = (
+        current_assigned_id == destination_cart_id
+        and str(device.get("assigned_type") or "").lower() == "asset"
+    )
+
+    if already_in_destination:
+        return jsonify({
+            "ok": True,
+            "message": "Device is already assigned to this cart.",
+            "moved": False,
+            "previous_cart_id": current_assigned_id,
+            "cart": _asset_payload(cart),
+            "device": _asset_payload(device),
+        })
+
+    moving_from_another_assignment = (
+        current_assigned_id is not None
+        and current_assigned_id != destination_cart_id
+    )
+
+    previous_cart_id = current_assigned_id
+    previous_cart_name = current_assigned_name
+    checked_in = False
+
+    try:
+        if moving_from_another_assignment:
             checkin_asset(
                 asset_id=int(device["id"]),
-                note="Checked in before move by SnipeOps Media Catalog.",
+                note=(
+                    "Checked in before moving to another cart through "
+                    "SnipeOps Media Catalog."
+                ),
+            )
+
+            checked_in = True
+
+            update_asset_assignment(
+                int(device["id"]),
+                assigned_type=None,
+                assigned_id=None,
+                assigned_name=None,
             )
 
         checkout_asset_to_cart(
             child_asset_id=int(device["id"]),
-            cart_asset_id=int(cart["id"]),
-            note="Moved to cart by SnipeOps Media Catalog." if force else "Added to cart by SnipeOps Media Catalog.",
+            cart_asset_id=destination_cart_id,
+            note=(
+                "Moved to cart by SnipeOps Media Catalog."
+                if moving_from_another_assignment
+                else "Added to cart by SnipeOps Media Catalog."
+            ),
         )
 
-        action = "moved_to_cart" if force else "added_to_cart"
-        message = "Device moved to cart." if force else "Device assigned to cart."
+        destination_name = (
+            cart.get("name")
+            or cart.get("asset_tag")
+            or f"Cart {destination_cart_id}"
+        )
+
+        updated_device = update_asset_assignment(
+            int(device["id"]),
+            assigned_type="asset",
+            assigned_id=destination_cart_id,
+            assigned_name=destination_name,
+        )
+
+        if moving_from_another_assignment:
+            if previous_cart_name:
+                message = (
+                    f'Device moved from "{previous_cart_name}" '
+                    f'to "{destination_name}".'
+                )
+            else:
+                message = f'Device moved to "{destination_name}".'
+
+            action = "moved_to_cart"
+        else:
+            message = f'Device assigned to "{destination_name}".'
+            action = "added_to_cart"
 
         log_media_action(
             action=action,
             cart_asset=cart,
-            device_asset=device,
+            device_asset=updated_device or device,
             ok=True,
             message=message,
             actor_user=actor_user,
@@ -528,14 +600,114 @@ def api_add_to_cart():
         return jsonify({
             "ok": True,
             "message": message,
+            "moved": moving_from_another_assignment,
+            "previous_cart_id": previous_cart_id,
+            "destination_cart_id": destination_cart_id,
             "cart": _asset_payload(cart),
-            "device": _asset_payload(device),
+            "device": _asset_payload(updated_device or device),
+        })
+
+    except Exception as exc:
+        if checked_in:
+            error_message = (
+                "The device was removed from its previous assignment, but "
+                f"could not be assigned to the destination cart. {exc}"
+            )
+        else:
+            error_message = str(exc)
+
+        latest_device = get_asset(int(device["id"]))
+
+        log_media_action(
+            action=(
+                "move_failed"
+                if moving_from_another_assignment
+                else "add_failed"
+            ),
+            cart_asset=cart,
+            device_asset=latest_device or device,
+            ok=False,
+            message=error_message,
+            actor_user=actor_user,
+        )
+
+        return jsonify({
+            "ok": False,
+            "error": error_message,
+            "partial_move": checked_in,
+            "previous_cart_id": previous_cart_id,
+            "destination_cart_id": destination_cart_id,
+            "device": _asset_payload(latest_device or device),
+        }), 500
+
+
+@bp.post("/api/remove-from-cart")
+@login_required
+@require_permission("snipeops.media_catalog.manage")
+def api_remove_from_cart():
+    body = _body()
+
+    try:
+        device_id = int(body.get("device_id") or 0)
+    except (TypeError, ValueError):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid device id.",
+        }), 400
+
+    actor_user = _current_user_profile()
+    device = get_asset(device_id)
+
+    if not device:
+        return jsonify({
+            "ok": False,
+            "error": "Device not found.",
+        }), 404
+
+    cart_asset = None
+    previous_cart_id = None
+
+    if device.get("assigned_id") is not None:
+        try:
+            previous_cart_id = int(device["assigned_id"])
+            cart_asset = get_asset(previous_cart_id)
+        except (TypeError, ValueError):
+            previous_cart_id = None
+            cart_asset = None
+
+    try:
+        checkin_asset(
+            asset_id=int(device["id"]),
+            note="Removed from cart by SnipeOps Media Catalog.",
+        )
+
+        updated_device = update_asset_assignment(
+            int(device["id"]),
+            assigned_type=None,
+            assigned_id=None,
+            assigned_name=None,
+        )
+
+        log_media_action(
+            action="removed_from_cart",
+            cart_asset=cart_asset,
+            device_asset=updated_device or device,
+            ok=True,
+            message="Device removed from cart and checked in.",
+            actor_user=actor_user,
+        )
+
+        return jsonify({
+            "ok": True,
+            "message": "Device removed from cart and checked in.",
+            "previous_cart_id": previous_cart_id,
+            "device": _asset_payload(updated_device or device),
         })
 
     except Exception as exc:
         log_media_action(
-            action="move_failed" if force else "add_failed",
-            cart_asset=cart,
+            action="remove_failed",
+            cart_asset=cart_asset,
             device_asset=device,
             ok=False,
             message=str(exc),
@@ -545,50 +717,8 @@ def api_add_to_cart():
         return jsonify({
             "ok": False,
             "error": str(exc),
+            "previous_cart_id": previous_cart_id,
         }), 500
-
-
-@bp.post("/api/remove-from-cart")
-@login_required
-@require_permission("snipeops.media_catalog.manage")
-def api_remove_from_cart():
-    body = _body()
-    device_id = int(body.get("device_id") or 0)
-    actor_user = _current_user_profile()
-
-    device = get_asset(device_id)
-
-    if not device:
-        return jsonify({"ok": False, "error": "Device not found."}), 404
-    
-    cart_asset = None
-    assigned_id = device.get("assigned_id")
-
-    if assigned_id:
-        try:
-            cart_asset = get_asset(int(assigned_id))
-        except Exception:
-            cart_asset = None
-
-    checkin_asset(
-        asset_id=int(device["id"]),
-        note="Removed from cart by SnipeOps Media Catalog.",
-    )
-
-    log_media_action(
-        action="removed_from_cart",
-        cart_asset=cart_asset,
-        device_asset=device,
-        ok=True,
-        message="Device removed from cart and checked in.",
-        actor_user=actor_user,
-    )
-
-    return jsonify({
-        "ok": True,
-        "message": "Device removed from cart and checked in.",
-        "device": _asset_payload(device),
-    })
 
 
 @bp.post("/api/sync-snipe")

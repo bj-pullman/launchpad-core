@@ -63,7 +63,16 @@
   <div class="settings-content-card users-table-card">
     <div class="users-table-toolbar">
       <div class="users-results-summary">
-        Showing <span id="users-visible-count">{{ users|length }}</span> of {{ pagination.total_users }} users
+        {% if filters.q or filters.status or filters.account_type or filters.department %}
+        Showing
+        <span id="users-visible-count">{{ users|length }}</span>
+        of {{ pagination.total_users }} matching users
+        out of {{ pagination.total_all_users }} total
+        {% else %}
+        Showing
+        <span id="users-visible-count">{{ users|length }}</span>
+        of {{ pagination.total_all_users }} users
+        {% endif %}
       </div>
 
       <div class="users-table-tools">
@@ -79,16 +88,28 @@
 
         <form method="get" class="users-page-size-form">
           <input type="hidden" name="page" value="1">
+          <input type="hidden" name="q" value="{{ filters.q }}">
+          <input type="hidden" name="status" value="{{ filters.status }}">
+          <input type="hidden" name="account_type" value="{{ filters.account_type }}">
+          <input type="hidden" name="department" value="{{ filters.department }}">
 
           <label for="users-per-page" class="muted">Show</label>
 
           <select id="users-per-page" name="per_page" onchange="this.form.submit()">
-            <option value="25" {% if pagination.per_page==25 %}selected{% endif %}>25</option>
-            <option value="50" {% if pagination.per_page==50 %}selected{% endif %}>50</option>
-            <option value="100" {% if pagination.per_page==100 %}selected{% endif %}>100</option>
+            <option value="25" {% if pagination.per_page==25 %}selected{% endif %}>
+              25
+            </option>
+
+            <option value="50" {% if pagination.per_page==50 %}selected{% endif %}>
+              50
+            </option>
+
+            <option value="100" {% if pagination.per_page==100 %}selected{% endif %}>
+              100
+            </option>
           </select>
         </form>
-        
+
         {% if pagination.total_pages > 1 %}
         <div class="settings-pagination users-pagination-top">
           {% if pagination.has_prev %}
@@ -132,43 +153,80 @@
     </div>
     {% endif %}
 
-    <div id="users-filter-panel" class="users-filter-panel users-filter-panel-inline" hidden>
+    <form method="get" id="users-filter-panel" class="users-filter-panel users-filter-panel-inline" {% if not filters.q
+      and not filters.status and not filters.account_type and not filters.department %} hidden {% endif %}>
+      <input type="hidden" name="page" value="1">
+
+      <input type="hidden" name="per_page" value="{{ pagination.per_page }}">
+
       <div class="users-filter-grid">
         <div class="form-field">
           <label for="users-search">Search</label>
-          <input type="search" id="users-search" placeholder="Search username, department, or groups..."
-            autocomplete="off">
+
+          <input type="search" id="users-search" name="q" value="{{ filters.q }}"
+            placeholder="Search name, username, email, department, title, or group..." autocomplete="off">
         </div>
 
         <div class="form-field">
           <label for="users-status-filter">Status</label>
-          <select id="users-status-filter">
+
+          <select id="users-status-filter" name="status">
             <option value="">All statuses</option>
-            <option value="active">Active</option>
-            <option value="disabled">Disabled</option>
+
+            <option value="active" {% if filters.status=="active" %}selected{% endif %}>
+              Active
+            </option>
+
+            <option value="disabled" {% if filters.status=="disabled" %}selected{% endif %}>
+              Disabled
+            </option>
           </select>
         </div>
 
         <div class="form-field">
           <label for="users-account-filter">Account Type</label>
-          <select id="users-account-filter">
+
+          <select id="users-account-filter" name="account_type">
             <option value="">All account types</option>
-            <option value="local">Local</option>
-            <option value="sso">SSO Only</option>
+
+            <option value="local" {% if filters.account_type=="local" %}selected{% endif %}>
+              Local
+            </option>
+
+            <option value="sso" {% if filters.account_type=="sso" %}selected{% endif %}>
+              SSO Only
+            </option>
           </select>
         </div>
 
         <div class="form-field">
           <label for="users-department-filter">Department</label>
-          <select id="users-department-filter">
+
+          <select id="users-department-filter" name="department">
             <option value="">All departments</option>
+
             {% for department in departments %}
-            <option value="{{ department|lower }}">{{ department }}</option>
+            <option value="{{ department|lower }}" {% if filters.department==department|lower %}selected{% endif %}>
+              {{ department }}
+            </option>
             {% endfor %}
           </select>
         </div>
       </div>
-    </div>
+
+      <div class="users-filter-actions">
+        <button type="submit" class="btn btn-primary">
+          Apply Filters
+        </button>
+
+        <a href="{{ url_for(
+        'launchpad_ui.settings_users',
+        per_page=pagination.per_page
+      ) }}" class="btn btn-secondary">
+          Clear Filters
+        </a>
+      </div>
+    </form>
 
     <div class="table-wrap">
       <table class="table" id="users-table">
@@ -191,9 +249,19 @@
         <tbody>
           {% for user in users %}
           <tr class="users-table-row"
-            data-edit-url="{{ url_for('launchpad_ui.settings_users_edit', user_id=user.user_id) }}"
-            data-search-text="{{ (user.username ~ ' ' ~ user.email ~ ' ' ~ user.department ~ ' ' ~ user.groups_display_full)|lower }}"
-            data-status="{% if user.is_active %}active{% else %}disabled{% endif %}"
+            data-edit-url="{{ url_for('launchpad_ui.settings_users_edit', user_id=user.user_id) }}" data-search-text="{{
+    (
+      (user.username or '') ~ ' ' ~
+      (user.email or '') ~ ' ' ~
+      (user.display_name or '') ~ ' ' ~
+      (user.first_name or '') ~ ' ' ~
+      (user.last_name or '') ~ ' ' ~
+      (user.job_title or '') ~ ' ' ~
+      (user.department or '') ~ ' ' ~
+      (user.office_location or '') ~ ' ' ~
+      (user.groups_display_full or '')
+    )|lower
+  }}" data-status="{% if user.is_active %}active{% else %}disabled{% endif %}"
             data-account-type="{{ user.account_type or 'sso' }}" data-department="{{ (user.department or '')|lower }}">
             {% if "launchpad.settings.users.manage" in session.get("user_permissions", []) %}
             <td class="users-select-col">
@@ -286,12 +354,19 @@
       </table>
     </div>
 
-    
+
     {% if pagination.total_pages > 1 %}
     <div class="settings-pagination users-pagination-bottom">
       {% if pagination.has_prev %}
-      <a class="btn btn-secondary"
-        href="{{ url_for('launchpad_ui.settings_users', page=pagination.prev_page, per_page=pagination.per_page) }}">
+      <a class="btn btn-secondary" href="{{ url_for(
+    'launchpad_ui.settings_users',
+    page=pagination.prev_page,
+    per_page=pagination.per_page,
+    q=filters.q,
+    status=filters.status,
+    account_type=filters.account_type,
+    department=filters.department
+  ) }}">
         Previous
       </a>
       {% endif %}
@@ -301,8 +376,15 @@
       </span>
 
       {% if pagination.has_next %}
-      <a class="btn btn-secondary"
-        href="{{ url_for('launchpad_ui.settings_users', page=pagination.next_page, per_page=pagination.per_page) }}">
+      <a class="btn btn-secondary" href="{{ url_for(
+    'launchpad_ui.settings_users',
+    page=pagination.next_page,
+    per_page=pagination.per_page,
+    q=filters.q,
+    status=filters.status,
+    account_type=filters.account_type,
+    department=filters.department
+  ) }}">
         Next
       </a>
       {% endif %}

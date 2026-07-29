@@ -60,6 +60,25 @@ def _parse_hour_list(value: str | None) -> list[int]:
 
     return hours or [6, 14]
 
+def _parse_interval_minutes(
+    value: str | int | None,
+    default: int = 60,
+    minimum: int = 5,
+    maximum: int = 10080,
+) -> int:
+    """
+    Parse and constrain a configurable scheduler interval.
+
+    Minimum: 5 minutes
+    Maximum: 10,080 minutes, or 7 days
+    """
+    try:
+        interval = int(value)
+    except (TypeError, ValueError):
+        interval = default
+
+    return max(minimum, min(interval, maximum))
+
 def _run_job_with_tracking(job_def):
     timezone_value = (
         get_setting(job_def["timezone_setting"], "America/Chicago")
@@ -91,7 +110,10 @@ def run_due_daily_jobs_once():
         if job_def.get("schedule_type") != "daily_time":
             continue
 
-        enabled = get_bool_setting(job_def["enabled_setting"], False)
+        enabled = get_bool_setting(
+            job_def["enabled_setting"],
+            job_def.get("enabled_default", False),
+        )
         if not enabled:
             continue
 
@@ -102,8 +124,10 @@ def run_due_daily_jobs_once():
         tz = zoneinfo.ZoneInfo(timezone_value)
         now = datetime.now(tz)
 
+        default_time = job_def.get("time_default", "01:00")
+
         hour, minute = _parse_daily_time(
-            get_setting(job_def["time_setting"], "01:00")
+            get_setting(job_def["time_setting"], default_time)
         )
 
         scheduled_today = now.replace(
@@ -139,7 +163,10 @@ def configure_jobs():
         if scheduler.get_job(job_id):
             scheduler.remove_job(job_id)
 
-        enabled = get_bool_setting(job_def["enabled_setting"], False)
+        enabled = get_bool_setting(
+            job_def["enabled_setting"],
+            job_def.get("enabled_default", False),
+        )
         if not enabled:
             continue
 
@@ -147,10 +174,12 @@ def configure_jobs():
         # Daily scheduled jobs
         #
         if job_def.get("schedule_type") == "daily_time":
+            default_time = job_def.get("time_default", "01:00")
+
             time_value = get_setting(
                 job_def["time_setting"],
-                "01:00"
-            ) or "01:00"
+                default_time,
+            ) or default_time
 
             timezone_value = (
                 get_setting(
@@ -217,6 +246,39 @@ def configure_jobs():
                     hour=",".join(str(hour) for hour in hours),
                     minute=0,
                     timezone=timezone_value,
+                ),
+                id=job_id,
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=3600,
+            )
+
+                #
+        # Recurring interval jobs
+        #
+        elif job_def.get("schedule_type") == "interval_minutes":
+            interval_default = job_def.get("interval_default", 60)
+
+            interval_value = get_setting(
+                job_def["interval_setting"],
+                str(interval_default),
+            )
+
+            interval_minutes = _parse_interval_minutes(
+                interval_value,
+                default=interval_default,
+            )
+
+            print(
+                f"[tasks] scheduling {job_id} "
+                f"every {interval_minutes} minute(s)"
+            )
+
+            scheduler.add_job(
+                job_def["func"],
+                trigger=IntervalTrigger(
+                    minutes=interval_minutes,
                 ),
                 id=job_id,
                 replace_existing=True,

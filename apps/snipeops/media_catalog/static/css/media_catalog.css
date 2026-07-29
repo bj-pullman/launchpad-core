@@ -2079,3 +2079,228 @@ body[data-theme="light"] .managed-device-count-pill {
         width: 24%;
     }
 }
+
+/* =========================================================
+   Active Cart Actions
+   ========================================================= */
+
+.active-cart-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.active-cart-summary .media-section-actions {
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.media-btn.primary-action {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2);
+}
+
+.media-btn.primary-action:hover {
+    border-color: #1d4ed8;
+    background: #1d4ed8;
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.media-btn.danger {
+    border-color: #dc2626;
+    background: #dc2626;
+    color: #ffffff;
+    box-shadow: 0 6px 14px rgba(220, 38, 38, 0.18);
+}
+
+.media-btn.danger:hover {
+    border-color: #b91c1c;
+    background: #b91c1c;
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+body[data-theme="light"] .media-btn.primary-action {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #ffffff;
+}
+
+body[data-theme="light"] .media-btn.primary-action:hover {
+    border-color: #1d4ed8;
+    background: #1d4ed8;
+}
+
+body[data-theme="light"] .media-btn.danger {
+    border-color: #dc2626;
+    background: #dc2626;
+    color: #ffffff;
+}
+
+body[data-theme="light"] .media-btn.danger:hover {
+    border-color: #b91c1c;
+    background: #b91c1c;
+}
+
+/* Do not display an empty selected-cart status box. */
+#status:empty {
+    display: none;
+}
+
+/* =========================================================
+   Recent Activity
+   ========================================================= */
+
+.recent-activity-head {
+    align-items: flex-end;
+    margin-bottom: 1rem;
+}
+
+.recent-activity-filter {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 190px;
+}
+
+.recent-activity-filter label {
+    color: var(--text);
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.recent-activity-filter .media-select {
+    width: 100%;
+    min-height: 42px;
+    padding: 0.55rem 0.7rem;
+}
+
+/*
+ * Let the page scroll vertically instead of putting the activity
+ * records inside a short internal scrolling container.
+ */
+.recent-activity-sheet-wrap {
+    width: 100%;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: visible;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.recent-activity-table {
+    width: 100%;
+    min-width: 1050px;
+    table-layout: auto;
+}
+
+.recent-activity-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.recent-activity-table th:nth-child(1) {
+    width: 140px;
+}
+
+.recent-activity-table th:nth-child(2) {
+    width: 150px;
+}
+
+.recent-activity-table th:nth-child(3) {
+    width: 170px;
+}
+
+.recent-activity-table th:nth-child(4),
+.recent-activity-table th:nth-child(5),
+.recent-activity-table th:nth-child(6) {
+    width: 120px;
+}
+
+.recent-activity-table th:nth-child(7) {
+    width: 105px;
+}
+
+.recent-activity-table td {
+    vertical-align: top;
+    line-height: 1.35;
+}
+
+.activity-message-cell {
+    min-width: 260px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.activity-result-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+    padding: 0.3rem 0.55rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 900;
+}
+
+.activity-result-badge.success {
+    border-color: rgba(34, 197, 94, 0.3);
+    background: rgba(34, 197, 94, 0.14);
+    color: #4ade80;
+}
+
+.activity-result-badge.error {
+    border-color: rgba(248, 113, 113, 0.35);
+    background: rgba(220, 38, 38, 0.14);
+    color: #f87171;
+}
+
+body[data-theme="light"] .activity-result-badge.success {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+}
+
+body[data-theme="light"] .activity-result-badge.error {
+    border-color: #fca5a5;
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+body[data-theme="light"] .recent-activity-sheet-wrap {
+    border-color: #dbe3ef;
+}
+
+/*
+ * The existing row colors remain useful, but soften them so that
+ * the result badge is the primary status indicator.
+ */
+body[data-theme="light"] .recent-activity-table tr.ok td {
+    background: rgba(240, 253, 244, 0.65);
+}
+
+body[data-theme="light"] .recent-activity-table tr.bad td {
+    background: rgba(254, 242, 242, 0.75);
+}
+
+@media (max-width: 800px) {
+    .active-cart-summary,
+    .recent-activity-head {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .active-cart-summary .media-section-actions {
+        justify-content: flex-start;
+    }
+
+    .recent-activity-filter {
+        width: 100%;
+        min-width: 0;
+    }
+}

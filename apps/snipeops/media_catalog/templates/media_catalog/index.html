@@ -204,15 +204,35 @@
 
         <div class="settings-tab-panel" data-panel="recent-activity">
             <section id="recentActivityPanel" class="media-panel media-wide">
-                <div class="media-section-head">
+                <div class="media-section-head recent-activity-head">
                     <div>
                         <h2>Recent Media Catalog Activity</h2>
-                        <p class="muted">Recent cart and device actions recorded locally in SnipeOps.</p>
+
+                        <p class="muted">
+                            Recent cart and device actions recorded locally in
+                            SnipeOps.
+                        </p>
+                    </div>
+
+                    <div class="recent-activity-filter">
+                        <label for="recentResultFilter">
+                            Result
+                        </label>
+
+                        <select id="recentResultFilter" class="media-select">
+                            <option value="all">All results</option>
+                            <option value="success">Successful only</option>
+                            <option value="error">Failed only</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="sheet-wrap compact">
-                    <table class="media-sheet">
+                <div id="recentActivityEmpty" class="media-empty-state hidden">
+                    No activity records match the selected filter.
+                </div>
+
+                <div class="sheet-wrap recent-activity-sheet-wrap">
+                    <table class="media-sheet recent-activity-table">
                         <thead>
                             <tr>
                                 <th>Time</th>
@@ -225,19 +245,44 @@
                                 <th>Message</th>
                             </tr>
                         </thead>
+
                         <tbody id="recentBody">
                             {% for r in recent %}
-                            <tr class="{{ 'ok' if r.ok else 'bad' }}">
-                                <td class="mono">{{ r.created_at|localtime }}</td>
-                                <td>{{ r.action.replace('_', ' ')|title }}</td>
-                                <td>{{ r.actor_display_name or r.actor_email or '—' }}</td>
-                                <td class="mono">{{ r.device_asset_tag or r.device_name or r.device_asset_id or '' }}
+                            <tr class="{{ 'ok' if r.ok else 'bad' }}"
+                                data-result="{{ 'success' if r.ok else 'error' }}">
+                                <td class="mono">
+                                    {{ r.created_at|localtime }}
                                 </td>
-                                <td class="mono">{{ r.device_serial or '' }}</td>
-                                <td class="mono">{{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '' }}
+
+                                <td>
+                                    {{ r.action.replace('_', ' ')|title }}
                                 </td>
-                                <td>{{ 'Success' if r.ok else 'Error' }}</td>
-                                <td class="muted">{{ r.message or '' }}</td>
+
+                                <td>
+                                    {{ r.actor_display_name or r.actor_email or '—' }}
+                                </td>
+
+                                <td class="mono">
+                                    {{ r.device_asset_tag or r.device_name or r.device_asset_id or '' }}
+                                </td>
+
+                                <td class="mono">
+                                    {{ r.device_serial or '' }}
+                                </td>
+
+                                <td class="mono">
+                                    {{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '' }}
+                                </td>
+
+                                <td>
+                                    <span class="activity-result-badge {{ 'success' if r.ok else 'error' }}">
+                                        {{ 'Success' if r.ok else 'Error' }}
+                                    </span>
+                                </td>
+
+                                <td class="muted activity-message-cell">
+                                    {{ r.message or '' }}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

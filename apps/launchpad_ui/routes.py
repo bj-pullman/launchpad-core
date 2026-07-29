@@ -122,6 +122,31 @@ def _require_manage_permission(permission_key: str, message: str):
 
     return True
 
+def _get_catalog_sync_interval() -> int:
+    allowed_intervals = {
+        15,
+        30,
+        60,
+        120,
+        180,
+        360,
+        720,
+        1440,
+    }
+
+    try:
+        interval = int(
+            get_setting(
+                "snipeops.catalog_sync.interval_minutes",
+                "60",
+            )
+            or 60
+        )
+    except (TypeError, ValueError):
+        interval = 60
+
+    return interval if interval in allowed_intervals else 60
+
 
 @launchpad_ui_bp.app_context_processor
 def inject_launchpad_navigation():
@@ -319,6 +344,58 @@ def settings_snipeops():
 
         action = (request.form.get("action") or "").strip().lower()
 
+        if action == "save_general":
+            sync_enabled = (
+                1
+                if request.form.get("catalog_sync_enabled") == "1"
+                else 0
+            )
+
+            allowed_intervals = {
+                15,
+                30,
+                60,
+                120,
+                180,
+                360,
+                720,
+                1440,
+            }
+
+            try:
+                interval_minutes = int(
+                    request.form.get("catalog_sync_interval_minutes") or 60
+                )
+            except (TypeError, ValueError):
+                interval_minutes = 60
+
+            if interval_minutes not in allowed_intervals:
+                interval_minutes = 60
+
+            set_setting(
+                "snipeops.catalog_sync.enabled",
+                sync_enabled,
+            )
+            set_setting(
+                "snipeops.catalog_sync.interval_minutes",
+                interval_minutes,
+            )
+
+            # Immediately rebuild APScheduler jobs so a restart is not required.
+            configure_jobs()
+
+            flash(
+                "SnipeOps synchronization settings saved.",
+                "success",
+            )
+
+            return redirect(
+                url_for(
+                    "launchpad_ui.settings_snipeops",
+                    tab="general",
+                )
+            )
+        
         if action == "save_mapping":
             source = (request.form.get("source") or "any").strip()
             field = (request.form.get("field") or "").strip()
@@ -358,6 +435,11 @@ def settings_snipeops():
         mappings=mappings,
         selected_field=selected_field,
         selected_source=selected_source,
+        catalog_sync_enabled=get_bool_setting(
+            "snipeops.catalog_sync.enabled",
+            True,
+        ),
+        catalog_sync_interval_minutes=_get_catalog_sync_interval(),
         source_options=[
             {"value": "", "label": "All Sources"},
             {"value": "any", "label": "Any"},
@@ -668,6 +750,11 @@ def settings_users():
     page = request.args.get("page", 1, type=int) or 1
     per_page = request.args.get("per_page", 25, type=int) or 25
 
+    search_query = (request.args.get("q") or "").strip()
+    status_filter = (request.args.get("status") or "").strip().lower()
+    account_filter = (request.args.get("account_type") or "").strip().lower()
+    department_filter = (request.args.get("department") or "").strip().lower()
+
     if page < 1:
         page = 1
 
@@ -675,51 +762,166 @@ def settings_users():
     if per_page not in allowed_page_sizes:
         per_page = 25
 
-    total_users = count_local_users()
-    total_pages = max(1, (total_users + per_page - 1) // per_page)
+    if status_filter not in {"", "active", "disabled"}:
+        status_filter = ""
+
+    if account_filter not in {"", "local", "sso"}:
+        account_filter = ""
+
+    total_all_users = count_local_users()
+
+    # Load the full user set so search and filters apply before pagination.
+    all_users = list_local_users(
+        limit=max(total_all_users, 1),
+        offset=0,
+    )
+
+    all_departments = set()
+
+    for user in all_users:
+        identity_user = get_user_by_id(user["user_id"]) or {}
+
+        user["email"] = (
+            identity_user.get("email")
+            or user.get("email")
+            or user.get("username")
+            or ""
+        )
+
+        user["display_name"] = (
+            identity_user.get("display_name")
+            or user.get("display_name")
+            or ""
+        )
+
+        user["first_name"] = identity_user.get("first_name") or ""
+        user["last_name"] = identity_user.get("last_name") or ""
+        user["job_title"] = identity_user.get("job_title") or ""
+        user["department"] = identity_user.get("department") or ""
+        user["office_location"] = identity_user.get("office_location") or ""
+
+        department_name = user["department"].strip()
+        if department_name:
+            all_departments.add(department_name)
+
+        groups = get_user_roles(user["user_id"])
+        user["roles"] = groups
+
+        group_names = [
+            group["role_name"]
+            for group in groups
+            if group.get("role_name")
+        ]
+
+        user["groups_display_full"] = (
+            ", ".join(group_names)
+            if group_names
+            else "None"
+        )
+
+        max_groups_shown = 2
+        user["groups_display_badges"] = groups[:max_groups_shown]
+        user["groups_display_remaining"] = max(
+            0,
+            len(groups) - max_groups_shown,
+        )
+
+        search_values = [
+            user.get("username"),
+            user.get("email"),
+            user.get("display_name"),
+            user.get("first_name"),
+            user.get("last_name"),
+            user.get("job_title"),
+            user.get("department"),
+            user.get("office_location"),
+            user.get("groups_display_full"),
+        ]
+
+        user["_search_text"] = " ".join(
+            str(value).strip()
+            for value in search_values
+            if value
+        ).lower()
+
+    normalized_query = search_query.lower()
+
+    filtered_users = []
+
+    for user in all_users:
+        user_status = "active" if user.get("is_active") else "disabled"
+        user_account_type = (
+            user.get("account_type")
+            or "sso"
+        ).strip().lower()
+
+        user_department = (
+            user.get("department")
+            or ""
+        ).strip().lower()
+
+        matches_search = (
+            not normalized_query
+            or normalized_query in user["_search_text"]
+        )
+
+        matches_status = (
+            not status_filter
+            or user_status == status_filter
+        )
+
+        matches_account = (
+            not account_filter
+            or user_account_type == account_filter
+        )
+
+        matches_department = (
+            not department_filter
+            or user_department == department_filter
+        )
+
+        if (
+            matches_search
+            and matches_status
+            and matches_account
+            and matches_department
+        ):
+            filtered_users.append(user)
+
+    total_users = len(filtered_users)
+    total_pages = max(
+        1,
+        (total_users + per_page - 1) // per_page,
+    )
 
     if page > total_pages:
         page = total_pages
 
     offset = (page - 1) * per_page
-    users = list_local_users(limit=per_page, offset=offset)
+    users = filtered_users[offset:offset + per_page]
 
-    for user in users:
-        identity_user = get_user_by_id(user["user_id"]) or {}
-
-        user["email"] = identity_user.get("email") or user.get("email")
-        user["display_name"] = identity_user.get("display_name") or user.get("display_name")
-        user["first_name"] = identity_user.get("first_name")
-        user["last_name"] = identity_user.get("last_name")
-        user["job_title"] = identity_user.get("job_title")
-        user["department"] = identity_user.get("department")
-        user["office_location"] = identity_user.get("office_location")
-
-        groups = get_user_roles(user["user_id"])
-        user["roles"] = groups
-
-        group_names = [group["role_name"] for group in groups]
-        user["groups_display_full"] = ", ".join(group_names) if group_names else "None"
-
-        max_groups_shown = 2
-        user["groups_display_badges"] = groups[:max_groups_shown]
-        user["groups_display_remaining"] = max(0, len(groups) - max_groups_shown)
-
-    departments = sorted({
-        (user.get("department") or "").strip()
-        for user in users
-        if (user.get("department") or "").strip()
-    })
+    departments = sorted(
+        all_departments,
+        key=str.lower,
+    )
 
     pagination = {
         "page": page,
         "per_page": per_page,
         "total_users": total_users,
+        "total_all_users": total_all_users,
         "total_pages": total_pages,
         "has_prev": page > 1,
         "has_next": page < total_pages,
         "prev_page": page - 1,
         "next_page": page + 1,
+    }
+
+    filters = {
+        "q": search_query,
+        "status": status_filter,
+        "account_type": account_filter,
+        "department": department_filter,
     }
 
     return render_template(
@@ -728,8 +930,8 @@ def settings_users():
         users=users,
         departments=departments,
         pagination=pagination,
+        filters=filters,
     )
-
 
 @launchpad_ui_bp.route("/settings/users/new", methods=["GET", "POST"])
 @login_required

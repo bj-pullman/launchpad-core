@@ -535,13 +535,12 @@ function initApiKeyCreatedModal() {
 
 function initUsersPage() {
   const table = document.getElementById("users-table");
-  if (!table) return;
+
+  if (!table) {
+    return;
+  }
 
   const searchInput = document.getElementById("users-search");
-  const statusFilter = document.getElementById("users-status-filter");
-  const accountFilter = document.getElementById("users-account-filter");
-  const departmentFilter = document.getElementById("users-department-filter");
-  const visibleCount = document.getElementById("users-visible-count");
   const selectAll = document.getElementById("users-select-all");
   const bulkActions = document.getElementById("users-bulk-actions");
   const bulkAction = document.getElementById("users-bulk-action");
@@ -552,70 +551,27 @@ function initUsersPage() {
   const modalMessage = document.getElementById("users-bulk-modal-message");
   const modalList = document.getElementById("users-bulk-modal-list");
   const modalConfirm = document.getElementById("users-bulk-modal-confirm");
-  const modalCancelButtons = document.querySelectorAll("[data-users-bulk-cancel]");
+  const modalCancelButtons = document.querySelectorAll(
+    "[data-users-bulk-cancel]"
+  );
 
-  const rows = Array.from(table.querySelectorAll("tbody tr.users-table-row"));
+  const rows = Array.from(
+    table.querySelectorAll("tbody tr.users-table-row")
+  );
+
   let pendingBulkAction = null;
   let pendingSelectedCheckboxes = [];
 
-  function applyFilters() {
-    const query = (searchInput?.value || "").trim().toLowerCase();
-    const status = statusFilter?.value || "";
-    const accountType = accountFilter?.value || "";
-    const department = departmentFilter?.value || "";
-
-    const filterPanel = document.getElementById("users-filter-panel");
-    const filterToggleBtn = document.getElementById("users-filter-toggle");
-
-    if (filterPanel && (query || status || accountType || department)) {
-      filterPanel.hidden = false;
-
-      if (filterToggleBtn) {
-        filterToggleBtn.setAttribute("aria-expanded", "true");
-      }
-    }
-
-    let shown = 0;
-
-    rows.forEach((row) => {
-      const rowText = row.dataset.searchText || "";
-      const rowStatus = row.dataset.status || "";
-      const rowAccountType = row.dataset.accountType || "";
-      const rowDepartment = row.dataset.department || "";
-
-      const matchesSearch = !query || rowText.includes(query);
-      const matchesStatus = !status || rowStatus === status;
-      const matchesAccount = !accountType || rowAccountType === accountType;
-      const matchesDepartment = !department || rowDepartment === department;
-
-      const shouldShow = matchesSearch && matchesStatus && matchesAccount && matchesDepartment;
-
-      row.classList.toggle("users-hidden-by-filter", !shouldShow);
-
-      if (shouldShow) {
-        shown += 1;
-      } else {
-        const checkbox = row.querySelector(".users-row-checkbox");
-        if (checkbox) checkbox.checked = false;
-      }
-    });
-
-    if (visibleCount) {
-      visibleCount.textContent = String(shown);
-    }
-
-    syncBulkUi();
-  }
-
   function getVisibleCheckboxes() {
     return rows
-      .filter((row) => !row.classList.contains("users-hidden-by-filter"))
       .map((row) => row.querySelector(".users-row-checkbox"))
       .filter(Boolean);
   }
 
   function getSelectedCheckboxes() {
-    return getVisibleCheckboxes().filter((checkbox) => checkbox.checked);
+    return getVisibleCheckboxes().filter(
+      (checkbox) => checkbox.checked
+    );
   }
 
   function syncBulkUi() {
@@ -646,7 +602,13 @@ function initUsersPage() {
   }
 
   function openBulkModal(action, selectedCheckboxes) {
-    if (!modal || !modalTitle || !modalMessage || !modalList || !modalConfirm) {
+    if (
+      !modal ||
+      !modalTitle ||
+      !modalMessage ||
+      !modalList ||
+      !modalConfirm
+    ) {
       return;
     }
 
@@ -654,8 +616,13 @@ function initUsersPage() {
     pendingSelectedCheckboxes = selectedCheckboxes;
 
     const count = selectedCheckboxes.length;
+
     const names = selectedCheckboxes
-      .map((checkbox) => checkbox.dataset.username || `User ${checkbox.value}`)
+      .map(
+        (checkbox) =>
+          checkbox.dataset.username ||
+          `User ${checkbox.value}`
+      )
       .slice(0, 10);
 
     const extraCount = Math.max(0, count - names.length);
@@ -663,19 +630,27 @@ function initUsersPage() {
     if (action === "activate") {
       modalTitle.textContent = "Activate Selected Users";
       modalMessage.textContent =
-        `This will activate ${count} selected user account(s). They will be allowed to sign in again if their authentication method is valid.`;
+        `This will activate ${count} selected user account(s). ` +
+        "They will be allowed to sign in again if their " +
+        "authentication method is valid.";
+
       modalConfirm.textContent = "Activate Users";
       modalConfirm.className = "btn btn-primary";
     } else if (action === "disable") {
       modalTitle.textContent = "Disable Selected Users";
       modalMessage.textContent =
-        `This will disable ${count} selected user account(s). They will no longer be able to sign in.`;
+        `This will disable ${count} selected user account(s). ` +
+        "They will no longer be able to sign in.";
+
       modalConfirm.textContent = "Disable Users";
       modalConfirm.className = "btn btn-danger";
     } else if (action === "delete") {
       modalTitle.textContent = "Delete Selected Users";
       modalMessage.textContent =
-        `This will delete ${count} selected user account(s). This removes the user record, local auth account, and role assignments.`;
+        `This will delete ${count} selected user account(s). ` +
+        "This removes the user record, local auth account, " +
+        "and role assignments.";
+
       modalConfirm.textContent = "Delete Users";
       modalConfirm.className = "btn btn-danger";
     } else {
@@ -693,7 +668,8 @@ function initUsersPage() {
 
     if (extraCount > 0) {
       const item = document.createElement("div");
-      item.className = "users-bulk-modal-list-item users-bulk-modal-list-more";
+      item.className =
+        "users-bulk-modal-list-item users-bulk-modal-list-more";
       item.textContent = `+${extraCount} more`;
       modalList.appendChild(item);
     }
@@ -704,23 +680,34 @@ function initUsersPage() {
   }
 
   function closeBulkModal() {
-    if (!modal) return;
+    if (!modal) {
+      return;
+    }
 
     modal.hidden = true;
     document.body.classList.remove("users-bulk-modal-open");
 
     pendingBulkAction = null;
     pendingSelectedCheckboxes = [];
+
+    if (modalConfirm) {
+      modalConfirm.disabled = false;
+    }
   }
 
-  async function runBulkStatusUpdate(action, selectedCheckboxes) {
+  async function runBulkStatusUpdate(
+    action,
+    selectedCheckboxes
+  ) {
     const bulkActionUrl = bulkActions?.dataset.bulkActionUrl;
+
     if (!bulkActionUrl) {
-      alert("Bulk update URL is missing.");
-      return;
+      throw new Error("Bulk update URL is missing.");
     }
 
-    const userIds = selectedCheckboxes.map((checkbox) => checkbox.value);
+    const userIds = selectedCheckboxes.map(
+      (checkbox) => checkbox.value
+    );
 
     const response = await fetch(bulkActionUrl, {
       method: "POST",
@@ -734,17 +721,33 @@ function initUsersPage() {
       })
     });
 
-    const payload = await response.json();
+    let payload = {};
+
+    try {
+      payload = await response.json();
+    } catch (error) {
+      throw new Error(
+        "The server returned an invalid response."
+      );
+    }
 
     if (!response.ok || !payload.ok) {
-      throw new Error(payload.message || "Unable to update selected users.");
+      throw new Error(
+        payload.message ||
+        "Unable to update selected users."
+      );
     }
+
+    return payload;
   }
 
   async function runBulkDelete(selectedCheckboxes) {
     for (const checkbox of selectedCheckboxes) {
       const deleteUrl = checkbox.dataset.deleteUrl;
-      if (!deleteUrl) continue;
+
+      if (!deleteUrl) {
+        continue;
+      }
 
       const response = await fetch(deleteUrl, {
         method: "POST",
@@ -754,7 +757,12 @@ function initUsersPage() {
       });
 
       if (!response.ok) {
-        throw new Error(`Unable to delete ${checkbox.dataset.username || checkbox.value}.`);
+        throw new Error(
+          `Unable to delete ${
+            checkbox.dataset.username ||
+            checkbox.value
+          }.`
+        );
       }
     }
   }
@@ -765,98 +773,188 @@ function initUsersPage() {
         "a, button, input, select, textarea, label, form"
       );
 
-      if (interactiveElement) return;
+      if (interactiveElement) {
+        return;
+      }
 
       const editUrl = row.dataset.editUrl;
+
       if (editUrl) {
         window.location.href = editUrl;
       }
     });
 
-    const checkbox = row.querySelector(".users-row-checkbox");
-    if (checkbox) {
-      checkbox.addEventListener("click", function (event) {
-        event.stopPropagation();
-      });
+    const checkbox = row.querySelector(
+      ".users-row-checkbox"
+    );
 
-      checkbox.addEventListener("change", syncBulkUi);
+    if (checkbox) {
+      checkbox.addEventListener(
+        "click",
+        function (event) {
+          event.stopPropagation();
+        }
+      );
+
+      checkbox.addEventListener(
+        "change",
+        syncBulkUi
+      );
     }
   });
 
-  if (searchInput) searchInput.addEventListener("input", applyFilters);
-  if (statusFilter) statusFilter.addEventListener("change", applyFilters);
-  if (accountFilter) accountFilter.addEventListener("change", applyFilters);
-  if (departmentFilter) departmentFilter.addEventListener("change", applyFilters);
-
   if (selectAll) {
-    selectAll.addEventListener("change", function () {
-      getVisibleCheckboxes().forEach((checkbox) => {
-        checkbox.checked = selectAll.checked;
-      });
+    selectAll.addEventListener(
+      "change",
+      function () {
+        getVisibleCheckboxes().forEach(
+          (checkbox) => {
+            checkbox.checked = selectAll.checked;
+          }
+        );
 
-      syncBulkUi();
-    });
+        syncBulkUi();
+      }
+    );
   }
 
   if (bulkApply) {
-    bulkApply.addEventListener("click", function () {
-      const action = bulkAction?.value || "";
-      const selected = getSelectedCheckboxes();
+    bulkApply.addEventListener(
+      "click",
+      function () {
+        const action = bulkAction?.value || "";
+        const selected = getSelectedCheckboxes();
 
-      if (!selected.length) {
-        alert("Select at least one user.");
-        return;
+        if (!selected.length) {
+          alert("Select at least one user.");
+          return;
+        }
+
+        if (!action) {
+          alert("Choose a bulk action first.");
+          return;
+        }
+
+        openBulkModal(action, selected);
       }
-
-      if (!action) {
-        alert("Choose a bulk action first.");
-        return;
-      }
-
-      openBulkModal(action, selected);
-    });
+    );
   }
 
   modalCancelButtons.forEach((button) => {
-    button.addEventListener("click", closeBulkModal);
+    button.addEventListener(
+      "click",
+      closeBulkModal
+    );
   });
 
   if (modalConfirm) {
-    modalConfirm.addEventListener("click", async function () {
-      if (!pendingBulkAction || !pendingSelectedCheckboxes.length) {
-        closeBulkModal();
+    modalConfirm.addEventListener(
+      "click",
+      async function () {
+        if (
+          !pendingBulkAction ||
+          !pendingSelectedCheckboxes.length
+        ) {
+          closeBulkModal();
+          return;
+        }
+
+        const actionToRun = pendingBulkAction;
+        const checkboxesToUpdate = [
+          ...pendingSelectedCheckboxes
+        ];
+
+        const originalText =
+          modalConfirm.textContent;
+
+        modalConfirm.disabled = true;
+        modalConfirm.textContent = "Working...";
+
+        try {
+          if (
+            actionToRun === "activate" ||
+            actionToRun === "disable"
+          ) {
+            await runBulkStatusUpdate(
+              actionToRun,
+              checkboxesToUpdate
+            );
+          } else if (actionToRun === "delete") {
+            await runBulkDelete(
+              checkboxesToUpdate
+            );
+          }
+
+          window.location.reload();
+        } catch (error) {
+          alert(
+            error.message ||
+            "Bulk update failed."
+          );
+
+          modalConfirm.disabled = false;
+          modalConfirm.textContent = originalText;
+        }
+      }
+    );
+  }
+
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      if (!modal || modal.hidden) {
         return;
       }
 
-      modalConfirm.disabled = true;
-      const originalText = modalConfirm.textContent;
-      modalConfirm.textContent = "Working...";
-
-      try {
-        if (pendingBulkAction === "activate" || pendingBulkAction === "disable") {
-          await runBulkStatusUpdate(pendingBulkAction, pendingSelectedCheckboxes);
-        } else if (pendingBulkAction === "delete") {
-          await runBulkDelete(pendingSelectedCheckboxes);
-        }
-
-        window.location.reload();
-      } catch (error) {
-        alert(error.message || "Bulk update failed.");
-        modalConfirm.disabled = false;
-        modalConfirm.textContent = originalText;
+      if (event.key === "Escape") {
+        closeBulkModal();
       }
+    }
+  );
+
+  const filterForm = document.getElementById(
+    "users-filter-panel"
+  );
+
+  if (filterForm instanceof HTMLFormElement) {
+    const pageInput = filterForm.querySelector(
+      'input[name="page"]'
+    );
+
+    const filterSelects =
+      filterForm.querySelectorAll("select");
+
+    function resetPageAndSubmit() {
+      if (pageInput) {
+        pageInput.value = "1";
+      }
+
+      filterForm.requestSubmit();
+    }
+
+    filterSelects.forEach((select) => {
+      select.addEventListener(
+        "change",
+        resetPageAndSubmit
+      );
     });
+
+    if (searchInput) {
+      searchInput.addEventListener(
+        "keydown",
+        function (event) {
+          if (event.key !== "Enter") {
+            return;
+          }
+
+          event.preventDefault();
+          resetPageAndSubmit();
+        }
+      );
+    }
   }
 
-  document.addEventListener("keydown", function (event) {
-    if (!modal || modal.hidden) return;
-
-    if (event.key === "Escape") {
-      closeBulkModal();
-    }
-  });
-
-  applyFilters();
+  syncBulkUi();
 }
 
 function initDepartmentPills() {
@@ -924,3 +1022,66 @@ function initDepartmentPills() {
     pill.style.borderColor = color.border;
   });
 }
+
+function initializeSettingsTabs() {
+  const tabs = document.querySelectorAll(".settings-tab[data-tab]");
+
+  if (!tabs.length) {
+    return;
+  }
+
+  const panels = document.querySelectorAll(
+    ".settings-tab-panel[data-panel]"
+  );
+
+  const saveRows = document.querySelectorAll(
+    ".settings-tab-save-row[data-panel-save]"
+  );
+
+  const activeTabInput = document.getElementById("active_tab");
+  const actionInput = document.getElementById("snipeops_action");
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      const tabName = tab.dataset.tab;
+      const actionValue = tab.dataset.actionValue;
+
+      tabs.forEach(function (item) {
+        item.classList.toggle(
+          "active",
+          item.dataset.tab === tabName
+        );
+      });
+
+      panels.forEach(function (panel) {
+        panel.classList.toggle(
+          "active",
+          panel.dataset.panel === tabName
+        );
+      });
+
+      saveRows.forEach(function (row) {
+        row.classList.toggle(
+          "active",
+          row.dataset.panelSave === tabName
+        );
+      });
+
+      if (activeTabInput) {
+        activeTabInput.value = tabName;
+      }
+
+      if (actionInput && actionValue) {
+        actionInput.value = actionValue;
+      }
+
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tabName);
+      window.history.replaceState({}, "", url.toString());
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  initializeSettingsTabs();
+});
