@@ -13,7 +13,21 @@ def run_snipe_catalog_sync():
             or result.get("message")
             or "Snipe Catalog synchronization failed."
         )
+
+        print(
+            f"[snipe-sync] failed: {error}; "
+            f"partial_counts={result.get('counts') or {}}",
+            flush=True,
+        )
+
         raise RuntimeError(error)
+
+    print(
+        "[snipe-sync] successful; "
+        f"last_sync_utc={result.get('last_sync_utc')}; "
+        f"counts={result.get('counts') or {}}",
+        flush=True,
+    )
 
     return result
 

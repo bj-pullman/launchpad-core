@@ -104,6 +104,69 @@ def _run_job_with_tracking(job_def):
         print(f"[tasks] failed {job_id}: {exc}")
         raise
 
+def _run_interval_job_with_tracking(job_def):
+    """
+    Run an interval-based job and create a separate history record
+    for every execution.
+
+    Daily jobs use the date as their unique run key. Interval jobs
+    need a timestamp so multiple executions can be recorded each day.
+    """
+    job_id = job_def["job_id"]
+
+    run_key = datetime.now().astimezone().isoformat(
+        timespec="seconds"
+    )
+
+    mark_job_started(job_id, run_key)
+
+    try:
+        print(
+            f"[tasks] running interval job {job_id} "
+            f"for {run_key}",
+            flush=True,
+        )
+
+        result = job_def["func"]()
+
+        mark_job_finished(job_id, run_key)
+
+        if isinstance(result, dict):
+            counts = result.get("counts") or {}
+            last_sync = result.get("last_sync_utc")
+
+            print(
+                f"[tasks] completed interval job {job_id}; "
+                f"run={run_key}; "
+                f"last_sync_utc={last_sync or 'not provided'}; "
+                f"counts={counts}",
+                flush=True,
+            )
+        else:
+            print(
+                f"[tasks] completed interval job {job_id}; "
+                f"run={run_key}",
+                flush=True,
+            )
+
+        return result
+
+    except Exception as exc:
+        mark_job_failed(
+            job_id,
+            run_key,
+            str(exc),
+        )
+
+        print(
+            f"[tasks] failed interval job {job_id}; "
+            f"run={run_key}; "
+            f"error={exc}",
+            flush=True,
+        )
+
+        raise
+
 
 def run_due_daily_jobs_once():
     for job_def in get_all_jobs():
@@ -254,7 +317,7 @@ def configure_jobs():
                 misfire_grace_time=3600,
             )
 
-                #
+        #
         # Recurring interval jobs
         #
         elif job_def.get("schedule_type") == "interval_minutes":
@@ -276,7 +339,8 @@ def configure_jobs():
             )
 
             scheduler.add_job(
-                job_def["func"],
+                _run_interval_job_with_tracking,
+                args=[job_def],
                 trigger=IntervalTrigger(
                     minutes=interval_minutes,
                 ),

@@ -2304,3 +2304,292 @@ body[data-theme="light"] .recent-activity-table tr.bad td {
         min-width: 0;
     }
 }
+
+/* =========================================================
+   Media Catalog readability and table action improvements
+   ========================================================= */
+
+/*
+ * Improve text rendering across Media Catalog.
+ * The existing 800/900 font weights can appear jagged or pixelated,
+ * especially in Chrome on Windows.
+ */
+.media-page,
+.media-page button,
+.media-page input,
+.media-page select,
+.media-page table,
+.media-page a {
+  font-family: inherit;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+}
+
+/*
+ * Use a slightly lighter weight for controls and table content.
+ * This remains bold enough to read without looking fuzzy.
+ */
+.media-btn,
+.mini-btn,
+.media-select,
+.media-label,
+.cart-index-input,
+.link-button,
+.inline-edit-value,
+.media-sheet th,
+.media-sheet td {
+  font-weight: 700;
+}
+
+.media-sheet td {
+  line-height: 1.35;
+}
+
+.media-sheet th {
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+/*
+ * Avoid transforms on table rows and controls because transformed
+ * text can be rendered on a separate compositing layer and appear soft.
+ */
+.my-carts-table,
+.my-carts-table tr,
+.my-carts-table td,
+.my-carts-table button,
+.my-carts-table input,
+.ownership-carts-table,
+.ownership-carts-table tr,
+.ownership-carts-table td,
+.ownership-carts-table button {
+  transform: none;
+  backface-visibility: visible;
+}
+
+/* ---------- My Carts column sizing ---------- */
+
+.my-carts-table {
+  min-width: 1240px;
+}
+
+/* Move */
+.my-carts-table th:nth-child(1),
+.my-carts-table td:nth-child(1) {
+  width: 55px;
+}
+
+/* Index */
+.my-carts-table th:nth-child(2),
+.my-carts-table td:nth-child(2) {
+  width: 72px;
+}
+
+/* Cart */
+.my-carts-table th:nth-child(3),
+.my-carts-table td:nth-child(3) {
+  width: 285px;
+}
+
+/* Teacher */
+.my-carts-table th:nth-child(4),
+.my-carts-table td:nth-child(4) {
+  width: 255px;
+}
+
+/* Room */
+.my-carts-table th:nth-child(5),
+.my-carts-table td:nth-child(5) {
+  width: 125px;
+}
+
+/* Location */
+.my-carts-table th:nth-child(6),
+.my-carts-table td:nth-child(6) {
+  width: 195px;
+}
+
+/* Devices */
+.my-carts-table th:nth-child(7),
+.my-carts-table td:nth-child(7) {
+  width: 90px;
+  text-align: center;
+}
+
+/* Actions */
+.my-carts-table th:nth-child(8),
+.my-carts-table td:nth-child(8) {
+  width: 215px;
+}
+
+/*
+ * Keep the buttons beside each other rather than stacking.
+ */
+.my-carts-table td:nth-child(8) .cart-action-group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+/*
+ * Give the action buttons consistent dimensions.
+ */
+.my-carts-table td:nth-child(8) .mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0.5rem 0.75rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/*
+ * Details can remain compact.
+ */
+.my-carts-table td:nth-child(8) [data-cart-details-id] {
+  min-width: 72px;
+}
+
+/*
+ * Unassign Cart gets enough space to stay on one line.
+ */
+.my-carts-table td:nth-child(8) [data-unassign-cart-id] {
+  min-width: 112px;
+}
+
+/* ---------- Cleaner destructive button ---------- */
+
+body[data-theme="light"]
+.my-carts-table
+[data-unassign-cart-id] {
+  background: #ffffff;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+body[data-theme="light"]
+.my-carts-table
+[data-unassign-cart-id]:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+body[data-theme="dark"]
+.my-carts-table
+[data-unassign-cart-id] {
+  background: rgba(185, 28, 28, 0.08);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+body[data-theme="dark"]
+.my-carts-table
+[data-unassign-cart-id]:hover {
+  background: rgba(185, 28, 28, 0.16);
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
+/* ---------- Ownership Management actions ---------- */
+
+.ownership-carts-table td:last-child {
+  min-width: 300px;
+}
+
+.ownership-carts-table td:last-child {
+  white-space: nowrap;
+}
+
+.ownership-carts-table td:last-child .mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.15rem 0.2rem 0.15rem 0;
+  min-height: 36px;
+  padding: 0.45rem 0.65rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body[data-theme="light"]
+.ownership-carts-table
+[data-admin-unassign-cart-id] {
+  background: #ffffff;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+body[data-theme="light"]
+.ownership-carts-table
+[data-admin-unassign-cart-id]:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+/* ---------- Inputs and pagination ---------- */
+
+.media-table-tools .media-input {
+  min-height: 42px;
+}
+
+.media-pagination .mini-btn,
+.media-pagination .media-select {
+  min-height: 38px;
+}
+
+.media-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 500;
+}
+
+/* ---------- Responsive behavior ---------- */
+
+@media (max-width: 1350px) {
+  .my-carts-table {
+    min-width: 1180px;
+  }
+
+  .my-carts-table th:nth-child(3),
+  .my-carts-table td:nth-child(3) {
+    width: 260px;
+  }
+
+  .my-carts-table th:nth-child(4),
+  .my-carts-table td:nth-child(4) {
+    width: 225px;
+  }
+
+  .my-carts-table th:nth-child(6),
+  .my-carts-table td:nth-child(6) {
+    width: 170px;
+  }
+
+  .my-carts-table th:nth-child(8),
+  .my-carts-table td:nth-child(8) {
+    width: 205px;
+  }
+}
+
+@media (max-width: 900px) {
+  .media-table-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .media-table-tools .media-input {
+    max-width: none;
+  }
+
+  .media-pagination {
+    justify-content: flex-start;
+  }
+}

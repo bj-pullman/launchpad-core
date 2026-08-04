@@ -45,6 +45,7 @@ from apps.snipeops.media_catalog.media_catalog_db import (
     list_cart_owners,
     get_cart_ownership,
     claim_cart,
+    unassign_cart,
     update_cart_metadata,
     update_cart_metadata_admin,
     reorder_owned_cart,
@@ -465,6 +466,90 @@ def api_claim_cart(cart_id: int):
         "ownership": ownership,
     })
 
+@bp.post("/api/carts/<int:cart_id>/unassign")
+@login_required
+@require_permission("snipeops.media_catalog.manage")
+def api_unassign_cart(cart_id: int):
+    actor_user = _current_user_profile()
+    cart = get_asset(cart_id)
+    ownership = get_cart_ownership(cart_id)
+
+    if not actor_user:
+        return jsonify({
+            "ok": False,
+            "error": "Current user profile not found.",
+        }), 404
+
+    if not cart:
+        return jsonify({
+            "ok": False,
+            "error": "Cart not found.",
+        }), 404
+
+    if not ownership:
+        return jsonify({
+            "ok": False,
+            "error": "This cart is not currently assigned to a Media Catalog owner.",
+        }), 404
+
+    can_manage_all_ownership = _can_manage_ownership()
+
+    expected_owner_user_id = (
+        None
+        if can_manage_all_ownership
+        else int(actor_user["id"])
+    )
+
+    try:
+        previous_ownership = unassign_cart(
+            cart_asset_id=cart_id,
+            expected_owner_user_id=expected_owner_user_id,
+        )
+    except ValueError as exc:
+        return jsonify({
+            "ok": False,
+            "error": str(exc),
+        }), 403
+
+    if not previous_ownership:
+        return jsonify({
+            "ok": False,
+            "error": "Cart ownership record was not found.",
+        }), 404
+
+    previous_owner = (
+        previous_ownership.get("owner_display_name")
+        or previous_ownership.get("owner_email")
+        or "the previous owner"
+    )
+
+    cart_label = (
+        cart.get("asset_tag")
+        or cart.get("name")
+        or f"Cart {cart_id}"
+    )
+
+    message = (
+        f'Cart "{cart_label}" was unassigned from {previous_owner}. '
+        "Devices remain assigned to the cart."
+    )
+
+    log_media_action(
+        action="unassigned_cart",
+        cart_asset=cart,
+        device_asset=None,
+        ok=True,
+        message=message,
+        actor_user=actor_user,
+    )
+
+    return jsonify({
+        "ok": True,
+        "message": message,
+        "cart": _asset_payload(cart),
+        "previous_ownership": previous_ownership,
+    })
+
 
 @bp.post("/api/add-to-cart")
 @login_required
@@ -719,6 +804,128 @@ def api_remove_from_cart():
             "error": str(exc),
             "previous_cart_id": previous_cart_id,
         }), 500
+
+@bp.post("/api/carts/<int:cart_id>/remove-all-devices")
+@login_required
+@require_permission("snipeops.media_catalog.manage")
+def api_remove_all_devices(cart_id: int):
+    actor_user = _current_user_profile()
+    cart = get_asset(cart_id)
+
+    if not actor_user:
+        return jsonify({
+            "ok": False,
+            "error": "Current user profile not found.",
+        }), 404
+
+    if not cart:
+        return jsonify({
+            "ok": False,
+            "error": "Cart not found.",
+        }), 404
+
+    devices = get_assets_assigned_to_asset(cart_id)
+
+    if not devices:
+        return jsonify({
+            "ok": True,
+            "message": "This cart does not have any assigned devices.",
+            "cart": _asset_payload(cart),
+            "removed_count": 0,
+            "failed_count": 0,
+            "failures": [],
+        })
+
+    removed_devices = []
+    failures = []
+
+    for device in devices:
+        try:
+            checkin_asset(
+                asset_id=int(device["id"]),
+                note=(
+                    "Removed through the Remove All Devices action in "
+                    "SnipeOps Media Catalog."
+                ),
+            )
+
+            updated_device = update_asset_assignment(
+                int(device["id"]),
+                assigned_type=None,
+                assigned_id=None,
+                assigned_name=None,
+            )
+
+            removed_devices.append(
+                _asset_payload(updated_device or device)
+            )
+
+        except Exception as exc:
+            failures.append({
+                "device_id": device.get("id"),
+                "asset_tag": device.get("asset_tag") or "",
+                "serial": device.get("serial") or "",
+                "name": device.get("name") or "",
+                "error": str(exc),
+            })
+
+    removed_count = len(removed_devices)
+    failed_count = len(failures)
+    total_count = len(devices)
+
+    cart_label = (
+        cart.get("asset_tag")
+        or cart.get("name")
+        or f"Cart {cart_id}"
+    )
+
+    if removed_count == total_count:
+        action = "removed_all_devices"
+        ok = True
+        message = (
+            f'Removed all {removed_count} device(s) from cart '
+            f'"{cart_label}" and checked them into Snipe-IT.'
+        )
+
+    elif removed_count > 0:
+        action = "remove_all_devices_partial"
+        ok = False
+        message = (
+            f'Removed {removed_count} of {total_count} device(s) from '
+            f'cart "{cart_label}". {failed_count} device(s) could not '
+            "be removed."
+        )
+
+    else:
+        action = "remove_all_devices_failed"
+        ok = False
+        message = (
+            f'No devices could be removed from cart "{cart_label}". '
+            f"All {failed_count} removal attempt(s) failed."
+        )
+
+    log_media_action(
+        action=action,
+        cart_asset=cart,
+        device_asset=None,
+        ok=ok,
+        message=message,
+        actor_user=actor_user,
+    )
+
+    return jsonify({
+        # Keep this response HTTP 200 so the frontend can display
+        # useful partial-success information.
+        "ok": True,
+        "complete_success": failed_count == 0,
+        "partial_success": removed_count > 0 and failed_count > 0,
+        "message": message,
+        "cart": _asset_payload(cart),
+        "removed_count": removed_count,
+        "failed_count": failed_count,
+        "removed_devices": removed_devices,
+        "failures": failures,
+    })
 
 
 @bp.post("/api/sync-snipe")

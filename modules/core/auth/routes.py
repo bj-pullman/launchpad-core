@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from urllib.parse import urlsplit
 
 from flask import (
     current_app,
@@ -32,6 +33,34 @@ def utcnow():
 
 def to_iso(dt):
     return dt.isoformat()
+
+def safe_post_login_redirect(
+    target: str | None,
+    default: str | None = None,
+) -> str:
+    fallback = default or url_for("launchpad_ui.home")
+    target = (target or "").strip()
+
+    if not target:
+        return fallback
+
+    parsed = urlsplit(target)
+
+    if parsed.scheme or parsed.netloc:
+        return fallback
+
+    if not target.startswith("/") or target.startswith("//"):
+        return fallback
+
+    login_path = url_for("auth.login")
+
+    if (
+        parsed.path == login_path
+        or parsed.path.startswith(f"{login_path}/")
+    ):
+        return fallback
+
+    return target
 
 
 def allowed_domain(email: str) -> bool:
@@ -161,15 +190,25 @@ def ensure_google_oauth_client(settings: dict):
 
 @bp.route("/login", methods=["GET"])
 def login():
+    next_url = safe_post_login_redirect(
+        request.args.get("next"),
+        url_for("launchpad_ui.home"),
+    )
+
     if session.get("is_authenticated"):
-        return redirect(request.args.get("next") or url_for("launchpad_ui.home"))
+        return redirect(next_url)
 
     settings = get_auth_settings()
-    next_url = request.args.get("next", "/")
 
     local_enabled = settings.get("local_enabled", True)
-    local_mode = settings.get("local_mode", "breakglass_only")
-    hide_local_form = settings.get("local_hide_form_when_restricted", False)
+    local_mode = settings.get(
+        "local_mode",
+        "breakglass_only",
+    )
+    hide_local_form = settings.get(
+        "local_hide_form_when_restricted",
+        False,
+    )
 
     show_local_form = False
     show_emergency_login = False
@@ -186,10 +225,22 @@ def login():
         next_url=next_url,
         show_local_form=show_local_form,
         show_emergency_login=show_emergency_login,
-        google_oidc_enabled=settings.get("google_oidc_enabled", False),
-        microsoft_oidc_enabled=settings.get("microsoft_oidc_enabled", False),
-        saml_enabled=settings.get("saml_enabled", False),
-        primary_method=settings.get("primary_method", "local"),
+        google_oidc_enabled=settings.get(
+            "google_oidc_enabled",
+            False,
+        ),
+        microsoft_oidc_enabled=settings.get(
+            "microsoft_oidc_enabled",
+            False,
+        ),
+        saml_enabled=settings.get(
+            "saml_enabled",
+            False,
+        ),
+        primary_method=settings.get(
+            "primary_method",
+            "local",
+        ),
     )
 
 @bp.route("/login/local", methods=["POST"])
@@ -205,7 +256,10 @@ def local_login():
 
     username = (request.form.get("username") or "").strip()
     password = request.form.get("password") or ""
-    next_url = (request.form.get("next") or "/").strip()
+    next_url = safe_post_login_redirect(
+        request.form.get("next"),
+        url_for("launchpad_ui.home"),
+    )
 
     result = verify_local_login(username, password)
     if not result:
@@ -251,11 +305,15 @@ def local_login():
 
 @bp.route("/login/emergency", methods=["GET"])
 def emergency_login():
+    next_url = safe_post_login_redirect(
+        request.args.get("next"),
+        url_for("launchpad_ui.home"),
+    )
+
     if session.get("is_authenticated"):
-        return redirect(request.args.get("next") or url_for("launchpad_ui.home"))
+        return redirect(next_url)
 
     settings = get_auth_settings()
-    next_url = request.args.get("next", "/")
 
     if not settings.get("local_enabled", True):
         flash("Emergency local sign-in is not available.", "error")
@@ -290,7 +348,10 @@ def google_start():
         flash("Google sign-in is not fully configured.", "error")
         return redirect(url_for("auth.login"))
 
-    next_url = request.args.get("next", "/")
+    next_url = safe_post_login_redirect(
+        request.args.get("next"),
+        url_for("launchpad_ui.home"),
+    )
     remember = request.args.get("remember", "0")
 
     session["post_login_redirect"] = next_url
@@ -393,12 +454,19 @@ def google_callback():
         return redirect(url_for("auth.login"))
 
     update_last_login_at(local_user["id"])
+
     remember = session.get("requested_remember") == "1"
 
-    start_user_session(local_user, userinfo, remember=remember)
+    next_url = safe_post_login_redirect(
+        session.get("post_login_redirect"),
+        url_for("launchpad_ui.home"),
+    )
 
-    next_url = session.pop("post_login_redirect", "/")
-    session.pop("requested_remember", None)
+    start_user_session(
+        local_user,
+        userinfo,
+        remember=remember,
+    )
 
     return redirect(next_url)
 

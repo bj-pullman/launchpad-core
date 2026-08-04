@@ -377,6 +377,110 @@ def claim_cart(*, cart_asset: dict, user: dict) -> dict:
 
     return get_cart_ownership(cart_asset_id)
 
+def unassign_cart(
+    *,
+    cart_asset_id: int,
+    expected_owner_user_id: int | None = None,
+) -> dict | None:
+    init_db()
+
+    cart_asset_id = int(cart_asset_id)
+    now = _now_iso()
+
+    with _connect() as conn:
+        ownership_row = conn.execute(
+            """
+            SELECT *
+            FROM media_cart_ownership
+            WHERE cart_asset_id = ?
+            """,
+            (cart_asset_id,),
+        ).fetchone()
+
+        if not ownership_row:
+            return None
+
+        ownership = dict(ownership_row)
+        previous_owner_user_id = ownership.get("owner_user_id")
+
+        if expected_owner_user_id is not None:
+            if int(previous_owner_user_id or 0) != int(expected_owner_user_id):
+                raise ValueError(
+                    "You can only unassign carts that are assigned to you."
+                )
+
+        conn.execute(
+            """
+            INSERT INTO media_cart_ownership_history (
+                created_at,
+                cart_asset_id,
+                cart_asset_tag,
+                cart_name,
+                action,
+                previous_owner_user_id,
+                previous_owner_email,
+                previous_owner_display_name,
+                new_owner_user_id,
+                new_owner_email,
+                new_owner_display_name
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                now,
+                cart_asset_id,
+                ownership.get("cart_asset_tag"),
+                ownership.get("cart_name"),
+                "unassigned",
+                ownership.get("owner_user_id"),
+                ownership.get("owner_email"),
+                ownership.get("owner_display_name"),
+                None,
+                None,
+                None,
+            ),
+        )
+
+        conn.execute(
+            """
+            DELETE FROM media_cart_ownership
+            WHERE cart_asset_id = ?
+            """,
+            (cart_asset_id,),
+        )
+
+        if previous_owner_user_id is not None:
+            remaining_rows = conn.execute(
+                """
+                SELECT id
+                FROM media_cart_ownership
+                WHERE owner_user_id = ?
+                ORDER BY
+                    COALESCE(display_order, 999999),
+                    cart_asset_tag,
+                    cart_name
+                """,
+                (int(previous_owner_user_id),),
+            ).fetchall()
+
+            for display_order, row in enumerate(remaining_rows, start=1):
+                conn.execute(
+                    """
+                    UPDATE media_cart_ownership
+                    SET display_order = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        display_order,
+                        now,
+                        row["id"],
+                    ),
+                )
+
+        conn.commit()
+
+    return ownership
+
 def normalize_cart_order(owner_user_id: int) -> None:
     with _connect() as conn:
         rows = conn.execute(

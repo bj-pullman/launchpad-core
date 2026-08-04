@@ -33,8 +33,30 @@ function setStatus(message, ok = true) {
 
 function setDeviceCount(count) {
     const el = $("deviceCount");
-    if (!el) return;
-    el.textContent = Number.isFinite(Number(count)) ? String(count) : "—";
+
+    if (el) {
+        el.textContent = Number.isFinite(Number(count))
+            ? String(count)
+            : "—";
+    }
+
+    updateRemoveAllDevicesButton(
+        Number.isFinite(Number(count))
+            ? Number(count)
+            : sheetDevices.size
+    );
+}
+
+function updateRemoveAllDevicesButton(count = sheetDevices.size) {
+    const button = $("removeAllDevicesBtn");
+    if (!button) return;
+
+    const deviceCount = Number(count) || 0;
+
+    button.disabled = !selectedCart || deviceCount < 1;
+    button.textContent = deviceCount > 0
+        ? `Remove All Devices (${deviceCount})`
+        : "Remove All Devices";
 }
 
 function escapeHtml(value) {
@@ -107,6 +129,7 @@ async function initMediaCatalog() {
     bindFindCartToggle();
     bindRefreshMyCarts();
     bindDeviceAdd();
+    bindRemoveAllDevices();
     bindSyncButton();
     bindConfirmModal();
     bindDeviceDetailModal();
@@ -426,6 +449,27 @@ function bindMyCartTableEvents(carts) {
 
         input.addEventListener("click", event => {
             event.stopPropagation();
+        });
+    });
+
+    document.querySelectorAll(
+        "#myCartsBody [data-unassign-cart-id]"
+    ).forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cart = carts.find(
+                item =>
+                    String(item.id) ===
+                    String(btn.dataset.unassignCartId)
+            );
+
+            if (cart) {
+                requestUnassignCart(cart, {
+                    source: "cart-management"
+                });
+            }
         });
     });
 
@@ -858,6 +902,137 @@ async function claimCart(cart) {
     }
 }
 
+function requestUnassignCart(cart, options = {}) {
+    if (!cart) return;
+
+    const ownership = cart.ownership || {};
+    const ownerName =
+        ownership.owner_display_name ||
+        ownership.owner_email ||
+        options.owner?.owner_display_name ||
+        options.owner?.owner_email ||
+        "the current owner";
+
+    const cartLabel = cartDisplayName(cart);
+
+    openConfirmModal({
+        title: "Unassign Cart?",
+        messageHtml: `
+            <p class="confirm-copy">
+                Remove this cart from the Media Catalog owner?
+            </p>
+
+            <div class="ownership-detail-card">
+                <div class="ownership-detail-heading">
+                    Unassign Cart
+                </div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">Cart</div>
+                    <div class="ownership-detail-value">
+                        ${escapeHtml(cartLabel)}
+                    </div>
+                </div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">
+                        Current Owner
+                    </div>
+                    <div class="ownership-detail-value">
+                        ${escapeHtml(ownerName)}
+                    </div>
+                </div>
+            </div>
+
+            <p class="confirm-copy confirm-warning">
+                This removes the cart from the owner's Media Catalog.
+                Devices currently inside the cart will remain assigned
+                to the cart in Snipe-IT.
+            </p>
+        `,
+        buttonText: "Unassign Cart",
+        action: async () => unassignCart(cart, options)
+    });
+}
+
+
+async function unassignCart(cart, options = {}) {
+    if (!cart) return;
+
+    setStatus("Unassigning cart...", true);
+
+    try {
+        const data = await apiPost(
+            `/api/carts/${cart.id}/unassign`,
+            {},
+            "Unable to unassign cart."
+        );
+
+        const wasSelected =
+            selectedCart &&
+            String(selectedCart.id) === String(cart.id);
+
+        prependRecent(
+            "unassigned_cart",
+            null,
+            data.cart || cart,
+            true,
+            data.message || "Cart unassigned."
+        );
+
+        if (wasSelected) {
+            hideSelectedCartPanel(false);
+        }
+
+        await refreshMediaCatalogViews();
+
+        if (
+            options.source === "ownership-management" &&
+            ownershipSelectedUser
+        ) {
+            const selectedOwnerId =
+                ownershipSelectedUser.owner_user_id;
+
+            await loadOwnershipOwners();
+
+                const stillExists = ownershipOwnersCache.find(
+                    owner =>
+                        String(owner.owner_user_id) ===
+                        String(selectedOwnerId)
+                );
+
+            if (stillExists) {
+                ownershipSelectedUser = stillExists;
+                await loadOwnershipUserCarts(stillExists);
+            } else {
+                ownershipSelectedUser = null;
+
+                const ownerCarts = $("ownershipUserCarts");
+                if (ownerCarts) {
+                    ownerCarts.innerHTML = `
+                        <div class="muted">
+                            The selected user no longer has any
+                            assigned carts.
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        setStatus(
+            data.message || "Cart unassigned.",
+            true
+        );
+
+    } catch (err) {
+        setStatus(
+            err.message || "Unable to unassign cart.",
+            false
+        );
+    }
+}
+
+
 function bindDeviceAdd() {
     const input = $("deviceInput");
     const btn = $("deviceAddBtn");
@@ -1100,6 +1275,224 @@ async function removeFromCart(device) {
         );
     }
 }
+
+function bindRemoveAllDevices() {
+    $("removeAllDevicesBtn")?.addEventListener(
+        "click",
+        requestRemoveAllDevices
+    );
+}
+
+
+function requestRemoveAllDevices() {
+    if (!selectedCart) {
+        setStatus(
+            "Select a cart before removing devices.",
+            false
+        );
+        return;
+    }
+
+    const deviceCount = sheetDevices.size;
+
+    if (deviceCount < 1) {
+        setStatus(
+            "This cart does not have any assigned devices.",
+            false
+        );
+        return;
+    }
+
+    const cartLabel = cartDisplayName(selectedCart);
+
+    openConfirmModal({
+        title: "Remove All Devices?",
+        messageHtml: `
+            <p class="confirm-copy">
+                You are about to remove every device from this cart.
+            </p>
+
+            <div class="ownership-detail-card">
+                <div class="ownership-detail-heading">
+                    Destructive Action
+                </div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">Cart</div>
+                    <div class="ownership-detail-value">
+                        ${escapeHtml(cartLabel)}
+                    </div>
+                </div>
+
+                <div class="ownership-detail-row">
+                    <div class="ownership-detail-label">
+                        Devices
+                    </div>
+                    <div class="ownership-detail-value">
+                        ${escapeHtml(deviceCount)}
+                    </div>
+                </div>
+            </div>
+
+            <p class="confirm-copy confirm-warning">
+                Each device will be checked into Snipe-IT and removed
+                from this cart. This action cannot be undone as one
+                operation.
+            </p>
+        `,
+        buttonText: "Remove All Devices",
+        action: removeAllDevicesFromSelectedCart
+    });
+}
+
+
+async function removeAllDevicesFromSelectedCart() {
+    if (!selectedCart) return;
+
+    const cart = selectedCart;
+    const button = $("removeAllDevicesBtn");
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Removing Devices...";
+    }
+
+    setStatus(
+        "Removing all devices from the cart...",
+        true
+    );
+
+    try {
+        const data = await apiPost(
+            `/api/carts/${cart.id}/remove-all-devices`,
+            {},
+            "Unable to remove all devices."
+        );
+
+        prependRecent(
+            data.complete_success
+                ? "removed_all_devices"
+                : data.partial_success
+                    ? "remove_all_devices_partial"
+                    : "remove_all_devices_failed",
+            null,
+            data.cart || cart,
+            Boolean(data.complete_success),
+            data.message || "Remove All Devices completed."
+        );
+
+        await refreshMediaCatalogViews();
+
+        if (
+            selectedCart &&
+            String(selectedCart.id) === String(cart.id)
+        ) {
+            await selectCart(data.cart || cart);
+        }
+
+        if (Number(data.failed_count || 0) > 0) {
+            const failureSummary = (data.failures || [])
+                .slice(0, 5)
+                .map(failure => {
+                    const identifier =
+                        failure.asset_tag ||
+                        failure.serial ||
+                        failure.device_id ||
+                        "Unknown device";
+
+                    return `
+                        <div class="ownership-detail-row">
+                            <div class="ownership-detail-label">
+                                ${escapeHtml(identifier)}
+                            </div>
+                            <div class="ownership-detail-value">
+                                ${escapeHtml(
+                                    failure.error ||
+                                    "Removal failed."
+                                )}
+                            </div>
+                        </div>
+                    `;
+                })
+                .join("");
+
+            openConfirmModal({
+                title: data.partial_success
+                    ? "Some Devices Were Not Removed"
+                    : "Devices Could Not Be Removed",
+                messageHtml: `
+                    <p class="confirm-copy">
+                        ${escapeHtml(data.message || "")}
+                    </p>
+
+                    <div class="ownership-detail-card">
+                        <div class="ownership-detail-heading">
+                            Removal Results
+                        </div>
+
+                        <div class="ownership-detail-row">
+                            <div class="ownership-detail-label">
+                                Removed
+                            </div>
+                            <div class="ownership-detail-value">
+                                ${escapeHtml(
+                                    data.removed_count || 0
+                                )}
+                            </div>
+                        </div>
+
+                        <div class="ownership-detail-row">
+                            <div class="ownership-detail-label">
+                                Failed
+                            </div>
+                            <div class="ownership-detail-value">
+                                ${escapeHtml(
+                                    data.failed_count || 0
+                                )}
+                            </div>
+                        </div>
+
+                        ${failureSummary}
+                    </div>
+                `,
+                buttonText: "Close",
+                action: async () => {}
+            });
+
+            setStatus(
+                data.message ||
+                "Some devices could not be removed.",
+                false
+            );
+        } else {
+            setStatus(
+                data.message ||
+                "All devices were removed from the cart.",
+                true
+            );
+        }
+
+    } catch (err) {
+        await refreshMediaCatalogViews();
+
+        if (
+            selectedCart &&
+            String(selectedCart.id) === String(cart.id)
+        ) {
+            await selectCart(cart);
+        }
+
+        setStatus(
+            err.message ||
+            "Unable to remove all devices.",
+            false
+        );
+
+    } finally {
+        updateRemoveAllDevicesButton(sheetDevices.size);
+    }
+}
+
 
 function renderSheetEmpty(message) {
     const tbody = $("sheetBody");
@@ -1564,13 +1957,20 @@ function friendlyAction(action) {
         move_failed: "Move Failed",
         add_failed: "Add Failed",
         assigned_cart_owner: "Assigned Cart Owner",
+        unassigned_cart: "Unassigned Cart",
+        removed_all_devices: "Removed All Devices",
+        remove_all_devices_partial: "Remove All Devices - Partial",
+        remove_all_devices_failed: "Remove All Devices Failed",
         updated_cart_metadata: "Updated Cart Fields",
         reordered_cart: "Reordered Cart",
         admin_updated_cart_metadata: "Admin Updated Cart Fields",
         updated_cart_location: "Updated Cart Location",
     };
 
-    return labels[action] || String(action || "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+    return labels[action] ||
+        String(action || "")
+            .replaceAll("_", " ")
+            .replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function bindAssignOwnerModal() {
@@ -2296,12 +2696,28 @@ function renderOwnershipUserCarts(owner, carts) {
                                         </span>
                                     </td>
                                     <td>
-                                        <button class="mini-btn" type="button" data-admin-assign-owner-id="${escapeHtml(cart.id)}">
-                                            Assign Owner
-                                        </button>
-                                        <a class="mini-btn" href="${MEDIA_CATALOG_BASE}/export/cart/${encodeURIComponent(cart.id)}.pdf">
-                                            Export
-                                        </a>
+                                    <button
+                                        class="mini-btn"
+                                        type="button"
+                                        data-admin-assign-owner-id="${escapeHtml(cart.id)}"
+                                    >
+                                        Assign Owner
+                                    </button>
+
+                                    <button
+                                        class="mini-btn remove"
+                                        type="button"
+                                        data-admin-unassign-cart-id="${escapeHtml(cart.id)}"
+                                    >
+                                        Unassign Cart
+                                    </button>
+
+                                    <a
+                                        class="mini-btn"
+                                        href="${MEDIA_CATALOG_BASE}/export/cart/${encodeURIComponent(cart.id)}.pdf"
+                                    >
+                                        Export
+                                    </a>
                                         ${cart.asset_url ? `<a class="mini-btn" href="${escapeHtml(cart.asset_url)}" target="_blank" rel="noopener">Snipe-IT</a>` : ""}
                                     </td>
                                 </tr>
@@ -2334,6 +2750,28 @@ function bindOwnershipUserCartEvents(carts) {
         btn.addEventListener("click", () => {
             const cart = carts.find(item => String(item.id) === String(btn.dataset.adminAssignOwnerId));
             if (cart) openAssignOwnerModal(cart);
+        });
+    });
+
+    document.querySelectorAll(
+        "[data-admin-unassign-cart-id]"
+    ).forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cart = carts.find(
+                item =>
+                    String(item.id) ===
+                    String(btn.dataset.adminUnassignCartId)
+            );
+
+            if (cart) {
+                requestUnassignCart(cart, {
+                    source: "ownership-management",
+                    owner: ownershipSelectedUser
+                });
+            }
         });
     });
 
@@ -2472,7 +2910,25 @@ function drawMyCartsRows(rows) {
                         ${escapeHtml(cart.device_count || 0)}
                     </span>
                 </td>
-                <td><button class="mini-btn" type="button" data-cart-details-id="${escapeHtml(cart.id)}">Details</button></td>
+                <td>
+                    <div class="cart-action-group">
+                        <button
+                            class="mini-btn"
+                            type="button"
+                            data-cart-details-id="${escapeHtml(cart.id)}"
+                        >
+                            Details
+                        </button>
+
+                        <button
+                            class="mini-btn remove"
+                            type="button"
+                            data-unassign-cart-id="${escapeHtml(cart.id)}"
+                        >
+                            Unassign Cart
+                        </button>
+                    </div>
+                </td>
             </tr>
         `;
     }).join("");

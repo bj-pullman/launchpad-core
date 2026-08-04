@@ -1,4 +1,5 @@
 from functools import wraps
+from urllib.parse import urlsplit
 
 from flask import flash, jsonify, redirect, request, session, url_for
 
@@ -16,25 +17,56 @@ def _wants_json_response():
     )
 
 
+def _safe_requested_url() -> str:
+    target = request.full_path or request.path or "/"
+
+    if target.endswith("?"):
+        target = target[:-1]
+
+    parsed = urlsplit(target)
+
+    if parsed.scheme or parsed.netloc:
+        return "/"
+
+    if not target.startswith("/") or target.startswith("//"):
+        return "/"
+
+    return target
+
+
 def _auth_failed_response():
+    next_url = _safe_requested_url()
+
     if _wants_json_response():
         return jsonify({
             "ok": False,
             "error": "Authentication required. Please sign in again.",
-            "redirect": url_for("auth.login", next=request.path),
+            "redirect": url_for("auth.login", next=next_url),
         }), 401
 
-    return redirect(url_for("auth.login", next=request.path))
+    return redirect(
+        url_for(
+            "auth.login",
+            next=next_url,
+        )
+    )
 
 
 def _permission_failed_response():
     if _wants_json_response():
         return jsonify({
             "ok": False,
-            "error": "Access denied. You do not have permission to perform this action.",
+            "error": (
+                "Access denied. You do not have permission "
+                "to perform this action."
+            ),
         }), 403
 
-    flash("You do not have permission to access that page.", "error")
+    flash(
+        "You do not have permission to access that page.",
+        "error",
+    )
+
     return redirect(url_for("launchpad_ui.home"))
 
 
@@ -56,7 +88,9 @@ def require_permission(permission_key: str):
             if not session.get("is_authenticated"):
                 return _auth_failed_response()
 
-            permissions = set(session.get("user_permissions", []))
+            permissions = set(
+                session.get("user_permissions", [])
+            )
 
             if permission_key not in permissions:
                 return _permission_failed_response()
