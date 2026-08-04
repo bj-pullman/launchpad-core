@@ -19,6 +19,8 @@ from reportlab.platypus import (
     PageBreak,
 )
 
+from tasks.job_runs import get_recent_job_runs
+
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.identity.user_service import get_user_by_id
 from modules.core.identity.identity_db import get_connection
@@ -317,16 +319,66 @@ def _send_pdf(buffer: BytesIO, filename: str):
         download_name=filename,
     )
 
+def _catalog_sync_runs(limit: int = 15) -> list[dict]:
+    runs = get_recent_job_runs(
+        job_id="snipe.catalog_sync",
+        limit=limit,
+    )
+
+    payload = []
+
+    for run in runs:
+        status = str(run.get("status") or "").strip().lower()
+
+        started_at = run.get("started_at")
+        finished_at = run.get("finished_at")
+
+        duration_seconds = None
+
+        if started_at and finished_at:
+            try:
+                started = datetime.fromisoformat(
+                    str(started_at).replace("Z", "+00:00")
+                )
+                finished = datetime.fromisoformat(
+                    str(finished_at).replace("Z", "+00:00")
+                )
+
+                duration_seconds = max(
+                    0,
+                    round(
+                        (finished - started).total_seconds(),
+                        1,
+                    ),
+                )
+            except (TypeError, ValueError):
+                duration_seconds = None
+
+        payload.append({
+            **run,
+            "status": status or "unknown",
+            "duration_seconds": duration_seconds,
+        })
+
+    return payload
+
 
 @bp.get("/")
 @login_required
 @require_permission("snipeops.media_catalog.view")
 def index():
-    system_timezone = get_setting("general.timezone", "America/Chicago") or "America/Chicago"
+    system_timezone = (
+        get_setting(
+            "general.timezone",
+            "America/Chicago",
+        )
+        or "America/Chicago"
+    )
 
     return render_template(
         "media_catalog/index.html",
         recent=get_recent(50),
+        catalog_sync_runs=_catalog_sync_runs(15),
         system_timezone=system_timezone,
     )
 

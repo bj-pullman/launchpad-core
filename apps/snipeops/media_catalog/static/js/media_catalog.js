@@ -139,6 +139,7 @@ async function initMediaCatalog() {
     bindOwnershipManagement();
     bindExportButtons();
     bindRecentActivityFilter();
+    hydrateActivityTimes();
     initManagedDeviceTotals();
 
     renderSheetEmpty("Select a cart to load assigned devices.");
@@ -1723,7 +1724,14 @@ function prependRecent(action, device, cart, ok, message) {
     tr.className = ok ? "ok" : "bad";
 
     tr.innerHTML = `
-        <td class="mono">${escapeHtml(new Date().toISOString())}</td>
+        <td>
+            <time
+                class="activity-time"
+                data-utc="${escapeHtml(new Date().toISOString())}"
+            >
+                ${escapeHtml(formatActivityDateTime(new Date().toISOString()))}
+            </time>
+        </td>
         <td>${escapeHtml(friendlyAction(action))}</td>
         <td>${escapeHtml(currentUser?.display_name || currentUser?.email || "—")}</td>
         <td class="mono">${escapeHtml(device?.asset_tag || device?.name || device?.id || "—")}</td>
@@ -1734,6 +1742,7 @@ function prependRecent(action, device, cart, ok, message) {
     `;
 
     tbody.prepend(tr);
+    hydrateActivityTimes(tr);
 }
 
 async function moveDeviceToCart(device, destinationCart) {
@@ -3304,6 +3313,66 @@ function formatFriendlyDateTime(value) {
             minute: "2-digit",
         });
     }
+}
+
+function formatActivityDateTime(value) {
+    if (!value) return "—";
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+        return String(value);
+    }
+
+    const options = {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+    };
+
+    if (window.MEDIA_CATALOG_TIMEZONE) {
+        options.timeZone = window.MEDIA_CATALOG_TIMEZONE;
+        options.timeZoneName = "short";
+    }
+
+    try {
+        return parsed.toLocaleString(
+            undefined,
+            options
+        );
+    } catch {
+        delete options.timeZone;
+        delete options.timeZoneName;
+
+        return parsed.toLocaleString(
+            undefined,
+            options
+        );
+    }
+}
+
+
+function hydrateActivityTimes(root = document) {
+    root
+        .querySelectorAll(".activity-time[data-utc]")
+        .forEach(element => {
+            const value = element.dataset.utc;
+
+            element.textContent =
+                formatActivityDateTime(value);
+
+            if (value) {
+                element.setAttribute(
+                    "datetime",
+                    value
+                );
+
+                element.title = value;
+            }
+        });
 }
 
 function initManagedDeviceTotals() {

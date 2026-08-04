@@ -105,3 +105,63 @@ def mark_job_failed(job_id: str, run_date: str, error: str):
             (now, error[:2000], now, job_id, run_date),
         )
         conn.commit()
+
+def get_recent_job_runs(
+    job_id: str | None = None,
+    limit: int = 25,
+) -> list[dict]:
+    """
+    Return recent scheduled job executions, newest first.
+
+    Interval jobs use an ISO timestamp in run_date so that every
+    execution can be stored separately.
+    """
+    init_job_runs_db()
+
+    safe_limit = max(1, min(int(limit or 25), 250))
+
+    with get_connection() as conn:
+        if job_id:
+            rows = conn.execute(
+                """
+                SELECT
+                    id,
+                    job_id,
+                    run_date,
+                    status,
+                    started_at,
+                    finished_at,
+                    error,
+                    created_at,
+                    updated_at
+                FROM scheduled_job_runs
+                WHERE job_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (
+                    str(job_id),
+                    safe_limit,
+                ),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT
+                    id,
+                    job_id,
+                    run_date,
+                    status,
+                    started_at,
+                    finished_at,
+                    error,
+                    created_at,
+                    updated_at
+                FROM scheduled_job_runs
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+
+    return [dict(row) for row in rows]

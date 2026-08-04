@@ -2593,3 +2593,493 @@ body[data-theme="light"]
     justify-content: flex-start;
   }
 }
+
+/* =========================================================
+   Recent activity and catalog sync history
+   ========================================================= */
+
+.recent-activity-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+/* ---------- Shared table formatting ---------- */
+
+.recent-activity-sheet-wrap,
+.job-history-sheet-wrap {
+  overflow-x: auto;
+  border-radius: 14px;
+}
+
+.recent-activity-table,
+.job-history-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.recent-activity-table th,
+.recent-activity-table td,
+.job-history-table th,
+.job-history-table td {
+  vertical-align: top;
+  padding: 0.72rem 0.68rem;
+  line-height: 1.35;
+}
+
+.recent-activity-table th,
+.job-history-table th {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.activity-time {
+  display: inline-block;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-id-cell {
+  white-space: nowrap;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.activity-action-cell,
+.activity-user-cell {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.activity-message-cell,
+.job-run-detail {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  color: var(--muted);
+}
+
+/* ---------- Recent Media Catalog Activity columns ---------- */
+
+.recent-activity-table {
+  min-width: 1160px;
+}
+
+/* Time */
+.recent-activity-table th:nth-child(1),
+.recent-activity-table td:nth-child(1) {
+  width: 155px;
+}
+
+/* Action */
+.recent-activity-table th:nth-child(2),
+.recent-activity-table td:nth-child(2) {
+  width: 135px;
+}
+
+/* User */
+.recent-activity-table th:nth-child(3),
+.recent-activity-table td:nth-child(3) {
+  width: 150px;
+}
+
+/* Device */
+.recent-activity-table th:nth-child(4),
+.recent-activity-table td:nth-child(4) {
+  width: 105px;
+}
+
+/* Serial */
+.recent-activity-table th:nth-child(5),
+.recent-activity-table td:nth-child(5) {
+  width: 115px;
+}
+
+/* Cart */
+.recent-activity-table th:nth-child(6),
+.recent-activity-table td:nth-child(6) {
+  width: 105px;
+}
+
+/* Result */
+.recent-activity-table th:nth-child(7),
+.recent-activity-table td:nth-child(7) {
+  width: 105px;
+}
+
+/* Message */
+.recent-activity-table th:nth-child(8),
+.recent-activity-table td:nth-child(8) {
+  width: auto;
+}
+
+/* ---------- Result badges ---------- */
+
+.activity-result-badge,
+.job-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 74px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.activity-result-badge::before,
+.job-status-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.activity-result-badge.success,
+.job-status-badge.success {
+  color: #15803d;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.activity-result-badge.error,
+.job-status-badge.failed {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.job-status-badge.running {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.job-status-badge.unknown {
+  color: #475569;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* ---------- Activity row backgrounds ---------- */
+
+body[data-theme="light"]
+.recent-activity-table
+tbody
+tr.ok
+td {
+  background: rgba(240, 253, 244, 0.74);
+}
+
+body[data-theme="light"]
+.recent-activity-table
+tbody
+tr.bad
+td {
+  background: rgba(254, 242, 242, 0.78);
+}
+
+body[data-theme="dark"]
+.recent-activity-table
+tbody
+tr.ok
+td {
+  background: rgba(22, 101, 52, 0.1);
+}
+
+body[data-theme="dark"]
+.recent-activity-table
+tbody
+tr.bad
+td {
+  background: rgba(185, 28, 28, 0.1);
+}
+
+/* ---------- Catalog sync card ---------- */
+
+.catalog-sync-panel {
+  border-left: 4px solid #3b82f6;
+}
+
+.catalog-sync-current {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.catalog-sync-current-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.catalog-sync-empty {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+/* ---------- Job history table ---------- */
+
+.job-history-table {
+  min-width: 900px;
+}
+
+/* Started */
+.job-history-table th:nth-child(1),
+.job-history-table td:nth-child(1) {
+  width: 190px;
+}
+
+/* Status */
+.job-history-table th:nth-child(2),
+.job-history-table td:nth-child(2) {
+  width: 110px;
+}
+
+/* Duration */
+.job-history-table th:nth-child(3),
+.job-history-table td:nth-child(3) {
+  width: 105px;
+}
+
+/* Finished */
+.job-history-table th:nth-child(4),
+.job-history-table td:nth-child(4) {
+  width: 190px;
+}
+
+/* Details */
+.job-history-table th:nth-child(5),
+.job-history-table td:nth-child(5) {
+  width: auto;
+}
+
+body[data-theme="light"]
+.job-history-table
+tr.job-run-success
+td {
+  background: rgba(240, 253, 244, 0.78);
+}
+
+body[data-theme="light"]
+.job-history-table
+tr.job-run-failed
+td {
+  background: rgba(254, 242, 242, 0.86);
+}
+
+body[data-theme="light"]
+.job-history-table
+tr.job-run-running
+td {
+  background: rgba(239, 246, 255, 0.86);
+}
+
+body[data-theme="dark"]
+.job-history-table
+tr.job-run-success
+td {
+  background: rgba(22, 101, 52, 0.1);
+}
+
+body[data-theme="dark"]
+.job-history-table
+tr.job-run-failed
+td {
+  background: rgba(185, 28, 28, 0.11);
+}
+
+body[data-theme="dark"]
+.job-history-table
+tr.job-run-running
+td {
+  background: rgba(37, 99, 235, 0.11);
+}
+
+/* ---------- Dark theme badges ---------- */
+
+body[data-theme="dark"]
+.activity-result-badge.success,
+body[data-theme="dark"]
+.job-status-badge.success {
+  color: #86efac;
+  background: rgba(22, 101, 52, 0.24);
+  border-color: rgba(74, 222, 128, 0.45);
+}
+
+body[data-theme="dark"]
+.activity-result-badge.error,
+body[data-theme="dark"]
+.job-status-badge.failed {
+  color: #fca5a5;
+  background: rgba(185, 28, 28, 0.22);
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+body[data-theme="dark"]
+.job-status-badge.running {
+  color: #93c5fd;
+  background: rgba(37, 99, 235, 0.2);
+  border-color: rgba(96, 165, 250, 0.42);
+}
+
+/* ---------- Responsive adjustments ---------- */
+
+@media (max-width: 900px) {
+  .recent-activity-head {
+    flex-direction: column;
+  }
+
+  .catalog-sync-current {
+    align-self: flex-start;
+  }
+
+  .recent-activity-filter {
+    width: 100%;
+  }
+
+  .recent-activity-filter .media-select {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   Fix Recent Activity time/action column overlap
+   ========================================================= */
+
+.recent-activity-sheet-wrap {
+  overflow-x: auto;
+}
+
+.recent-activity-table {
+  width: 100%;
+  min-width: 1220px;
+  table-layout: fixed;
+}
+
+/* Time */
+.recent-activity-table th:nth-child(1),
+.recent-activity-table td:nth-child(1) {
+  width: 185px;
+  min-width: 185px;
+  max-width: 185px;
+}
+
+/* Action */
+.recent-activity-table th:nth-child(2),
+.recent-activity-table td:nth-child(2) {
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+}
+
+/* User */
+.recent-activity-table th:nth-child(3),
+.recent-activity-table td:nth-child(3) {
+  width: 150px;
+}
+
+/* Device */
+.recent-activity-table th:nth-child(4),
+.recent-activity-table td:nth-child(4) {
+  width: 105px;
+}
+
+/* Serial */
+.recent-activity-table th:nth-child(5),
+.recent-activity-table td:nth-child(5) {
+  width: 120px;
+}
+
+/* Cart */
+.recent-activity-table th:nth-child(6),
+.recent-activity-table td:nth-child(6) {
+  width: 110px;
+}
+
+/* Result */
+.recent-activity-table th:nth-child(7),
+.recent-activity-table td:nth-child(7) {
+  width: 110px;
+}
+
+/* Message */
+.recent-activity-table th:nth-child(8),
+.recent-activity-table td:nth-child(8) {
+  width: auto;
+  min-width: 260px;
+}
+
+/*
+ * Keep the full formatted timestamp inside its own column.
+ */
+.recent-activity-table .activity-time {
+  display: block;
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  line-height: 1.35;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Prevent the action text from entering the Time column.
+ */
+.recent-activity-table .activity-action-cell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  padding-left: 0.85rem;
+}
+
+/*
+ * Ensure all table cells stay inside their assigned widths.
+ */
+.recent-activity-table th,
+.recent-activity-table td {
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/*
+ * Allow the message to wrap instead of widening the table.
+ */
+.recent-activity-table .activity-message-cell {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/*
+ * Keep identifiers readable without letting them cross columns.
+ */
+.recent-activity-table .activity-id-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

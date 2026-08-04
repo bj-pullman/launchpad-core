@@ -207,92 +207,219 @@
         {% endif %}
 
         <div class="settings-tab-panel" data-panel="recent-activity">
-            <section id="recentActivityPanel" class="media-panel media-wide">
-                <div class="media-section-head recent-activity-head">
-                    <div>
-                        <h2>Recent Media Catalog Activity</h2>
+            <div class="recent-activity-stack">
 
-                        <p class="muted">
-                            Recent cart and device actions recorded locally in
-                            SnipeOps.
-                        </p>
+                <section class="media-panel media-wide catalog-sync-panel">
+                    <div class="media-section-head recent-activity-head">
+                        <div>
+                            <p class="media-eyebrow">Scheduled Job</p>
+
+                            <h2>Catalog Sync Status</h2>
+
+                            <p class="muted">
+                                Recent hourly synchronization attempts between
+                                Snipe-IT and the Launchpad catalog.
+                            </p>
+                        </div>
+
+                        {% if catalog_sync_runs %}
+                        {% set latest_sync = catalog_sync_runs[0] %}
+
+                        <div class="catalog-sync-current">
+                            <span class="catalog-sync-current-label">
+                                Latest Run
+                            </span>
+
+                            <span class="job-status-badge {{ latest_sync.status }}">
+                                {% if latest_sync.status == 'success' %}
+                                Success
+                                {% elif latest_sync.status == 'failed' %}
+                                Failed
+                                {% elif latest_sync.status == 'running' %}
+                                Running
+                                {% else %}
+                                {{ latest_sync.status|title }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endif %}
                     </div>
 
-                    <div class="recent-activity-filter">
-                        <label for="recentResultFilter">
-                            Result
-                        </label>
+                    {% if catalog_sync_runs %}
+                    <div class="sheet-wrap job-history-sheet-wrap">
+                        <table class="media-sheet job-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Started</th>
+                                    <th>Status</th>
+                                    <th>Duration</th>
+                                    <th>Finished</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
 
-                        <select id="recentResultFilter" class="media-select">
-                            <option value="all">All results</option>
-                            <option value="success">Successful only</option>
-                            <option value="error">Failed only</option>
-                        </select>
+                            <tbody>
+                                {% for run in catalog_sync_runs %}
+                                <tr class="job-run-row job-run-{{ run.status }}">
+                                    <td>
+                                        <time class="activity-time"
+                                            data-utc="{{ run.started_at or run.run_date or '' }}">
+                                            {{ run.started_at or run.run_date or '—' }}
+                                        </time>
+                                    </td>
+
+                                    <td>
+                                        <span class="job-status-badge {{ run.status }}">
+                                            {% if run.status == 'success' %}
+                                            Success
+                                            {% elif run.status == 'failed' %}
+                                            Failed
+                                            {% elif run.status == 'running' %}
+                                            Running
+                                            {% else %}
+                                            {{ run.status|title }}
+                                            {% endif %}
+                                        </span>
+                                    </td>
+
+                                    <td>
+                                        {% if run.duration_seconds is not none %}
+                                        {{ run.duration_seconds }} sec
+                                        {% elif run.status == 'running' %}
+                                        In progress
+                                        {% else %}
+                                        —
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {% if run.finished_at %}
+                                        <time class="activity-time" data-utc="{{ run.finished_at }}">
+                                            {{ run.finished_at }}
+                                        </time>
+                                        {% else %}
+                                        —
+                                        {% endif %}
+                                    </td>
+
+                                    <td class="job-run-detail">
+                                        {% if run.error %}
+                                        {{ run.error }}
+                                        {% elif run.status == 'success' %}
+                                        Catalog synchronization completed successfully.
+                                        {% elif run.status == 'running' %}
+                                        Catalog synchronization is currently running.
+                                        {% else %}
+                                        No additional details were recorded.
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
-                </div>
+                    {% else %}
+                    <div class="catalog-sync-empty">
+                        <strong>No catalog sync history is available yet.</strong>
 
-                <div id="recentActivityEmpty" class="media-empty-state hidden">
-                    No activity records match the selected filter.
-                </div>
+                        <span class="muted">
+                            History will appear after the next scheduled
+                            catalog synchronization runs.
+                        </span>
+                    </div>
+                    {% endif %}
+                </section>
 
-                <div class="sheet-wrap recent-activity-sheet-wrap">
-                    <table class="media-sheet recent-activity-table">
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Action</th>
-                                <th>User</th>
-                                <th>Device</th>
-                                <th>Serial</th>
-                                <th>Cart</th>
-                                <th>Result</th>
-                                <th>Message</th>
-                            </tr>
-                        </thead>
+                <section id="recentActivityPanel" class="media-panel media-wide">
+                    <div class="media-section-head recent-activity-head">
+                        <div>
+                            <h2>Recent Media Catalog Activity</h2>
 
-                        <tbody id="recentBody">
-                            {% for r in recent %}
-                            <tr class="{{ 'ok' if r.ok else 'bad' }}"
-                                data-result="{{ 'success' if r.ok else 'error' }}">
-                                <td class="mono">
-                                    {{ r.created_at|localtime }}
-                                </td>
+                            <p class="muted">
+                                Recent cart and device actions recorded locally in
+                                SnipeOps.
+                            </p>
+                        </div>
 
-                                <td>
-                                    {{ r.action.replace('_', ' ')|title }}
-                                </td>
+                        <div class="recent-activity-filter">
+                            <label for="recentResultFilter">
+                                Result
+                            </label>
 
-                                <td>
-                                    {{ r.actor_display_name or r.actor_email or '—' }}
-                                </td>
+                            <select id="recentResultFilter" class="media-select">
+                                <option value="all">All results</option>
+                                <option value="success">Successful only</option>
+                                <option value="error">Failed only</option>
+                            </select>
+                        </div>
+                    </div>
 
-                                <td class="mono">
-                                    {{ r.device_asset_tag or r.device_name or r.device_asset_id or '' }}
-                                </td>
+                    <div id="recentActivityEmpty" class="media-empty-state hidden">
+                        No activity records match the selected filter.
+                    </div>
 
-                                <td class="mono">
-                                    {{ r.device_serial or '' }}
-                                </td>
+                    <div class="sheet-wrap recent-activity-sheet-wrap">
+                        <table class="media-sheet recent-activity-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Action</th>
+                                    <th>User</th>
+                                    <th>Device</th>
+                                    <th>Serial</th>
+                                    <th>Cart</th>
+                                    <th>Result</th>
+                                    <th>Message</th>
+                                </tr>
+                            </thead>
 
-                                <td class="mono">
-                                    {{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '' }}
-                                </td>
+                            <tbody id="recentBody">
+                                {% for r in recent %}
+                                <tr class="{{ 'ok' if r.ok else 'bad' }}"
+                                    data-result="{{ 'success' if r.ok else 'error' }}">
+                                    <td>
+                                        <time class="activity-time" data-utc="{{ r.created_at or '' }}">
+                                            {{ r.created_at or '—' }}
+                                        </time>
+                                    </td>
 
-                                <td>
-                                    <span class="activity-result-badge {{ 'success' if r.ok else 'error' }}">
-                                        {{ 'Success' if r.ok else 'Error' }}
-                                    </span>
-                                </td>
+                                    <td class="activity-action-cell">
+                                        {{ r.action.replace('_', ' ')|title }}
+                                    </td>
 
-                                <td class="muted activity-message-cell">
-                                    {{ r.message or '' }}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+                                    <td class="activity-user-cell">
+                                        {{ r.actor_display_name or r.actor_email or '—' }}
+                                    </td>
+
+                                    <td class="activity-id-cell">
+                                        {{ r.device_asset_tag or r.device_name or r.device_asset_id or '—' }}
+                                    </td>
+
+                                    <td class="activity-id-cell">
+                                        {{ r.device_serial or '—' }}
+                                    </td>
+
+                                    <td class="activity-id-cell">
+                                        {{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '—' }}
+                                    </td>
+
+                                    <td>
+                                        <span class="activity-result-badge {{ 'success' if r.ok else 'error' }}">
+                                            {{ 'Success' if r.ok else 'Failed' }}
+                                        </span>
+                                    </td>
+
+                                    <td class="activity-message-cell">
+                                        {{ r.message or '—' }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+            </div>
         </div>
     </div>
 </div>
