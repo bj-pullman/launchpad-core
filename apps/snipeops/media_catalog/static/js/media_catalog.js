@@ -3325,12 +3325,11 @@ function formatActivityDateTime(value) {
     }
 
     const options = {
-        month: "2-digit",
-        day: "2-digit",
-        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+        year: "2-digit",
         hour: "numeric",
         minute: "2-digit",
-        second: "2-digit",
     };
 
     if (window.MEDIA_CATALOG_TIMEZONE) {

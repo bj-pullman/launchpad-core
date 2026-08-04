@@ -2966,120 +2966,444 @@ body[data-theme="dark"]
 }
 
 /* =========================================================
-   Fix Recent Activity time/action column overlap
+   Catalog sync status and recent activity
    ========================================================= */
 
+.recent-activity-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.catalog-sync-panel,
+.recent-activity-panel {
+  overflow: hidden;
+}
+
+/* ---------- Panel headers ---------- */
+
+.sync-status-header,
+.recent-activity-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.sync-status-title,
+.recent-activity-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.sync-status-title h2,
+.recent-activity-title h2 {
+  margin: 0 0 0.28rem;
+}
+
+.sync-status-title p,
+.recent-activity-title p {
+  margin: 0;
+}
+
+.sync-status-icon,
+.recent-activity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+  color: #2563eb;
+}
+
+.sync-latest-summary {
+  display: grid;
+  justify-items: end;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.sync-latest-line {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.sync-latest-time {
+  color: var(--muted);
+}
+
+.recent-activity-filter {
+  display: grid;
+  gap: 0.35rem;
+  width: 190px;
+  flex: 0 0 190px;
+}
+
+.recent-activity-filter label {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.recent-activity-filter .media-select {
+  width: 100%;
+}
+
+/* ---------- Table containers ---------- */
+
+.job-history-sheet-wrap,
 .recent-activity-sheet-wrap {
+  width: 100%;
   overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.job-history-table,
+.recent-activity-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.job-history-table {
+  min-width: 980px;
 }
 
 .recent-activity-table {
-  width: 100%;
   min-width: 1220px;
-  table-layout: fixed;
 }
 
-/* Time */
-.recent-activity-table th:nth-child(1),
-.recent-activity-table td:nth-child(1) {
-  width: 185px;
-  min-width: 185px;
-  max-width: 185px;
-}
-
-/* Action */
-.recent-activity-table th:nth-child(2),
-.recent-activity-table td:nth-child(2) {
-  width: 150px;
-  min-width: 150px;
-  max-width: 150px;
-}
-
-/* User */
-.recent-activity-table th:nth-child(3),
-.recent-activity-table td:nth-child(3) {
-  width: 150px;
-}
-
-/* Device */
-.recent-activity-table th:nth-child(4),
-.recent-activity-table td:nth-child(4) {
-  width: 105px;
-}
-
-/* Serial */
-.recent-activity-table th:nth-child(5),
-.recent-activity-table td:nth-child(5) {
-  width: 120px;
-}
-
-/* Cart */
-.recent-activity-table th:nth-child(6),
-.recent-activity-table td:nth-child(6) {
-  width: 110px;
-}
-
-/* Result */
-.recent-activity-table th:nth-child(7),
-.recent-activity-table td:nth-child(7) {
-  width: 110px;
-}
-
-/* Message */
-.recent-activity-table th:nth-child(8),
-.recent-activity-table td:nth-child(8) {
-  width: auto;
-  min-width: 260px;
-}
-
-/*
- * Keep the full formatted timestamp inside its own column.
- */
-.recent-activity-table .activity-time {
-  display: block;
-  width: 100%;
-  white-space: normal;
-  overflow-wrap: normal;
-  word-break: normal;
-  line-height: 1.35;
-  font-size: 0.82rem;
-  font-variant-numeric: tabular-nums;
-}
-
-/*
- * Prevent the action text from entering the Time column.
- */
-.recent-activity-table .activity-action-cell {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: normal;
-  padding-left: 0.85rem;
-}
-
-/*
- * Ensure all table cells stay inside their assigned widths.
- */
+.job-history-table th,
+.job-history-table td,
 .recent-activity-table th,
 .recent-activity-table td {
-  box-sizing: border-box;
-  overflow: hidden;
+  padding: 0.7rem 0.75rem;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.35;
 }
 
-/*
- * Allow the message to wrap instead of widening the table.
- */
-.recent-activity-table .activity-message-cell {
-  white-space: normal;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  word-break: normal;
+.job-history-table th,
+.recent-activity-table th {
+  background: rgba(122, 162, 255, 0.08);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
 }
 
+body[data-theme="light"] .job-history-table th,
+body[data-theme="light"] .recent-activity-table th {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.job-history-table tbody tr:last-child td,
+.recent-activity-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ---------- Catalog job table widths ---------- */
+
+.job-started-column {
+  width: 210px;
+}
+
+.job-status-column {
+  width: 130px;
+}
+
+.job-duration-column {
+  width: 115px;
+}
+
+.job-finished-column {
+  width: 210px;
+}
+
+.job-details-column {
+  width: auto;
+}
+
+/* ---------- Activity table widths ---------- */
+
 /*
- * Keep identifiers readable without letting them cross columns.
+ * These widths prevent the Time column from extending into Action.
+ * The colgroup controls the real column layout rather than relying
+ * only on nth-child width declarations.
  */
-.recent-activity-table .activity-id-cell {
+
+.activity-time-column {
+  width: 190px;
+}
+
+.activity-action-column {
+  width: 150px;
+}
+
+.activity-user-column {
+  width: 165px;
+}
+
+.activity-device-column {
+  width: 110px;
+}
+
+.activity-serial-column {
+  width: 115px;
+}
+
+.activity-cart-column {
+  width: 115px;
+}
+
+.activity-result-column {
+  width: 115px;
+}
+
+.activity-message-column {
+  width: auto;
+}
+
+/* ---------- Cell formatting ---------- */
+
+.activity-time {
+  display: block;
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.activity-action-cell {
+  font-weight: 700;
+  overflow-wrap: break-word;
+}
+
+.activity-user-cell {
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+.activity-id-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 0.81rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-message-cell,
+.job-run-detail {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  color: var(--muted);
+}
+
+.job-duration-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Status badges ---------- */
+
+.activity-result-badge,
+.job-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  min-width: 78px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.32rem 0.68rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.activity-result-badge::before,
+.job-status-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.activity-result-badge.success,
+.job-status-badge.success {
+  color: #15803d;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.activity-result-badge.error,
+.job-status-badge.failed {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.job-status-badge.running {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.job-status-badge.unknown {
+  color: #475569;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* ---------- Colored job rows ---------- */
+
+body[data-theme="light"]
+.job-history-table
+.job-run-success
+td {
+  background: rgba(240, 253, 244, 0.78);
+}
+
+body[data-theme="light"]
+.job-history-table
+.job-run-failed
+td {
+  background: rgba(254, 242, 242, 0.88);
+}
+
+body[data-theme="light"]
+.job-history-table
+.job-run-running
+td {
+  background: rgba(239, 246, 255, 0.88);
+}
+
+body[data-theme="dark"]
+.job-history-table
+.job-run-success
+td {
+  background: rgba(22, 101, 52, 0.12);
+}
+
+body[data-theme="dark"]
+.job-history-table
+.job-run-failed
+td {
+  background: rgba(185, 28, 28, 0.13);
+}
+
+body[data-theme="dark"]
+.job-history-table
+.job-run-running
+td {
+  background: rgba(37, 99, 235, 0.13);
+}
+
+/* ---------- Colored activity rows ---------- */
+
+body[data-theme="light"]
+.recent-activity-table
+tr.ok
+td {
+  background: rgba(240, 253, 244, 0.7);
+}
+
+body[data-theme="light"]
+.recent-activity-table
+tr.bad
+td {
+  background: rgba(254, 242, 242, 0.82);
+}
+
+body[data-theme="dark"]
+.recent-activity-table
+tr.ok
+td {
+  background: rgba(22, 101, 52, 0.1);
+}
+
+body[data-theme="dark"]
+.recent-activity-table
+tr.bad
+td {
+  background: rgba(185, 28, 28, 0.1);
+}
+
+/* ---------- Dark mode badges ---------- */
+
+body[data-theme="dark"]
+.activity-result-badge.success,
+body[data-theme="dark"]
+.job-status-badge.success {
+  color: #86efac;
+  background: rgba(22, 101, 52, 0.25);
+  border-color: rgba(74, 222, 128, 0.45);
+}
+
+body[data-theme="dark"]
+.activity-result-badge.error,
+body[data-theme="dark"]
+.job-status-badge.failed {
+  color: #fca5a5;
+  background: rgba(185, 28, 28, 0.23);
+  border-color: rgba(248, 113, 113, 0.43);
+}
+
+body[data-theme="dark"]
+.job-status-badge.running {
+  color: #93c5fd;
+  background: rgba(37, 99, 235, 0.22);
+  border-color: rgba(96, 165, 250, 0.43);
+}
+
+/* ---------- Empty sync history ---------- */
+
+.catalog-sync-empty {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 900px) {
+  .sync-status-header,
+  .recent-activity-header {
+    flex-direction: column;
+  }
+
+  .sync-latest-summary {
+    justify-items: start;
+  }
+
+  .recent-activity-filter {
+    width: 100%;
+    flex-basis: auto;
+  }
 }
