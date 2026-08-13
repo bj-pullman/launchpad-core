@@ -23,6 +23,7 @@ let studentCheckoutSearchQuery = "";
 let pendingReturnCheckout = null;
 
 const sheetDevices = new Map();
+const cartMetadataSaveQueues = new Map();
 
 function $(id) {
     return document.getElementById(id);
@@ -4122,45 +4123,353 @@ function renderAdminInlineEditField(cartId, field, value) {
 }
 
 
-function activateAdminInlineEdit(wrapper, carts) {
-    const input = wrapper.querySelector(".inline-cart-field");
+function activateAdminInlineEdit(
+    wrapper,
+    carts
+) {
+    const input = wrapper.querySelector(
+        ".inline-cart-field"
+    );
+
     if (!input) return;
 
+    if (
+        wrapper.classList.contains(
+            "is-editing"
+        )
+    ) {
+        input.focus();
+        input.select();
+        return;
+    }
+
     wrapper.classList.add("is-editing");
+
+    input.hidden = false;
     input.classList.remove("hidden");
-    input.classList.add("inline-edit-active");
+    input.classList.add(
+        "inline-edit-active"
+    );
 
     input.focus();
     input.select();
 
-    let finished = false;
+    let submitted = false;
 
-    const finish = async () => {
-        if (finished || input.dataset.saving === "1") return;
+    const submit = async () => {
+        if (submitted) return;
 
-        const saved = await saveAdminInlineEdit(input, wrapper, carts);
-        if (saved) {
-            finished = true;
-        } else {
-            input.focus();
-            input.select();
+        submitted = true;
+
+        const cartId = input.dataset.cartId;
+        const field = input.dataset.field;
+        const value = input.value;
+
+        applyOptimisticCartMetadata(
+            cartId,
+            field,
+            value,
+            carts
+        );
+
+        cancelInlineEdit(wrapper);
+
+        const valueEl = wrapper.querySelector(
+            ".inline-edit-value"
+        );
+
+        if (valueEl) {
+            valueEl.textContent =
+                value.trim() || "—";
+        }
+
+        setStatus(
+            "Saving cart fields...",
+            true
+        );
+
+        try {
+            await queueCartMetadataSave(
+                cartId,
+                carts,
+                {
+                    admin: true
+                }
+            );
+
+        } catch (err) {
+            setStatus(
+                err.message ||
+                "Unable to update cart fields.",
+                false
+            );
+
+            if (ownershipSelectedUser) {
+                await loadOwnershipUserCarts(
+                    ownershipSelectedUser
+                );
+            }
         }
     };
 
-    input.addEventListener("keydown", async event => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            await finish();
+    input.addEventListener(
+        "keydown",
+        async event => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                event.stopPropagation();
+
+                await submit();
+                return;
+            }
+
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+
+                cancelInlineEdit(wrapper);
+            }
+        }
+    );
+
+    input.addEventListener(
+        "blur",
+        async () => {
+            await submit();
+        },
+        {
+            once: true
+        }
+    );
+}
+
+function getCartFromState(cartId, carts = []) {
+    return (
+        carts.find(item => String(item.id) === String(cartId)) ||
+        myCartsCache.find(item => String(item.id) === String(cartId)) ||
+        (
+            selectedCart &&
+            String(selectedCart.id) === String(cartId)
+                ? selectedCart
+                : null
+        )
+    );
+}
+
+
+function applyOptimisticCartMetadata(
+    cartId,
+    field,
+    value,
+    carts = []
+) {
+    const normalizedValue = String(value || "").trim();
+
+    const updateCart = cart => {
+        if (!cart || String(cart.id) !== String(cartId)) {
+            return cart;
         }
 
-        if (event.key === "Escape") {
-            event.preventDefault();
-            finished = true;
-            cancelInlineEdit(wrapper);
-        }
-    }, { once: false });
+        return {
+            ...cart,
+            ownership: {
+                ...(cart.ownership || {}),
+                [field]: normalizedValue,
+            },
+        };
+    };
 
-    input.addEventListener("blur", finish, { once: true });
+    const cartIndex = carts.findIndex(
+        item => String(item.id) === String(cartId)
+    );
+
+    if (cartIndex >= 0) {
+        carts[cartIndex] = updateCart(carts[cartIndex]);
+    }
+
+    myCartsCache = myCartsCache.map(updateCart);
+
+    if (
+        selectedCart &&
+        String(selectedCart.id) === String(cartId)
+    ) {
+        selectedCart = updateCart(selectedCart);
+
+        const subtitle = $("cartSubtitle");
+
+        if (subtitle) {
+            subtitle.innerHTML =
+                renderSelectedCartMeta(selectedCart);
+        }
+
+        updateActiveCartSummary();
+    }
+}
+
+
+function queueCartMetadataSave(
+    cartId,
+    carts,
+    {
+        admin = false
+    } = {}
+) {
+    const existingQueue =
+        cartMetadataSaveQueues.get(String(cartId)) ||
+        Promise.resolve();
+
+    const nextSave = existingQueue
+        .catch(() => {
+            /*
+             * A previous save failing must not permanently
+             * break the queue.
+             */
+        })
+        .then(async () => {
+            const cart = getCartFromState(
+                cartId,
+                carts
+            );
+
+            if (!cart) {
+                throw new Error(
+                    "Unable to locate cart while saving metadata."
+                );
+            }
+
+            const ownership = cart.ownership || {};
+
+            /*
+             * IMPORTANT:
+             *
+             * Build this from current application state,
+             * not from potentially stale DOM inputs.
+             */
+            const body = {
+                teacher_name:
+                    ownership.teacher_name || "",
+
+                room_number:
+                    ownership.room_number || "",
+            };
+
+            const endpoint = admin
+                ? `/api/admin/carts/${cartId}/metadata`
+                : `/api/carts/${cartId}/metadata`;
+
+            const data = await apiPost(
+                endpoint,
+                body,
+                "Unable to update cart fields."
+            );
+
+            const serverCart = data.cart || {};
+
+            /*
+             * Server response may contain stale nested ownership
+             * information if another edit occurred while the
+             * request was running.
+             *
+             * Latest local state wins.
+             */
+            const currentCart = getCartFromState(
+                cartId,
+                carts
+            ) || cart;
+
+            const confirmedCart = {
+                ...currentCart,
+                ...serverCart,
+
+                ownership: {
+                    ...(serverCart.ownership || {}),
+                    ...(currentCart.ownership || {}),
+                },
+            };
+
+            const index = carts.findIndex(
+                item =>
+                    String(item.id) ===
+                    String(cartId)
+            );
+
+            if (index >= 0) {
+                carts[index] = confirmedCart;
+            }
+
+            myCartsCache = myCartsCache.map(item => {
+                if (
+                    String(item.id) !==
+                    String(cartId)
+                ) {
+                    return item;
+                }
+
+                return {
+                    ...item,
+                    ...confirmedCart,
+
+                    ownership: {
+                        ...(item.ownership || {}),
+                        ...(confirmedCart.ownership || {}),
+                    },
+                };
+            });
+
+            if (
+                selectedCart &&
+                String(selectedCart.id) ===
+                String(cartId)
+            ) {
+                selectedCart = {
+                    ...selectedCart,
+                    ...confirmedCart,
+
+                    ownership: {
+                        ...(selectedCart.ownership || {}),
+                        ...(confirmedCart.ownership || {}),
+                    },
+                };
+
+                const subtitle = $("cartSubtitle");
+
+                if (subtitle) {
+                    subtitle.innerHTML =
+                        renderSelectedCartMeta(
+                            selectedCart
+                        );
+                }
+
+                updateActiveCartSummary();
+            }
+
+            setStatus(
+                data.message ||
+                "Cart fields updated.",
+                true
+            );
+
+            return data;
+        });
+
+    cartMetadataSaveQueues.set(
+        String(cartId),
+        nextSave
+    );
+
+    nextSave.finally(() => {
+        if (
+            cartMetadataSaveQueues.get(
+                String(cartId)
+            ) === nextSave
+        ) {
+            cartMetadataSaveQueues.delete(
+                String(cartId)
+            );
+        }
+    });
+
+    return nextSave;
 }
 
 function captureScrollState() {
@@ -4247,51 +4556,6 @@ function applyUpdatedMetadataToRow(row, updatedCart) {
     });
 }
 
-async function saveAdminInlineEdit(input, wrapper, carts) {
-    if (!input || input.dataset.saving === "1") return;
-
-    const scrollState = captureScrollState();
-    const row = input.closest("tr");
-    const cartId = input.dataset.cartId;
-    const cart = carts.find(c => String(c.id) === String(cartId));
-
-    if (!row || !cart) {
-        cancelInlineEdit(wrapper);
-        return true;
-    }
-
-    input.dataset.saving = "1";
-    let saved = false;
-
-    const body = {
-        teacher_name: row.querySelector('[data-field="teacher_name"]')?.value || "",
-        room_number: row.querySelector('[data-field="room_number"]')?.value || "",
-    };
-
-    try {
-        const data = await apiPost(
-            `/api/admin/carts/${cart.id}/metadata`,
-            body,
-            "Unable to update cart fields."
-        );
-
-        const updatedCart = syncUpdatedCartIntoState(data.cart || null, carts, cart);
-        applyUpdatedMetadataToRow(row, updatedCart);
-
-        setStatus(data.message || "Cart fields updated.", true);
-        saved = true;
-        return true;
-    } catch (err) {
-        setStatus(err.message || "Unable to update cart fields.", false);
-        return false;
-    } finally {
-        delete input.dataset.saving;
-        if (saved) {
-            cancelInlineEdit(wrapper);
-        }
-        restoreScrollState(scrollState);
-    }
-}
 
 function drawMyCartsRows(rows) {
     const tbody = $("myCartsBody");
@@ -4479,6 +4743,7 @@ function renderInlineEditField(cartId, field, value) {
                 data-field="${escapeHtml(field)}"
                 data-cart-id="${escapeHtml(cartId)}"
                 value="${escapeHtml(value === "—" ? "" : value)}"
+                hidden
             >
             <button class="inline-edit-btn" type="button" title="Edit">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -4491,101 +4756,147 @@ function renderInlineEditField(cartId, field, value) {
 }
 
 function activateInlineEdit(wrapper, carts) {
-    const input = wrapper.querySelector(".inline-cart-field");
+    const input = wrapper.querySelector(
+        ".inline-cart-field"
+    );
+
     if (!input) return;
 
+    if (
+        wrapper.classList.contains(
+            "is-editing"
+        )
+    ) {
+        input.focus();
+        input.select();
+        return;
+    }
+
     wrapper.classList.add("is-editing");
+
+    input.hidden = false;
     input.classList.remove("hidden");
-    input.classList.add("inline-edit-active");
+    input.classList.add(
+        "inline-edit-active"
+    );
 
     input.focus();
     input.select();
 
-    let finished = false;
+    let submitted = false;
 
-    const finish = async () => {
-        if (finished || input.dataset.saving === "1") return;
+    const submit = async () => {
+        if (submitted) return;
 
-        const saved = await saveInlineEdit(input, wrapper, carts);
-        if (saved) {
-            finished = true;
-        } else {
-            input.focus();
-            input.select();
+        submitted = true;
+
+        const cartId = input.dataset.cartId;
+        const field = input.dataset.field;
+        const value = input.value;
+
+        /*
+         * Put the new value into application state BEFORE
+         * starting the slow network request.
+         */
+        applyOptimisticCartMetadata(
+            cartId,
+            field,
+            value,
+            carts
+        );
+
+        /*
+         * Immediately collapse the textbox.
+         */
+        cancelInlineEdit(wrapper);
+
+        const valueEl = wrapper.querySelector(
+            ".inline-edit-value"
+        );
+
+        if (valueEl) {
+            valueEl.textContent =
+                value.trim() || "—";
+        }
+
+        setStatus(
+            "Saving cart fields...",
+            true
+        );
+
+        try {
+            await queueCartMetadataSave(
+                cartId,
+                carts,
+                {
+                    admin: false
+                }
+            );
+
+        } catch (err) {
+            setStatus(
+                err.message ||
+                "Unable to update cart fields.",
+                false
+            );
+
+            /*
+             * Something actually failed.
+             * Reload authoritative server state.
+             */
+            await loadMyCarts();
         }
     };
 
-    input.addEventListener("keydown", async event => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            await finish();
-        }
+    input.addEventListener(
+        "keydown",
+        async event => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                event.stopPropagation();
 
-        if (event.key === "Escape") {
-            event.preventDefault();
-            finished = true;
-            cancelInlineEdit(wrapper);
-        }
-    }, { once: false });
+                await submit();
+                return;
+            }
 
-    input.addEventListener("blur", finish, { once: true });
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+
+                cancelInlineEdit(wrapper);
+            }
+        }
+    );
+
+    input.addEventListener(
+        "blur",
+        async () => {
+            await submit();
+        },
+        {
+            once: true
+        }
+    );
 }
 
 function cancelInlineEdit(wrapper) {
+    if (!wrapper) return;
+
     const input = wrapper.querySelector(".inline-cart-field");
+
     wrapper.classList.remove("is-editing");
 
     if (input) {
-        input.classList.add("hidden");
         input.classList.remove("inline-edit-active");
+        input.classList.add("hidden");
+
+        // Native hidden state guarantees the textbox disappears
+        // even if another CSS selector has display: block !important.
+        input.hidden = true;
     }
 }
 
-async function saveInlineEdit(input, wrapper, carts) {
-    if (!input || input.dataset.saving === "1") return;
 
-    const scrollState = captureScrollState();
-    const row = input.closest("tr");
-    const cartId = input.dataset.cartId;
-    const cart = carts.find(c => String(c.id) === String(cartId));
-
-    if (!row || !cart) {
-        cancelInlineEdit(wrapper);
-        return true;
-    }
-
-    input.dataset.saving = "1";
-    let saved = false;
-
-    const body = {
-        teacher_name: row.querySelector('[data-field="teacher_name"]')?.value || "",
-        room_number: row.querySelector('[data-field="room_number"]')?.value || "",
-    };
-
-    try {
-        const data = await apiPost(
-            `/api/carts/${cart.id}/metadata`,
-            body,
-            "Unable to update cart fields."
-        );
-
-        const updatedCart = syncUpdatedCartIntoState(data.cart || null, carts, cart);
-        applyUpdatedMetadataToRow(row, updatedCart);
-
-        setStatus(data.message || "Cart fields updated.", true);
-        saved = true;
-        return true;
-    } catch (err) {
-        setStatus(err.message || "Unable to update cart fields.", false);
-        return false;
-    } finally {
-        delete input.dataset.saving;
-        if (saved) {
-            cancelInlineEdit(wrapper);
-        }
-        restoreScrollState(scrollState);
-    }
-}
 
 function renderLocationEditField(cart) {
     return `
