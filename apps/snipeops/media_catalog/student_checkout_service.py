@@ -305,11 +305,17 @@ def scoped_cart_rows_for_user(
     *,
     can_manage_ownership: bool = False,
 ) -> list[dict]:
+    """
+    Return carts that the authenticated user actually owns/manages.
+
+    Student Checkout scope is based on cart ownership.
+
+    The can_manage_ownership argument is intentionally retained for
+    compatibility with existing callers, but Ownership Management permission
+    does not expand Student Checkout scope.
+    """
     if not user:
         return []
-
-    if can_manage_ownership:
-        return list_all_owned_carts()
 
     return list_owned_carts(int(user["id"]))
 
@@ -319,6 +325,11 @@ def scoped_cart_ids_for_user(
     *,
     can_manage_ownership: bool = False,
 ) -> list[int]:
+    """
+    Return cart asset IDs owned by the authenticated user.
+
+    Devices inherit Student Checkout management scope from their cart.
+    """
     return [
         int(row["cart_asset_id"])
         for row in scoped_cart_rows_for_user(
@@ -335,17 +346,28 @@ def user_can_access_cart(
     *,
     can_manage_ownership: bool = False,
 ) -> bool:
+    """
+    Determine whether the authenticated user manages this cart.
+
+    Ownership Management permission does NOT grant Student Checkout access
+    to every cart. A user manages a device for Student Checkout only when
+    the device belongs to a cart assigned to that user.
+
+    can_manage_ownership is retained for compatibility with existing callers
+    but intentionally does not bypass ownership.
+    """
     if not cart_asset_id or not user:
         return False
 
-    if can_manage_ownership:
-        return True
-
     ownership = get_cart_ownership(int(cart_asset_id))
+
     if not ownership:
         return False
 
-    return int(ownership.get("owner_user_id") or 0) == int(user["id"])
+    try:
+        return int(ownership.get("owner_user_id") or 0) == int(user["id"])
+    except (TypeError, ValueError):
+        return False
 
 
 def assert_checkout_scope(
@@ -354,6 +376,12 @@ def assert_checkout_scope(
     *,
     can_manage_ownership: bool = False,
 ) -> None:
+    """
+    Enforce Student Checkout ownership scope.
+
+    A checkout is manageable only when its originating cart is currently
+    assigned to the authenticated user.
+    """
     if user_can_access_cart(
         record.get("original_cart_asset_id"),
         user,
@@ -427,41 +455,60 @@ def create_student_checkout(
             "Device not found by Asset Tag or Serial Number."
         )
 
-    active = get_active_student_checkout_for_device(int(device["id"]))
-    if active:
-        existing = decorate_checkout(active)
-        raise StudentCheckoutDuplicateError(
-            (
-                f"This device is currently checked out to "
-                f"{existing.get('student_name') or 'another student'} and must be returned "
-                "before it can be checked out again."
-            ),
-            existing_checkout=existing,
-        )
-
+    # First validate that this is actually an eligible device assigned
+    # to a valid cart.
     context = validate_device_eligibility(device)
+
     cart = context["cart"]
     ownership = context.get("ownership") or {}
 
+    # Student Checkout management follows cart ownership.
+    #
+    # Having Ownership Management permission does not grant checkout
+    # authority over every cart.
     if not user_can_access_cart(
         int(cart["id"]),
         actor_user,
         can_manage_ownership=can_manage_ownership,
     ):
         raise StudentCheckoutPermissionError(
-            "You can only create Student Checkouts for carts in your Media Catalog scope."
+            "This device belongs to a cart that is not assigned to you."
+        )
+
+    # Only after scope has been established should we expose information
+    # about an existing Student Checkout.
+    active = get_active_student_checkout_for_device(int(device["id"]))
+
+    if active:
+        existing = decorate_checkout(active)
+
+        raise StudentCheckoutDuplicateError(
+            (
+                f"This device is currently checked out to "
+                f"{existing.get('student_name') or 'another student'} "
+                "and must be returned before it can be checked out again."
+            ),
+            existing_checkout=existing,
         )
 
     checkout_at = _coerce_datetime(now)
     checkout_day = _local_date(checkout_at)
+
     default_due = calculate_next_business_day(checkout_day)
     return_by = _parse_date(return_by_date) or default_due
 
     if return_by < checkout_day:
-        raise StudentCheckoutError("Return By date cannot be before the checkout date.")
+        raise StudentCheckoutError(
+            "Return By date cannot be before the checkout date."
+        )
 
     due_date_overridden = return_by != default_due
-    actor_display = actor_user.get("display_name") or actor_user.get("email") or ""
+
+    actor_display = (
+        actor_user.get("display_name")
+        or actor_user.get("email")
+        or ""
+    )
 
     payload = {
         "device_asset_id": int(device["id"]),
@@ -470,36 +517,68 @@ def create_student_checkout(
         "device_name": device.get("name") or "",
         "device_model_name": device.get("model_name") or "",
         "device_status_name": device.get("status_name") or "",
+
         "original_cart_asset_id": int(cart["id"]),
         "original_cart_asset_tag": cart.get("asset_tag") or "",
         "original_cart_name": cart.get("name") or "",
-        "original_cart_teacher_name": ownership.get("teacher_name") or "",
-        "original_cart_room_number": ownership.get("room_number") or "",
+
+        "original_cart_teacher_name": (
+            ownership.get("teacher_name") or ""
+        ),
+        "original_cart_room_number": (
+            ownership.get("room_number") or ""
+        ),
+
         "original_owner_user_id": ownership.get("owner_user_id"),
         "original_owner_email": ownership.get("owner_email") or "",
-        "original_owner_display_name": ownership.get("owner_display_name") or "",
+        "original_owner_display_name": (
+            ownership.get("owner_display_name") or ""
+        ),
+
         "student_name": student_name,
         "student_id": student_id,
-        "checked_out_at": checkout_at.astimezone(timezone.utc).isoformat(),
+
+        "checked_out_at": (
+            checkout_at
+            .astimezone(timezone.utc)
+            .isoformat()
+        ),
+
         "return_by_date": return_by.isoformat(),
+
         "checkout_actor_user_id": actor_user.get("id"),
         "checkout_actor_email": actor_user.get("email") or "",
         "checkout_actor_display_name": actor_display,
+
         "status": ACTIVE_STATUS,
         "due_date_overridden": due_date_overridden,
     }
 
     try:
         record = create_student_checkout_record(payload)
+
     except sqlite3.IntegrityError as exc:
-        active = get_active_student_checkout_for_device(int(device["id"]))
+        # Keep the database unique index as the final line of defense
+        # against two simultaneous active checkouts.
+        active = get_active_student_checkout_for_device(
+            int(device["id"])
+        )
+
         raise StudentCheckoutDuplicateError(
-            "This device already has an active Student Checkout and must be returned first.",
-            existing_checkout=decorate_checkout(active) if active else None,
+            (
+                "This device already has an active Student Checkout "
+                "and must be returned first."
+            ),
+            existing_checkout=(
+                decorate_checkout(active)
+                if active
+                else None
+            ),
         ) from exc
 
     message = (
-        f"Checked out {device.get('asset_tag') or device.get('serial') or device.get('id')} "
+        f"Checked out "
+        f"{device.get('asset_tag') or device.get('serial') or device.get('id')} "
         f"to {student_name}; due {return_by.isoformat()}."
     )
 

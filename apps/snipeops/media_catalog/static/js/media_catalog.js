@@ -730,9 +730,25 @@ function renderMyCartsTable(carts) {
                         </select>
                     </label>
 
-                    <button id="myCartsPrevPage" class="mini-btn" type="button">Prev</button>
-                    <span id="myCartsPageLabel" class="muted">Page 1 of 1</span>
-                    <button id="myCartsNextPage" class="mini-btn" type="button">Next</button>
+                    <button
+                        id="myCartsPrevPage"
+                        class="mini-btn"
+                        type="button"
+                    >
+                        Prev
+                    </button>
+
+                    <span id="myCartsPageLabel" class="muted">
+                        Page 1 of 1
+                    </span>
+
+                    <button
+                        id="myCartsNextPage"
+                        class="mini-btn"
+                        type="button"
+                    >
+                        Next
+                    </button>
                 </div>
             </div>
 
@@ -741,7 +757,6 @@ function renderMyCartsTable(carts) {
                     <thead>
                         <tr>
                             <th>Move</th>
-                            <th>Index</th>
                             <th>Cart</th>
                             <th>Teacher Name</th>
                             <th>Room Number</th>
@@ -751,20 +766,36 @@ function renderMyCartsTable(carts) {
                             <th>Actions</th>
                         </tr>
                     </thead>
+
                     <tbody id="myCartsBody"></tbody>
                 </table>
             </div>
 
-            <div id="myCartsEmptyState" class="media-empty-state hidden">
+            <div
+                id="myCartsEmptyState"
+                class="media-empty-state hidden"
+            >
                 No carts match your search.
             </div>
         </div>
 
-        <div id="myCartsCollapsedView" class="active-cart-summary hidden">
+        <div
+            id="myCartsCollapsedView"
+            class="active-cart-summary hidden"
+        >
             <div>
                 <p class="media-eyebrow">Active Cart</p>
-                <strong id="activeCartSummaryTitle">No cart selected</strong>
-                <p id="activeCartSummarySubtitle" class="muted">The cart list is collapsed while you are adding devices.</p>
+
+                <strong id="activeCartSummaryTitle">
+                    No cart selected
+                </strong>
+
+                <p
+                    id="activeCartSummarySubtitle"
+                    class="muted"
+                >
+                    The cart list is collapsed while you are adding devices.
+                </p>
             </div>
 
             <div class="media-section-actions">
@@ -788,31 +819,57 @@ function renderMyCartsTable(carts) {
     `;
 
     $("myCartsFilter")?.addEventListener("input", event => {
-        myCartsSearchQuery = event.target.value.toLowerCase().trim();
+        myCartsSearchQuery =
+            event.target.value.toLowerCase().trim();
+
         myCartsPage = 1;
         drawCurrentMyCartsPage();
     });
 
     $("myCartsPageSize")?.addEventListener("change", event => {
-        myCartsPageSize = Number.parseInt(event.target.value, 10) || 25;
+        myCartsPageSize =
+            Number.parseInt(event.target.value, 10) || 25;
+
         myCartsPage = 1;
         drawCurrentMyCartsPage();
     });
 
     $("myCartsPrevPage")?.addEventListener("click", () => {
-        myCartsPage = Math.max(1, myCartsPage - 1);
+        myCartsPage = Math.max(
+            1,
+            myCartsPage - 1
+        );
+
         drawCurrentMyCartsPage();
     });
 
     $("myCartsNextPage")?.addEventListener("click", () => {
         const filtered = getFilteredMyCarts();
-        const totalPages = Math.max(1, Math.ceil(filtered.length / myCartsPageSize));
-        myCartsPage = Math.min(totalPages, myCartsPage + 1);
+
+        const totalPages = Math.max(
+            1,
+            Math.ceil(
+                filtered.length / myCartsPageSize
+            )
+        );
+
+        myCartsPage = Math.min(
+            totalPages,
+            myCartsPage + 1
+        );
+
         drawCurrentMyCartsPage();
     });
 
-    $("expandMyCartsBtn")?.addEventListener("click", expandMyCartsTable);
-    $("deselectCartBtn")?.addEventListener("click", () => hideSelectedCartPanel(true));
+    $("expandMyCartsBtn")?.addEventListener(
+        "click",
+        expandMyCartsTable
+    );
+
+    $("deselectCartBtn")?.addEventListener(
+        "click",
+        () => hideSelectedCartPanel(true)
+    );
 
     drawCurrentMyCartsPage();
 
@@ -872,16 +929,6 @@ function bindMyCartTableEvents(carts) {
             if (!wrapper) return;
 
             activateInlineEdit(wrapper, carts);
-        });
-    });
-
-    document.querySelectorAll("#myCartsBody .cart-index-input").forEach(input => {
-        input.addEventListener("change", async () => {
-            await reorderCart(input.dataset.cartId, input.value);
-        });
-
-        input.addEventListener("click", event => {
-            event.stopPropagation();
         });
     });
 
@@ -2848,11 +2895,8 @@ function renderCartCheckoutSummary(cart) {
 
     return `
         <div class="cart-checkout-summary">
-            <span>${escapeHtml(active)} student checkout${active === 1 ? "" : "s"}</span>
+            <span>${escapeHtml(active)} checkout${active === 1 ? "" : "s"}</span>
             <span class="${overdue ? "checkout-overdue-text" : "muted"}">${escapeHtml(overdue)} overdue</span>
-            <button class="mini-btn" type="button" data-cart-checkouts-id="${escapeHtml(cart.id)}">
-                Details
-            </button>
         </div>
     `;
 }
@@ -4253,39 +4297,67 @@ function drawMyCartsRows(rows) {
     const tbody = $("myCartsBody");
     if (!tbody) return;
 
-    tbody.innerHTML = rows.map((cart, index) => {
+    tbody.innerHTML = rows.map(cart => {
         const ownership = cart.ownership || {};
-        const displayOrder = ownership.display_order || ((myCartsPage - 1) * myCartsPageSize) + index + 1;
 
         return `
-            <tr class="my-cart-row" draggable="true" data-cart-id="${escapeHtml(cart.id)}">
-                <td class="drag-handle" title="Drag to reorder">☰</td>
-                <td>
-                    <input class="cart-index-input" type="number" min="1" value="${escapeHtml(displayOrder)}" data-cart-id="${escapeHtml(cart.id)}">
+            <tr
+                class="my-cart-row"
+                draggable="true"
+                data-cart-id="${escapeHtml(cart.id)}"
+            >
+                <td
+                    class="drag-handle"
+                    title="Drag to reorder"
+                    aria-label="Drag to reorder"
+                >
+                    ☰
                 </td>
+
                 <td>
-                    <button class="link-button" type="button" data-open-cart-id="${escapeHtml(cart.id)}">
+                    <button
+                        class="link-button"
+                        type="button"
+                        data-open-cart-id="${escapeHtml(cart.id)}"
+                    >
                         ${escapeHtml(cartDisplayName(cart))}
                     </button>
-                    <div class="muted">${escapeHtml(cart.model_name || "")}</div>
+
+                    <div class="muted">
+                        ${escapeHtml(cart.model_name || "")}
+                    </div>
                 </td>
+
                 <td>
-                    ${renderInlineEditField(cart.id, "teacher_name", ownership.teacher_name || "—")}
+                    ${renderInlineEditField(
+                        cart.id,
+                        "teacher_name",
+                        ownership.teacher_name || "—"
+                    )}
                 </td>
+
                 <td>
-                    ${renderInlineEditField(cart.id, "room_number", ownership.room_number || "—")}
+                    ${renderInlineEditField(
+                        cart.id,
+                        "room_number",
+                        ownership.room_number || "—"
+                    )}
                 </td>
+
                 <td>
                     ${renderLocationEditField(cart)}
                 </td>
+
                 <td>
                     <span class="device-count-badge">
                         ${escapeHtml(cart.device_count || 0)}
                     </span>
                 </td>
+
                 <td>
                     ${renderCartCheckoutSummary(cart)}
                 </td>
+
                 <td>
                     <div class="cart-action-group">
                         <button

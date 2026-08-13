@@ -1482,34 +1482,6 @@ body[data-theme="light"] .ownership-user-carts .media-sheet thead th {
     width: 100%;
 }
 
-.my-carts-table th:nth-child(1),
-.my-carts-table td:nth-child(1) {
-    width: 3rem;
-    text-align: center;
-}
-
-.my-carts-table th:nth-child(2),
-.my-carts-table td:nth-child(2) {
-    width: 4rem;
-}
-
-.my-carts-table th:nth-child(5),
-.my-carts-table td:nth-child(5) {
-    width: 7rem;
-}
-
-.my-carts-table th:nth-child(7),
-.my-carts-table td:nth-child(7) {
-    width: 5rem;
-    text-align: center;
-}
-
-.my-carts-table th:nth-child(8),
-.my-carts-table td:nth-child(8) {
-    width: 6rem;
-    text-align: center;
-}
-
 .my-carts-table .cart-index-input {
     max-width: 3.25rem;
 }
@@ -1525,22 +1497,6 @@ body[data-theme="light"] .ownership-user-carts .media-sheet thead th {
 /* Ownership Management: only ensure room has enough width */
 .ownership-carts-table {
     width: 100%;
-}
-
-.ownership-carts-table th:nth-child(3),
-.ownership-carts-table td:nth-child(3) {
-    width: 7rem;
-}
-
-.ownership-carts-table th:nth-child(5),
-.ownership-carts-table td:nth-child(5) {
-    width: 5rem;
-    text-align: center;
-}
-
-.ownership-carts-table th:nth-child(6),
-.ownership-carts-table td:nth-child(6) {
-    width: 13rem;
 }
 
 .ownership-carts-table .inline-edit-value {
@@ -4124,5 +4080,255 @@ body[data-theme="light"] .checkout-warning {
 
   .student-checkout-form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   My Carts - Final Column Layout
+   Move | Cart | Teacher | Room | Location | Devices |
+   Student Checkouts | Actions
+   ========================================================= */
+
+#myCarts,
+#myCartsExpandedView {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.my-carts-sheet-wrap {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+
+  overflow-x: auto;
+  overflow-y: visible;
+
+  -webkit-overflow-scrolling: touch;
+}
+
+.my-carts-table {
+  width: 100%;
+  min-width: 1120px;
+  table-layout: fixed;
+}
+
+/* Move */
+.my-carts-table th:nth-child(1),
+.my-carts-table td:nth-child(1) {
+  width: 50px;
+  text-align: center;
+}
+
+/* Cart */
+.my-carts-table th:nth-child(2),
+.my-carts-table td:nth-child(2) {
+  width: 210px;
+}
+
+/* Teacher Name */
+.my-carts-table th:nth-child(3),
+.my-carts-table td:nth-child(3) {
+  width: 170px;
+}
+
+/* Room Number */
+.my-carts-table th:nth-child(4),
+.my-carts-table td:nth-child(4) {
+  width: 125px;
+}
+
+/* Location */
+.my-carts-table th:nth-child(5),
+.my-carts-table td:nth-child(5) {
+  width: 165px;
+}
+
+/* Devices */
+.my-carts-table th:nth-child(6),
+.my-carts-table td:nth-child(6) {
+  width: 80px;
+  text-align: center;
+}
+
+/* Student Checkouts */
+.my-carts-table th:nth-child(7),
+.my-carts-table td:nth-child(7) {
+  width: 145px;
+}
+
+/* Actions */
+.my-carts-table th:nth-child(8),
+.my-carts-table td:nth-child(8) {
+  width: 185px;
+}
+
+/* General cell behavior */
+.my-carts-table th,
+.my-carts-table td {
+  vertical-align: middle;
+}
+
+.my-carts-table td {
+  min-width: 0;
+}
+
+/* Cart cell */
+.my-carts-table td:nth-child(2) .link-button {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Teacher / Room / Location */
+.my-carts-table .inline-edit-control {
+  width: 100%;
+  min-width: 0;
+}
+
+.my-carts-table .inline-edit-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Student checkout summary */
+.my-carts-table .cart-checkout-summary {
+  display: grid;
+  gap: 0.2rem;
+  max-width: 100%;
+
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.my-carts-table .cart-checkout-summary span {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+}
+
+/* Action buttons */
+.my-carts-table td:nth-child(8) .cart-action-group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.my-carts-table td:nth-child(8) .mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 36px;
+  padding: 0.45rem 0.65rem;
+
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.my-carts-table td:nth-child(8) [data-cart-details-id] {
+  min-width: 68px;
+}
+
+.my-carts-table td:nth-child(8) [data-unassign-cart-id] {
+  min-width: 108px;
+}
+
+/* Drag handle */
+.my-carts-table .drag-handle {
+  width: 52px;
+  text-align: center;
+  color: var(--muted);
+  font-weight: 800;
+  cursor: grab;
+}
+
+.my-carts-table tr.dragging td {
+  opacity: 0.55;
+  background: rgba(122, 162, 255, 0.16) !important;
+}
+
+/* Row interaction */
+.my-carts-table tbody tr.my-cart-row {
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+body[data-theme="light"]
+.my-carts-table
+tbody
+tr.my-cart-row:hover
+td {
+  background: #eff6ff !important;
+}
+
+body[data-theme="dark"]
+.my-carts-table
+tbody
+tr.my-cart-row:hover
+td {
+  background: rgba(122, 162, 255, 0.10) !important;
+}
+
+.my-carts-table tbody tr.my-cart-row:hover {
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+/* Destructive action */
+body[data-theme="light"]
+.my-carts-table
+[data-unassign-cart-id] {
+  background: #ffffff;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+body[data-theme="light"]
+.my-carts-table
+[data-unassign-cart-id]:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+body[data-theme="dark"]
+.my-carts-table
+[data-unassign-cart-id] {
+  background: rgba(185, 28, 28, 0.08);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+body[data-theme="dark"]
+.my-carts-table
+[data-unassign-cart-id]:hover {
+  background: rgba(185, 28, 28, 0.16);
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
+/* Responsive containment */
+@media (max-width: 1200px) {
+  .my-carts-table {
+    min-width: 1080px;
+  }
+}
+
+@media (max-width: 760px) {
+  .my-carts-sheet-wrap {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+
+  .my-carts-table {
+    min-width: 1040px;
   }
 }
