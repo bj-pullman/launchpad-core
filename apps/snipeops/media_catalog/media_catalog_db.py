@@ -10,14 +10,28 @@ from config.settings import SNIPE_CATALOG_DB_PATH
 DB_PATH = Path(SNIPE_CATALOG_DB_PATH).with_name("snipeops_media_catalog.sqlite3")
 
 
+class _ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        result = super().__exit__(exc_type, exc_value, traceback)
+        self.close()
+        return result
+
+
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), factory=_ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    return {
+        row["name"]
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
 
 
 def init_db() -> None:
@@ -41,22 +55,16 @@ def init_db() -> None:
         )
         """)
 
-        with _connect() as conn:
-            existing_columns = {
-                row["name"]
-                for row in conn.execute("PRAGMA table_info(media_catalog_logs)").fetchall()
-            }
+        existing_columns = _table_columns(conn, "media_catalog_logs")
 
-            if "actor_user_id" not in existing_columns:
-                conn.execute("ALTER TABLE media_catalog_logs ADD COLUMN actor_user_id INTEGER")
+        if "actor_user_id" not in existing_columns:
+            conn.execute("ALTER TABLE media_catalog_logs ADD COLUMN actor_user_id INTEGER")
 
-            if "actor_email" not in existing_columns:
-                conn.execute("ALTER TABLE media_catalog_logs ADD COLUMN actor_email TEXT")
+        if "actor_email" not in existing_columns:
+            conn.execute("ALTER TABLE media_catalog_logs ADD COLUMN actor_email TEXT")
 
-            if "actor_display_name" not in existing_columns:
-                conn.execute("ALTER TABLE media_catalog_logs ADD COLUMN actor_display_name TEXT")
-
-            conn.commit()
+        if "actor_display_name" not in existing_columns:
+            conn.execute("ALTER TABLE media_catalog_logs ADD COLUMN actor_display_name TEXT")
 
         conn.execute("""
         CREATE TABLE IF NOT EXISTS media_cart_ownership (
@@ -89,10 +97,7 @@ def init_db() -> None:
         )
         """)
 
-        existing_columns = {
-            row["name"]
-            for row in conn.execute("PRAGMA table_info(media_cart_ownership)").fetchall()
-        }
+        existing_columns = _table_columns(conn, "media_cart_ownership")
 
         if "media_specialist_owner" not in existing_columns:
             conn.execute("ALTER TABLE media_cart_ownership ADD COLUMN media_specialist_owner TEXT")
@@ -105,6 +110,66 @@ def init_db() -> None:
 
         if "display_order" not in existing_columns:
             conn.execute("ALTER TABLE media_cart_ownership ADD COLUMN display_order INTEGER")
+
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS media_student_checkouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_asset_id INTEGER NOT NULL,
+            device_asset_tag TEXT,
+            device_serial TEXT,
+            device_name TEXT,
+            device_model_name TEXT,
+            device_status_name TEXT,
+            original_cart_asset_id INTEGER,
+            original_cart_asset_tag TEXT,
+            original_cart_name TEXT,
+            original_cart_teacher_name TEXT,
+            original_cart_room_number TEXT,
+            original_owner_user_id INTEGER,
+            original_owner_email TEXT,
+            original_owner_display_name TEXT,
+            student_name TEXT NOT NULL,
+            student_id TEXT,
+            checked_out_at TEXT NOT NULL,
+            return_by_date TEXT NOT NULL,
+            returned_at TEXT,
+            checkout_actor_user_id INTEGER,
+            checkout_actor_email TEXT,
+            checkout_actor_display_name TEXT,
+            return_actor_user_id INTEGER,
+            return_actor_email TEXT,
+            return_actor_display_name TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            due_date_overridden INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """)
+
+        conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_media_student_checkouts_one_active_device
+        ON media_student_checkouts(device_asset_id)
+        WHERE returned_at IS NULL
+        """)
+
+        conn.execute("""
+        CREATE INDEX IF NOT EXISTS
+            idx_media_student_checkouts_cart
+        ON media_student_checkouts(original_cart_asset_id)
+        """)
+
+        conn.execute("""
+        CREATE INDEX IF NOT EXISTS
+            idx_media_student_checkouts_status
+        ON media_student_checkouts(status, returned_at)
+        """)
+
+        conn.execute("""
+        CREATE INDEX IF NOT EXISTS
+            idx_media_student_checkouts_return_by
+        ON media_student_checkouts(return_by_date)
+        """)
 
         conn.commit()
 
@@ -178,6 +243,219 @@ def get_recent(limit: int = 50) -> list[dict]:
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def create_student_checkout_record(payload: dict) -> dict:
+    init_db()
+
+    now = _now_iso()
+
+    values = {
+        "device_asset_id": int(payload["device_asset_id"]),
+        "device_asset_tag": payload.get("device_asset_tag") or "",
+        "device_serial": payload.get("device_serial") or "",
+        "device_name": payload.get("device_name") or "",
+        "device_model_name": payload.get("device_model_name") or "",
+        "device_status_name": payload.get("device_status_name") or "",
+        "original_cart_asset_id": payload.get("original_cart_asset_id"),
+        "original_cart_asset_tag": payload.get("original_cart_asset_tag") or "",
+        "original_cart_name": payload.get("original_cart_name") or "",
+        "original_cart_teacher_name": payload.get("original_cart_teacher_name") or "",
+        "original_cart_room_number": payload.get("original_cart_room_number") or "",
+        "original_owner_user_id": payload.get("original_owner_user_id"),
+        "original_owner_email": payload.get("original_owner_email") or "",
+        "original_owner_display_name": payload.get("original_owner_display_name") or "",
+        "student_name": payload.get("student_name") or "",
+        "student_id": payload.get("student_id") or "",
+        "checked_out_at": payload["checked_out_at"],
+        "return_by_date": payload["return_by_date"],
+        "checkout_actor_user_id": payload.get("checkout_actor_user_id"),
+        "checkout_actor_email": payload.get("checkout_actor_email") or "",
+        "checkout_actor_display_name": payload.get("checkout_actor_display_name") or "",
+        "status": payload.get("status") or "active",
+        "due_date_overridden": 1 if payload.get("due_date_overridden") else 0,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    fields = list(values.keys())
+    placeholders = ", ".join("?" for _ in fields)
+
+    with _connect() as conn:
+        cur = conn.execute(
+            f"""
+            INSERT INTO media_student_checkouts (
+                {", ".join(fields)}
+            )
+            VALUES ({placeholders})
+            """,
+            [values[field] for field in fields],
+        )
+        conn.commit()
+
+        return get_student_checkout(int(cur.lastrowid)) or {}
+
+
+def get_student_checkout(checkout_id: int) -> dict | None:
+    init_db()
+
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM media_student_checkouts
+            WHERE id = ?
+            """,
+            (int(checkout_id),),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def get_active_student_checkout_for_device(device_asset_id: int) -> dict | None:
+    init_db()
+
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM media_student_checkouts
+            WHERE device_asset_id = ?
+              AND returned_at IS NULL
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(device_asset_id),),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def list_student_checkouts(
+    *,
+    cart_asset_ids: list[int] | None = None,
+    limit: int = 1000,
+) -> list[dict]:
+    init_db()
+
+    params: list[object] = []
+    where = ""
+
+    if cart_asset_ids is not None:
+        normalized_ids = sorted({
+            int(cart_asset_id)
+            for cart_asset_id in cart_asset_ids
+            if cart_asset_id is not None
+        })
+
+        if not normalized_ids:
+            return []
+
+        placeholders = ", ".join("?" for _ in normalized_ids)
+        where = f"WHERE original_cart_asset_id IN ({placeholders})"
+        params.extend(normalized_ids)
+
+    params.append(int(limit))
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM media_student_checkouts
+            {where}
+            ORDER BY
+                CASE WHEN returned_at IS NULL THEN 0 ELSE 1 END,
+                checked_out_at DESC,
+                id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def list_active_student_checkouts_by_cart_ids(cart_asset_ids: list[int]) -> list[dict]:
+    init_db()
+
+    normalized_ids = sorted({
+        int(cart_asset_id)
+        for cart_asset_id in cart_asset_ids
+        if cart_asset_id is not None
+    })
+
+    if not normalized_ids:
+        return []
+
+    placeholders = ", ".join("?" for _ in normalized_ids)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM media_student_checkouts
+            WHERE returned_at IS NULL
+              AND original_cart_asset_id IN ({placeholders})
+            ORDER BY return_by_date, checked_out_at DESC, id DESC
+            """,
+            normalized_ids,
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def return_student_checkout_record(
+    *,
+    checkout_id: int,
+    actor_user: dict,
+    returned_at: str | None = None,
+) -> dict | None:
+    init_db()
+
+    returned_at = returned_at or _now_iso()
+    actor_user = actor_user or {}
+
+    with _connect() as conn:
+        existing = conn.execute(
+            """
+            SELECT *
+            FROM media_student_checkouts
+            WHERE id = ?
+            """,
+            (int(checkout_id),),
+        ).fetchone()
+
+        if not existing:
+            return None
+
+        if existing["returned_at"]:
+            return dict(existing)
+
+        conn.execute(
+            """
+            UPDATE media_student_checkouts
+            SET
+                returned_at = ?,
+                return_actor_user_id = ?,
+                return_actor_email = ?,
+                return_actor_display_name = ?,
+                status = 'returned',
+                updated_at = ?
+            WHERE id = ?
+              AND returned_at IS NULL
+            """,
+            (
+                returned_at,
+                actor_user.get("id"),
+                actor_user.get("email") or "",
+                actor_user.get("display_name") or "",
+                returned_at,
+                int(checkout_id),
+            ),
+        )
+        conn.commit()
+
+    return get_student_checkout(checkout_id)
 
 
 def get_cart_ownership(cart_asset_id: int) -> dict | None:

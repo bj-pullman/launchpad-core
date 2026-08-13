@@ -15,6 +15,12 @@ let myCartsSearchQuery = "";
 let ownershipOwnersCache = [];
 let ownershipSelectedUser = null;
 let locationOptionsCache = null;
+let dashboardCache = null;
+let studentCheckoutLookup = null;
+let studentCheckoutsCache = [];
+let studentCheckoutStatusFilter = "active";
+let studentCheckoutSearchQuery = "";
+let pendingReturnCheckout = null;
 
 const sheetDevices = new Map();
 
@@ -97,7 +103,9 @@ async function readJsonResponse(resp, fallbackMessage) {
     }
 
     if (!resp.ok || data.ok === false) {
-        throw new Error(data.error || data.message || fallbackMessage);
+        const err = new Error(data.error || data.message || fallbackMessage);
+        Object.assign(err, data);
+        throw err;
     }
 
     return data;
@@ -125,6 +133,7 @@ async function apiPost(path, body, fallbackMessage) {
 }
 
 async function initMediaCatalog() {
+    bindDashboard();
     bindCartSearch();
     bindFindCartToggle();
     bindRefreshMyCarts();
@@ -139,6 +148,9 @@ async function initMediaCatalog() {
     bindOwnershipManagement();
     bindExportButtons();
     bindRecentActivityFilter();
+    bindStudentCheckoutModal();
+    bindStudentCheckoutsPage();
+    bindReturnStudentCheckoutModal();
     hydrateActivityTimes();
     initManagedDeviceTotals();
 
@@ -148,6 +160,7 @@ async function initMediaCatalog() {
 
     try {
         await loadCurrentUser();
+        await loadDashboard();
         await loadMyCarts();
         preloadLocationOptions();
         setStatus("Media Catalog loaded.", true);
@@ -159,6 +172,368 @@ async function initMediaCatalog() {
 async function loadCurrentUser() {
     const data = await apiGet("/api/me", "Unable to load current user.");
     currentUser = data.user || null;
+}
+
+function bindDashboard() {
+    $("refreshDashboardBtn")?.addEventListener("click", loadDashboard);
+
+    document.querySelectorAll("[data-open-checkout-status]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            openStudentCheckoutsTab(btn.dataset.openCheckoutStatus || "active");
+        });
+    });
+
+    document.querySelectorAll("[data-dashboard-view-all-carts]").forEach(btn => {
+        btn.addEventListener("click", openCartManagementTab);
+    });
+}
+
+async function loadDashboard() {
+    const summaryEl = $("dashboardSummary");
+    const cartsEl = $("dashboardMyCarts");
+    const attentionEl = $("dashboardAttention");
+    const activityEl = $("dashboardRecentCheckouts");
+
+    if (!summaryEl && !cartsEl && !attentionEl && !activityEl) return;
+
+    if (summaryEl) {
+        summaryEl.innerHTML = `<div class="muted">Loading dashboard...</div>`;
+    }
+
+    try {
+        const data = await apiGet("/api/dashboard", "Unable to load Media Catalog dashboard.");
+        dashboardCache = data;
+        renderDashboard(data);
+    } catch (err) {
+        if (summaryEl) {
+            summaryEl.innerHTML = `<div class="muted">${escapeHtml(err.message || "Unable to load dashboard.")}</div>`;
+        }
+        if (attentionEl) attentionEl.innerHTML = "";
+        if (cartsEl) cartsEl.innerHTML = "";
+        if (activityEl) activityEl.innerHTML = "";
+    }
+}
+
+function openCartManagementTab() {
+    document.querySelector('[data-tab="cart-management"]')?.click();
+}
+
+function dashboardMetricIcon(name) {
+    const icons = {
+        carts: `
+            <rect x="3" y="5" width="18" height="12" rx="2"></rect>
+            <path d="M7 17v2"></path>
+            <path d="M17 17v2"></path>
+            <path d="M7 9h10"></path>
+        `,
+        devices: `
+            <rect x="5" y="3" width="14" height="18" rx="2"></rect>
+            <path d="M9 7h6"></path>
+            <path d="M12 17h.01"></path>
+        `,
+        active: `
+            <path d="M9 11l3 3L22 4"></path>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+        `,
+        overdue: `
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7v5l3 2"></path>
+        `,
+    };
+
+    return `
+        <span class="dashboard-metric-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                ${icons[name] || icons.carts}
+            </svg>
+        </span>
+    `;
+}
+
+function renderDashboard(data) {
+    const summary = data.summary || {};
+    const summaryEl = $("dashboardSummary");
+    const cartsEl = $("dashboardMyCarts");
+    const attentionEl = $("dashboardAttention");
+    const activityEl = $("dashboardRecentCheckouts");
+
+    if (summaryEl) {
+        const activeCheckoutCard = window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
+            ? `
+                <button class="dashboard-metric-card" type="button" data-dashboard-checkout-status="active">
+                    ${dashboardMetricIcon("active")}
+                    <span class="dashboard-metric-value">${escapeHtml(summary.active_checkout_count || 0)}</span>
+                    <strong>Active Checkouts</strong>
+                    <small>Devices currently with students</small>
+                </button>
+            `
+            : `
+                <div class="dashboard-metric-card">
+                    ${dashboardMetricIcon("active")}
+                    <span class="dashboard-metric-value">${escapeHtml(summary.active_checkout_count || 0)}</span>
+                    <strong>Active Checkouts</strong>
+                    <small>Devices currently with students</small>
+                </div>
+            `;
+
+        const overdueCheckoutCard = window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
+            ? `
+                <button class="dashboard-metric-card overdue" type="button" data-dashboard-checkout-status="overdue">
+                    ${dashboardMetricIcon("overdue")}
+                    <span class="dashboard-metric-value">${escapeHtml(summary.overdue_checkout_count || 0)}</span>
+                    <strong>Overdue</strong>
+                    <small>Past the Return By date</small>
+                </button>
+            `
+            : `
+                <div class="dashboard-metric-card overdue">
+                    ${dashboardMetricIcon("overdue")}
+                    <span class="dashboard-metric-value">${escapeHtml(summary.overdue_checkout_count || 0)}</span>
+                    <strong>Overdue</strong>
+                    <small>Past the Return By date</small>
+                </div>
+            `;
+
+        summaryEl.innerHTML = `
+            <button class="dashboard-metric-card" type="button" data-dashboard-target="cart-management">
+                ${dashboardMetricIcon("carts")}
+                <span class="dashboard-metric-value">${escapeHtml(summary.cart_count || 0)}</span>
+                <strong>My Carts</strong>
+                <small>Assigned or managed in your scope</small>
+            </button>
+
+            <button class="dashboard-metric-card" type="button" data-dashboard-target="cart-management">
+                ${dashboardMetricIcon("devices")}
+                <span class="dashboard-metric-value">${escapeHtml(summary.device_count || 0)}</span>
+                <strong>Devices</strong>
+                <small>Total devices in scoped carts</small>
+            </button>
+
+            ${activeCheckoutCard}
+            ${overdueCheckoutCard}
+        `;
+
+        summaryEl.querySelectorAll("[data-dashboard-target]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelector(`[data-tab="${btn.dataset.dashboardTarget}"]`)?.click();
+            });
+        });
+
+        summaryEl.querySelectorAll("[data-dashboard-checkout-status]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                openStudentCheckoutsTab(btn.dataset.dashboardCheckoutStatus || "active");
+            });
+        });
+    }
+
+    if (cartsEl) {
+        renderDashboardCarts(data.carts || []);
+    }
+
+    if (attentionEl) {
+        renderDashboardAttention(data);
+    }
+
+    if (activityEl) {
+        renderDashboardRecentCheckouts(data.recent_student_checkouts || []);
+    }
+}
+
+function renderDashboardAttention(data) {
+    const el = $("dashboardAttention");
+    if (!el) return;
+
+    const summary = data.summary || {};
+    const attention = data.attention || {};
+    const overdueCount = Number(summary.overdue_checkout_count || 0);
+    const overdueCarts = attention.overdue_carts || [];
+    const items = [];
+
+    if (overdueCount > 0) {
+        items.push(`
+            <button class="dashboard-attention-item priority" type="button" data-attention-checkout-status="overdue">
+                <span>${escapeHtml(overdueCount)}</span>
+                <div>
+                    <strong>Overdue Student Checkouts</strong>
+                    <p>${escapeHtml(overdueCount)} device${overdueCount === 1 ? "" : "s"} past the Return By date</p>
+                </div>
+            </button>
+        `);
+    }
+
+    overdueCarts.slice(0, 5).forEach(cart => {
+        const checkoutSummary = cart.student_checkout_summary || {};
+        const ownership = cart.ownership || {};
+        const overdue = Number(checkoutSummary.overdue_count || 0);
+        const teacher = ownership.teacher_name || ownership.owner_display_name || ownership.owner_email || "Unassigned";
+        const room = ownership.room_number ? `Room ${ownership.room_number}` : "No room";
+
+        if (!overdue) return;
+
+        items.push(`
+            <button class="dashboard-attention-item" type="button" data-attention-open-cart="${escapeHtml(cart.id)}">
+                <span>${escapeHtml(overdue)}</span>
+                <div>
+                    <strong>${escapeHtml(cart.asset_tag ? `Cart ${cart.asset_tag}` : cart.name || "Cart")}</strong>
+                    <p>${escapeHtml(teacher)} - ${escapeHtml(room)}</p>
+                </div>
+            </button>
+        `);
+    });
+
+    if (!items.length) {
+        el.innerHTML = `
+            <div class="dashboard-empty-state">
+                <strong>No checkout items need attention</strong>
+                <p class="muted">Overdue Student Checkouts will surface here when they occur.</p>
+            </div>
+        `;
+        return;
+    }
+
+    el.innerHTML = items.join("");
+
+    el.querySelectorAll("[data-attention-checkout-status]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            openStudentCheckoutsTab(btn.dataset.attentionCheckoutStatus || "overdue");
+        });
+    });
+
+    el.querySelectorAll("[data-attention-open-cart]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const carts = data.carts || [];
+            const cart = carts.find(item => String(item.id) === String(btn.dataset.attentionOpenCart));
+            openCartManagementTab();
+            if (cart) selectCart(cart);
+        });
+    });
+}
+
+function renderDashboardCarts(carts) {
+    const el = $("dashboardMyCarts");
+    if (!el) return;
+
+    if (!carts.length) {
+        el.innerHTML = `
+            <div class="dashboard-empty-state">
+                <strong>No carts in your current scope</strong>
+                <p class="muted">Claim or assign a cart from Cart Management to build this overview.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const visibleCarts = carts.slice(0, 8);
+
+    el.innerHTML = `
+        <div class="dashboard-cart-table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Cart</th>
+                        <th>Teacher / Owner</th>
+                        <th>Room</th>
+                        <th>Devices</th>
+                        <th>Active</th>
+                        <th>Overdue</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${visibleCarts.map(cart => {
+        const ownership = cart.ownership || {};
+        const summary = cart.student_checkout_summary || {};
+        const teacher = ownership.teacher_name || ownership.owner_display_name || ownership.owner_email || "Unassigned";
+        const room = ownership.room_number || "-";
+        const overdue = Number(summary.overdue_count || 0);
+        const active = Number(summary.active_count || 0);
+
+        return `
+            <tr data-dashboard-cart-id="${escapeHtml(cart.id)}">
+                <td>
+                    <button class="link-button" type="button" data-dashboard-open-cart="${escapeHtml(cart.id)}">
+                        ${escapeHtml(cart.asset_tag ? `Cart ${cart.asset_tag}` : cart.name || "Cart")}
+                    </button>
+                    <div class="muted">${escapeHtml(cart.name || cart.model_name || "")}</div>
+                </td>
+                <td>${escapeHtml(teacher)}</td>
+                <td>${escapeHtml(room)}</td>
+                <td>${escapeHtml(cart.device_count || 0)}</td>
+                <td>${escapeHtml(active)}</td>
+                <td class="${overdue ? "checkout-overdue-text" : "muted"}">${escapeHtml(overdue)}</td>
+                <td>
+                    ${window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS ? `
+                        <button class="mini-btn" type="button" data-dashboard-open-checkouts="${escapeHtml(cart.asset_tag || cart.name || "")}">
+                            Checkouts
+                        </button>
+                    ` : `
+                        <button class="mini-btn" type="button" data-dashboard-open-cart="${escapeHtml(cart.id)}">
+                            Open
+                        </button>
+                    `}
+                </td>
+            </tr>
+        `;
+                    }).join("")}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="dashboard-table-footer">
+            <span class="muted">Showing ${escapeHtml(visibleCarts.length)} of ${escapeHtml(carts.length)} cart${carts.length === 1 ? "" : "s"}.</span>
+        </div>
+    `;
+
+    el.querySelectorAll("[data-dashboard-open-cart]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const cart = carts.find(item => String(item.id) === String(btn.dataset.dashboardOpenCart));
+            if (!cart) return;
+            openCartManagementTab();
+            selectCart(cart);
+        });
+    });
+
+    el.querySelectorAll("[data-dashboard-open-checkouts]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            openStudentCheckoutsTab("all", btn.dataset.dashboardOpenCheckouts || "");
+        });
+    });
+}
+
+function renderDashboardRecentCheckouts(checkouts) {
+    const el = $("dashboardRecentCheckouts");
+    if (!el) return;
+
+    if (!checkouts.length) {
+        el.innerHTML = `
+            <div class="dashboard-empty-state">
+                <strong>No recent Student Checkout activity</strong>
+                <p class="muted">Checkout and return records will appear here once devices move through student custody.</p>
+            </div>
+        `;
+        return;
+    }
+
+    el.innerHTML = checkouts.slice(0, 8).map(checkout => {
+        const returned = Boolean(checkout.returned_at);
+        const action = returned ? "Returned" : "Checked out";
+        const when = returned ? checkout.returned_at : checkout.checked_out_at;
+
+        return `
+        <article class="dashboard-activity-item">
+            <div>
+                <strong>${escapeHtml(action)} ${escapeHtml(checkout.device_asset_tag || checkout.device_serial || "Device")}</strong>
+                <p>
+                    ${escapeHtml(checkout.student_name || "Student")}
+                    - ${escapeHtml(checkout.original_cart_asset_tag || checkout.original_cart_name || "Cart")}
+                </p>
+                <span class="muted">${escapeHtml(formatActivityDateTime(when))}</span>
+            </div>
+            ${renderCheckoutStatusBadge(checkout)}
+        </article>
+        `;
+    }).join("");
 }
 
 function bindFindCartToggle() {
@@ -268,6 +643,62 @@ async function searchCarts() {
     }
 }
 
+function bindOwnershipCartSearch() {
+    const input = $("ownershipCartSearch");
+    const btn = $("ownershipCartSearchBtn");
+
+    if (!input || !btn) return;
+
+    const run = debounce(searchOwnershipCarts, 250);
+
+    input.addEventListener("input", run);
+
+    input.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            searchOwnershipCarts();
+        }
+    });
+
+    btn.addEventListener("click", searchOwnershipCarts);
+}
+
+
+async function searchOwnershipCarts() {
+    const input = $("ownershipCartSearch");
+    const resultsEl = $("ownershipCartResults");
+    const query = (input?.value || "").trim();
+
+    if (!resultsEl) return;
+
+    if (query.length < 2) {
+        resultsEl.innerHTML = "";
+        return;
+    }
+
+    resultsEl.innerHTML = `<div class="muted">Searching carts...</div>`;
+    setStatus(`Searching carts for "${query}"...`, true);
+
+    try {
+        const data = await apiGet(
+            `/api/carts?q=${encodeURIComponent(query)}`,
+            "Cart search failed."
+        );
+
+        renderCartCards(
+            "ownershipCartResults",
+            data.carts || [],
+            { showOwnershipButton: true }
+        );
+
+        setStatus(`Found ${(data.carts || []).length} cart(s).`, true);
+    } catch (err) {
+        resultsEl.innerHTML =
+            `<div class="muted">${escapeHtml(err.message || "Cart search failed.")}</div>`;
+        setStatus(err.message || "Cart search failed.", false);
+    }
+}
+
 function renderMyCartsTable(carts) {
     const el = $("myCarts");
     if (!el) return;
@@ -316,6 +747,7 @@ function renderMyCartsTable(carts) {
                             <th>Room Number</th>
                             <th>Location</th>
                             <th>Devices</th>
+                            <th>Student Checkouts</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -471,6 +903,16 @@ function bindMyCartTableEvents(carts) {
                     source: "cart-management"
                 });
             }
+        });
+    });
+
+    document.querySelectorAll("#myCartsBody [data-cart-checkouts-id]").forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cart = carts.find(item => String(item.id) === String(btn.dataset.cartCheckoutsId));
+            if (cart) openCartCheckoutDetails(cart);
         });
     });
 
@@ -1120,8 +1562,25 @@ async function requestAddDevice(device) {
 }
 
 
+function getActiveMediaCatalogTab() {
+    return document.querySelector(".media-catalog-tabs .settings-tab.active")?.dataset.tab || "";
+}
+
+function setStudentCheckoutListState(status = "active", query = "") {
+    studentCheckoutStatusFilter = status || "active";
+    studentCheckoutSearchQuery = query || "";
+
+    const search = $("studentCheckoutSearch");
+    if (search) {
+        search.value = studentCheckoutSearchQuery;
+    }
+
+    updateStudentCheckoutFilterButtons();
+}
+
 async function refreshMediaCatalogViews() {
     const refreshTasks = [
+        loadDashboard(),
         loadMyCarts()
     ];
 
@@ -1129,7 +1588,28 @@ async function refreshMediaCatalogViews() {
         refreshTasks.push(loadOwnershipOwners());
     }
 
+    if ($("ownershipUserCarts") && ownershipSelectedUser) {
+        refreshTasks.push(loadOwnershipUserCarts(ownershipSelectedUser));
+    }
+
+    if ($("studentCheckoutsBody") && window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) {
+        refreshTasks.push(loadStudentCheckouts());
+    }
+
     await Promise.allSettled(refreshTasks);
+}
+
+async function refreshStudentCheckoutDependentViews(options = {}) {
+    const activeTab = getActiveMediaCatalogTab();
+
+    if (
+        options.afterCreate &&
+        activeTab === "student-checkouts"
+    ) {
+        setStudentCheckoutListState("active", "");
+    }
+
+    await refreshMediaCatalogViews();
 }
 
 
@@ -2183,8 +2663,582 @@ function openCartDetails(cart) {
     });
 }
 
+function openStudentCheckoutsTab(status = "active", query = "") {
+    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) {
+        setStatus("You do not have permission to manage Student Checkouts.", false);
+        return;
+    }
+
+    setStudentCheckoutListState(status || "active", query || "");
+
+    const tab = document.querySelector('[data-tab="student-checkouts"]');
+    if (tab) {
+        tab.click();
+    }
+    loadStudentCheckouts();
+}
+
+function bindStudentCheckoutsPage() {
+    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) return;
+
+    $("refreshStudentCheckoutsBtn")?.addEventListener("click", loadStudentCheckouts);
+    $("openStudentCheckoutFromPageBtn")?.addEventListener("click", openStudentCheckoutModal);
+
+    document.querySelectorAll("[data-checkout-status-filter]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            studentCheckoutStatusFilter = btn.dataset.checkoutStatusFilter || "active";
+            updateStudentCheckoutFilterButtons();
+            loadStudentCheckouts();
+        });
+    });
+
+    const search = $("studentCheckoutSearch");
+    if (search) {
+        const run = debounce(() => {
+            studentCheckoutSearchQuery = search.value.trim();
+            loadStudentCheckouts();
+        }, 250);
+
+        search.addEventListener("input", run);
+        search.addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                studentCheckoutSearchQuery = search.value.trim();
+                loadStudentCheckouts();
+            }
+        });
+    }
+}
+
+function updateStudentCheckoutFilterButtons() {
+    document.querySelectorAll("[data-checkout-status-filter]").forEach(btn => {
+        btn.classList.toggle(
+            "active",
+            btn.dataset.checkoutStatusFilter === studentCheckoutStatusFilter
+        );
+    });
+}
+
+async function loadStudentCheckouts() {
+    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) return;
+
+    const tbody = $("studentCheckoutsBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="7" class="muted">Loading Student Checkouts...</td></tr>`;
+
+    try {
+        const data = await apiGet(
+            `/api/student-checkouts?status=${encodeURIComponent(studentCheckoutStatusFilter)}&q=${encodeURIComponent(studentCheckoutSearchQuery)}`,
+            "Unable to load Student Checkouts."
+        );
+
+        studentCheckoutsCache = data.checkouts || [];
+        renderStudentCheckoutSummary(data.summary || {});
+        renderStudentCheckouts(studentCheckoutsCache);
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(err.message || "Unable to load Student Checkouts.")}</td></tr>`;
+    }
+}
+
+function renderStudentCheckoutSummary(summary) {
+    const el = $("studentCheckoutSummary");
+    if (!el) return;
+
+    el.innerHTML = `
+        <button class="checkout-summary-pill" type="button" data-checkout-summary-status="active">
+            <strong>${escapeHtml(summary.active_checkout_count || 0)}</strong>
+            <span>Active</span>
+        </button>
+        <button class="checkout-summary-pill overdue" type="button" data-checkout-summary-status="overdue">
+            <strong>${escapeHtml(summary.overdue_checkout_count || 0)}</strong>
+            <span>Overdue</span>
+        </button>
+    `;
+
+    el.querySelectorAll("[data-checkout-summary-status]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            studentCheckoutStatusFilter = btn.dataset.checkoutSummaryStatus || "active";
+            updateStudentCheckoutFilterButtons();
+            loadStudentCheckouts();
+        });
+    });
+}
+
+function renderStudentCheckouts(checkouts) {
+    const tbody = $("studentCheckoutsBody");
+    const empty = $("studentCheckoutsEmpty");
+    if (!tbody) return;
+
+    if (!checkouts.length) {
+        tbody.innerHTML = "";
+        empty?.classList.remove("hidden");
+        return;
+    }
+
+    empty?.classList.add("hidden");
+
+    tbody.innerHTML = checkouts.map(checkout => {
+        const canReturn = checkout.status !== "returned";
+
+        return `
+            <tr data-student-checkout-id="${escapeHtml(checkout.id)}">
+                <td>
+                    <strong>${escapeHtml(checkout.device_asset_tag || "No tag")}</strong>
+                    <div class="muted mono">${escapeHtml(checkout.device_serial || "No serial")}</div>
+                    <div class="muted">${escapeHtml(checkout.device_model_name || "")}</div>
+                </td>
+                <td>
+                    <strong>${escapeHtml(checkout.student_name || "")}</strong>
+                    <div class="muted">${escapeHtml(checkout.student_id || "No Student ID")}</div>
+                </td>
+                <td>
+                    <strong>${escapeHtml(checkout.original_cart_asset_tag || checkout.original_cart_name || "Cart")}</strong>
+                    <div class="muted">${escapeHtml(checkout.original_cart_teacher_name || "")}</div>
+                    <div class="muted">${escapeHtml(checkout.original_cart_room_number ? "Room " + checkout.original_cart_room_number : "")}</div>
+                </td>
+                <td>${escapeHtml(formatActivityDateTime(checkout.checked_out_at))}</td>
+                <td>${escapeHtml(checkout.return_by_date || "-")}</td>
+                <td>${renderCheckoutStatusBadge(checkout)}</td>
+                <td>
+                    <div class="cart-action-group">
+                        <button class="mini-btn" type="button" data-checkout-details-id="${escapeHtml(checkout.id)}">
+                            Details
+                        </button>
+                        ${canReturn ? `
+                            <button class="mini-btn" type="button" data-return-checkout-id="${escapeHtml(checkout.id)}">
+                                Return
+                            </button>
+                        ` : ""}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join("");
+
+    tbody.querySelectorAll("[data-checkout-details-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const checkout = studentCheckoutsCache.find(item => String(item.id) === String(btn.dataset.checkoutDetailsId));
+            if (checkout) openStudentCheckoutDetails(checkout);
+        });
+    });
+
+    tbody.querySelectorAll("[data-return-checkout-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const checkout = studentCheckoutsCache.find(item => String(item.id) === String(btn.dataset.returnCheckoutId));
+            if (checkout) openReturnStudentCheckoutModal(checkout);
+        });
+    });
+}
+
+function renderCheckoutStatusBadge(checkout) {
+    const status = checkout?.status || "active";
+    const label = checkout?.status_label || (status === "overdue" ? "Overdue" : status === "returned" ? "Returned" : "Active");
+    const overdueText = checkout?.days_overdue
+        ? ` (${checkout.days_overdue} day${Number(checkout.days_overdue) === 1 ? "" : "s"})`
+        : "";
+
+    return `<span class="student-status-badge ${escapeHtml(status)}">${escapeHtml(label + overdueText)}</span>`;
+}
+
+function renderCartCheckoutSummary(cart) {
+    const summary = cart.student_checkout_summary || {};
+    const active = Number(summary.active_count || 0);
+    const overdue = Number(summary.overdue_count || 0);
+
+    return `
+        <div class="cart-checkout-summary">
+            <span>${escapeHtml(active)} student checkout${active === 1 ? "" : "s"}</span>
+            <span class="${overdue ? "checkout-overdue-text" : "muted"}">${escapeHtml(overdue)} overdue</span>
+            <button class="mini-btn" type="button" data-cart-checkouts-id="${escapeHtml(cart.id)}">
+                Details
+            </button>
+        </div>
+    `;
+}
+
+function openCartCheckoutDetails(cart) {
+    const summary = cart.student_checkout_summary || {};
+    const checkouts = summary.checkouts || [];
+    const title = cart.asset_tag ? `Cart ${cart.asset_tag} Student Checkouts` : "Cart Student Checkouts";
+
+    if (!checkouts.length) {
+        openConfirmModal({
+            title,
+            message: "No active Student Checkouts are recorded for this cart.",
+            buttonText: "Close",
+            action: async () => {}
+        });
+        return;
+    }
+
+    const rows = checkouts.map(checkout => `
+        <div class="checkout-detail-row">
+            <div>
+                <strong>${escapeHtml(checkout.device_asset_tag || checkout.device_serial || "Device")}</strong>
+                <span class="muted">${escapeHtml(checkout.student_name || "Student")}</span>
+            </div>
+            <div>
+                <span class="muted">Due ${escapeHtml(checkout.return_by_date || "-")}</span>
+                ${renderCheckoutStatusBadge(checkout)}
+            </div>
+        </div>
+    `).join("");
+
+    openConfirmModal({
+        title,
+        messageHtml: `
+            <div class="checkout-detail-list">${rows}</div>
+            ${window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS ? `
+                <p class="confirm-copy">
+                    Open Student Checkouts and search this cart to return devices or review history.
+                </p>
+            ` : ""}
+        `,
+        buttonText: "Close",
+        action: async () => {}
+    });
+}
+
+function studentCheckoutDetailRows(checkout) {
+    return [
+        ["Asset Tag", checkout.device_asset_tag || "-"],
+        ["Serial Number", checkout.device_serial || "-"],
+        ["Model", checkout.device_model_name || "-"],
+        ["Student", checkout.student_name || "-"],
+        ["Student ID", checkout.student_id || "-"],
+        ["Original Cart", checkout.original_cart_asset_tag || checkout.original_cart_name || "-"],
+        ["Teacher / Owner", checkout.original_cart_teacher_name || checkout.original_owner_display_name || "-"],
+        ["Room", checkout.original_cart_room_number || "-"],
+        ["Checkout Date", formatActivityDateTime(checkout.checked_out_at)],
+        ["Return By", checkout.return_by_date || "-"],
+        ["Returned", checkout.returned_at ? formatActivityDateTime(checkout.returned_at) : "-"],
+        ["Checked Out By", checkout.checkout_actor_display_name || checkout.checkout_actor_email || "-"],
+        ["Returned By", checkout.return_actor_display_name || checkout.return_actor_email || "-"],
+        ["Status", checkout.status_label || "-"],
+    ];
+}
+
+function renderDetailCard(rows) {
+    return `
+        <div class="device-detail-grid">
+            ${rows.map(([label, value]) => `
+                <div class="detail-item">
+                    <span class="detail-label">${escapeHtml(label)}</span>
+                    <span class="detail-value">${escapeHtml(value || "-")}</span>
+                </div>
+            `).join("")}
+        </div>
+    `;
+}
+
+function openStudentCheckoutDetails(checkout) {
+    openConfirmModal({
+        title: "Student Checkout Details",
+        messageHtml: renderDetailCard(studentCheckoutDetailRows(checkout)),
+        buttonText: "Close",
+        action: async () => {}
+    });
+}
+
+function bindStudentCheckoutModal() {
+    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) return;
+
+    $("openStudentCheckoutBtn")?.addEventListener("click", openStudentCheckoutModal);
+    $("closeStudentCheckoutBtn")?.addEventListener("click", closeStudentCheckoutModal);
+    $("cancelStudentCheckoutBtn")?.addEventListener("click", closeStudentCheckoutModal);
+    $("lookupStudentCheckoutDeviceBtn")?.addEventListener("click", lookupStudentCheckoutDevice);
+    $("completeStudentCheckoutBtn")?.addEventListener("click", completeStudentCheckout);
+
+    $("studentCheckoutIdentifier")?.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            lookupStudentCheckoutDevice();
+        }
+    });
+
+    $("studentCheckoutName")?.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            completeStudentCheckout();
+        }
+    });
+
+    $("studentCheckoutModal")?.addEventListener("click", event => {
+        if (event.target.id === "studentCheckoutModal") {
+            closeStudentCheckoutModal();
+        }
+    });
+}
+
+function openStudentCheckoutModal() {
+    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) {
+        setStatus("You do not have permission to manage Student Checkouts.", false);
+        return;
+    }
+
+    resetStudentCheckoutModal();
+    $("studentCheckoutModal")?.classList.remove("hidden");
+    setTimeout(() => $("studentCheckoutIdentifier")?.focus(), 50);
+}
+
+function closeStudentCheckoutModal() {
+    $("studentCheckoutModal")?.classList.add("hidden");
+}
+
+function resetStudentCheckoutModal() {
+    studentCheckoutLookup = null;
+
+    if ($("studentCheckoutIdentifier")) $("studentCheckoutIdentifier").value = "";
+    if ($("studentCheckoutName")) $("studentCheckoutName").value = "";
+    if ($("studentCheckoutId")) $("studentCheckoutId").value = "";
+    if ($("studentCheckoutReturnBy")) $("studentCheckoutReturnBy").value = "";
+    if ($("studentCheckoutLookupResult")) {
+        $("studentCheckoutLookupResult").innerHTML = `<div class="muted">Locate a device to begin checkout.</div>`;
+    }
+
+    setStudentCheckoutModalStatus("", true, true);
+    updateStudentCheckoutSubmitState();
+}
+
+function setStudentCheckoutModalStatus(message, ok = true, hidden = false) {
+    const el = $("studentCheckoutModalStatus");
+    if (!el) return;
+
+    el.textContent = message || "";
+    el.classList.toggle("hidden", hidden || !message);
+    el.classList.toggle("ok", Boolean(ok));
+    el.classList.toggle("bad", !ok);
+}
+
+function updateStudentCheckoutSubmitState() {
+    const btn = $("completeStudentCheckoutBtn");
+    if (!btn) return;
+
+    const lookupReady =
+        studentCheckoutLookup &&
+        studentCheckoutLookup.eligible &&
+        !studentCheckoutLookup.active_checkout &&
+        studentCheckoutLookup.device;
+
+    btn.disabled = !lookupReady;
+}
+
+async function lookupStudentCheckoutDevice() {
+    const input = $("studentCheckoutIdentifier");
+    const query = (input?.value || "").trim();
+    const resultEl = $("studentCheckoutLookupResult");
+
+    if (!query) {
+        setStudentCheckoutModalStatus("Scan or type an Asset Tag or Serial Number.", false);
+        return;
+    }
+
+    studentCheckoutLookup = null;
+    updateStudentCheckoutSubmitState();
+
+    if (resultEl) {
+        resultEl.innerHTML = `<div class="muted">Locating device...</div>`;
+    }
+
+    setStudentCheckoutModalStatus("Locating device...", true);
+
+    try {
+        const data = await apiGet(
+            `/api/student-checkouts/lookup?q=${encodeURIComponent(query)}`,
+            "Device lookup failed."
+        );
+
+        studentCheckoutLookup = data;
+        renderStudentCheckoutLookup(data);
+        setStudentCheckoutModalStatus("", true, true);
+        updateStudentCheckoutSubmitState();
+    } catch (err) {
+        if (resultEl) {
+            resultEl.innerHTML = `<div class="checkout-warning">${escapeHtml(err.message || "Device lookup failed.")}</div>`;
+        }
+        setStudentCheckoutModalStatus(err.message || "Device lookup failed.", false);
+        updateStudentCheckoutSubmitState();
+    }
+}
+
+function renderStudentCheckoutLookup(data) {
+    const resultEl = $("studentCheckoutLookupResult");
+    if (!resultEl) return;
+
+    const device = data.device || {};
+    const cart = data.cart || {};
+    const ownership = data.ownership || {};
+    const active = data.active_checkout || null;
+    const canCheckout = data.eligible && !active;
+
+    if ($("studentCheckoutReturnBy") && data.default_return_by_date) {
+        $("studentCheckoutReturnBy").value = data.default_return_by_date;
+    }
+
+    const activeMessage = active
+        ? `This device is currently checked out to ${active.student_name || "another student"} and must be returned before it can be checked out again.`
+        : "";
+
+    resultEl.innerHTML = `
+        <div class="checkout-lookup-card ${canCheckout ? "ok" : "bad"}">
+            <div class="checkout-lookup-main">
+                <strong>${escapeHtml(device.asset_tag || device.serial || "Device")}</strong>
+                <span>${escapeHtml(device.model_name || device.name || "")}</span>
+                <span class="mono">${escapeHtml(device.serial || "")}</span>
+            </div>
+
+            <div class="checkout-lookup-context">
+                <span><strong>Cart</strong> ${escapeHtml(cart.asset_tag || cart.name || "-")}</span>
+                <span><strong>Teacher</strong> ${escapeHtml(ownership.teacher_name || ownership.owner_display_name || "-")}</span>
+                <span><strong>Room</strong> ${escapeHtml(ownership.room_number || "-")}</span>
+                <span><strong>Status</strong> ${escapeHtml(device.status_name || "-")}</span>
+            </div>
+
+            ${activeMessage ? `<div class="checkout-warning">${escapeHtml(activeMessage)}</div>` : ""}
+            ${!data.eligible ? `<div class="checkout-warning">${escapeHtml(data.eligibility_message || "This device is not eligible for Student Checkout.")}</div>` : ""}
+        </div>
+    `;
+}
+
+async function completeStudentCheckout() {
+    if (!studentCheckoutLookup?.device) {
+        setStudentCheckoutModalStatus("Locate an eligible device before completing checkout.", false);
+        return;
+    }
+
+    const studentName = ($("studentCheckoutName")?.value || "").trim();
+    const studentId = ($("studentCheckoutId")?.value || "").trim();
+    const returnByDate = ($("studentCheckoutReturnBy")?.value || "").trim();
+    const identifier = ($("studentCheckoutIdentifier")?.value || "").trim();
+
+    if (!studentName) {
+        setStudentCheckoutModalStatus("Student Name is required.", false);
+        $("studentCheckoutName")?.focus();
+        return;
+    }
+
+    const btn = $("completeStudentCheckoutBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Completing...";
+    }
+
+    setStudentCheckoutModalStatus("Completing Student Checkout...", true);
+
+    try {
+        const data = await apiPost(
+            "/api/student-checkouts",
+            {
+                identifier,
+                device_id: studentCheckoutLookup.device.id,
+                student_name: studentName,
+                student_id: studentId,
+                return_by_date: returnByDate,
+            },
+            "Unable to create Student Checkout."
+        );
+
+        closeStudentCheckoutModal();
+        resetStudentCheckoutModal();
+        await refreshStudentCheckoutDependentViews({ afterCreate: true });
+        setStatus(data.message || "Student Checkout created.", true);
+    } catch (err) {
+        if (err.existing_checkout) {
+            studentCheckoutLookup.active_checkout = err.existing_checkout;
+            renderStudentCheckoutLookup(studentCheckoutLookup);
+        }
+
+        setStudentCheckoutModalStatus(err.message || "Unable to create Student Checkout.", false);
+    } finally {
+        if (btn) {
+            btn.textContent = "Complete Checkout";
+            updateStudentCheckoutSubmitState();
+        }
+    }
+}
+
+function bindReturnStudentCheckoutModal() {
+    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) return;
+
+    $("closeReturnStudentCheckoutBtn")?.addEventListener("click", closeReturnStudentCheckoutModal);
+    $("cancelReturnStudentCheckoutBtn")?.addEventListener("click", closeReturnStudentCheckoutModal);
+    $("confirmReturnStudentCheckoutBtn")?.addEventListener("click", confirmReturnStudentCheckout);
+
+    $("returnStudentCheckoutModal")?.addEventListener("click", event => {
+        if (event.target.id === "returnStudentCheckoutModal") {
+            closeReturnStudentCheckoutModal();
+        }
+    });
+}
+
+function openReturnStudentCheckoutModal(checkout) {
+    pendingReturnCheckout = checkout;
+
+    const title = $("returnStudentCheckoutTitle");
+    const body = $("returnStudentCheckoutBody");
+
+    if (title) {
+        title.textContent = `Return ${checkout.device_asset_tag || checkout.device_serial || "Device"}`;
+    }
+
+    if (body) {
+        body.innerHTML = renderDetailCard(studentCheckoutDetailRows(checkout));
+    }
+
+    setReturnStudentCheckoutStatus("", true, true);
+    $("returnStudentCheckoutModal")?.classList.remove("hidden");
+}
+
+function closeReturnStudentCheckoutModal() {
+    pendingReturnCheckout = null;
+    $("returnStudentCheckoutModal")?.classList.add("hidden");
+}
+
+function setReturnStudentCheckoutStatus(message, ok = true, hidden = false) {
+    const el = $("returnStudentCheckoutStatus");
+    if (!el) return;
+
+    el.textContent = message || "";
+    el.classList.toggle("hidden", hidden || !message);
+    el.classList.toggle("ok", Boolean(ok));
+    el.classList.toggle("bad", !ok);
+}
+
+async function confirmReturnStudentCheckout() {
+    const checkout = pendingReturnCheckout;
+    if (!checkout) return;
+
+    const btn = $("confirmReturnStudentCheckoutBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Returning...";
+    }
+
+    setReturnStudentCheckoutStatus("Returning device...", true);
+
+    try {
+        const data = await apiPost(
+            `/api/student-checkouts/${checkout.id}/return`,
+            {},
+            "Unable to return device."
+        );
+
+        closeReturnStudentCheckoutModal();
+        await refreshStudentCheckoutDependentViews({ afterReturn: true });
+        setStatus(data.message || "Device returned.", true);
+    } catch (err) {
+        setReturnStudentCheckoutStatus(err.message || "Unable to return device.", false);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Return Device";
+        }
+    }
+}
+
 function bindMediaTabs() {
-    const defaultTab = "cart-management";
+    const defaultTab = "dashboard";
 
     const tabs = Array.from(
         document.querySelectorAll(
@@ -2218,6 +3272,17 @@ function bindMediaTabs() {
     }
 
     function loadTabContent(tabName) {
+        if (tabName === "dashboard") {
+            loadDashboard();
+        }
+
+        if (
+            tabName === "student-checkouts" &&
+            window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
+        ) {
+            loadStudentCheckouts();
+        }
+
         if (
             tabName === "ownership-management" &&
             window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP
@@ -2346,7 +3411,7 @@ function bindMediaTabs() {
     /*
      * A browser refresh retains the hash.
      * A new visit through the Media Catalog menu normally has
-     * no hash and therefore opens Cart Management.
+     * no hash and therefore opens Dashboard.
      */
     activateMediaTab(
         getTabFromHash(),
@@ -2357,20 +3422,53 @@ function bindMediaTabs() {
     );
 }
 
+function closeOwnershipExportMenu() {
+    document.querySelectorAll(".media-export-menu").forEach(menu => {
+        menu.classList.add("hidden");
+    });
+
+    document.querySelectorAll("[data-export-menu-button]").forEach(button => {
+        button.setAttribute("aria-expanded", "false");
+    });
+
+    $("ownershipExportMenuBtn")?.setAttribute("aria-expanded", "false");
+}
+
+
+function toggleExportMenu(button) {
+    const wrapper = button.closest(".media-export-menu-wrap");
+    const menu = wrapper?.querySelector(".media-export-menu");
+
+    if (!menu) return;
+
+    const willOpen = menu.classList.contains("hidden");
+
+    closeOwnershipExportMenu();
+
+    menu.classList.toggle("hidden", !willOpen);
+    button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+}
+
+
 function bindExportButtons() {
     document.addEventListener("click", event => {
         const exportMyCartsBtn = event.target.closest("#exportMyCartsBtn");
         const exportSelectedCartBtn = event.target.closest("#exportSelectedCartBtn");
-        const exportAllAssignedCartsBtn = event.target.closest("#exportAllAssignedCartsBtn");
+        const exportMenuButton = event.target.closest("[data-export-menu-button], #ownershipExportMenuBtn");
+        const ownershipExportItem = event.target.closest("[data-ownership-export]");
+        const userExportItem = event.target.closest("[data-user-export]");
+        const cartExportItem = event.target.closest("[data-cart-export]");
 
         if (exportMyCartsBtn) {
             event.preventDefault();
+            closeOwnershipExportMenu();
             window.location.href = `${MEDIA_CATALOG_BASE}/export/my-carts.pdf`;
             return;
         }
 
         if (exportSelectedCartBtn) {
             event.preventDefault();
+            closeOwnershipExportMenu();
 
             if (!selectedCart || !selectedCart.id) {
                 setStatus("Select a cart before exporting.", false);
@@ -2382,10 +3480,103 @@ function bindExportButtons() {
             return;
         }
 
-        if (exportAllAssignedCartsBtn) {
+        if (exportMenuButton) {
             event.preventDefault();
-            window.location.href =
-                `${MEDIA_CATALOG_BASE}/export/all-assigned-carts.pdf`;
+            event.stopPropagation();
+            toggleExportMenu(exportMenuButton);
+            return;
+        }
+
+        if (ownershipExportItem) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const exportType = ownershipExportItem.dataset.ownershipExport || "";
+            closeOwnershipExportMenu();
+
+            if (exportType === "pdf") {
+                window.location.href =
+                    `${MEDIA_CATALOG_BASE}/export/all-assigned-carts.pdf`;
+                return;
+            }
+
+            if (exportType === "csv-carts") {
+                window.location.href =
+                    `${MEDIA_CATALOG_BASE}/export/all-assigned-carts.csv?mode=carts`;
+                return;
+            }
+
+            if (exportType === "csv-assets") {
+                window.location.href =
+                    `${MEDIA_CATALOG_BASE}/export/all-assigned-carts.csv?mode=assets`;
+                return;
+            }
+        }
+
+        if (userExportItem) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const exportType = userExportItem.dataset.userExport || "";
+            const userId = userExportItem.dataset.userId || "";
+
+            if (!userId) {
+                setStatus("Select a user before exporting.", false);
+                closeOwnershipExportMenu();
+                return;
+            }
+
+            closeOwnershipExportMenu();
+
+            if (exportType === "pdf") {
+                window.location.href =
+                    `${MEDIA_CATALOG_BASE}/export/user/${encodeURIComponent(userId)}/carts.pdf`;
+                return;
+            }
+
+            if (exportType === "csv-carts") {
+                window.location.href =
+                    `${MEDIA_CATALOG_BASE}/export/user/${encodeURIComponent(userId)}/carts.csv?mode=carts`;
+                return;
+            }
+
+            if (exportType === "csv-assets") {
+                window.location.href =
+                    `${MEDIA_CATALOG_BASE}/export/user/${encodeURIComponent(userId)}/carts.csv?mode=assets`;
+                return;
+            }
+        }
+
+        if (cartExportItem) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const exportType = cartExportItem.dataset.cartExport || "";
+            const cartId = cartExportItem.dataset.cartId || "";
+
+            if (!cartId) {
+                setStatus("Select a cart before exporting.", false);
+                closeOwnershipExportMenu();
+                return;
+            }
+
+            closeOwnershipExportMenu();
+
+            if (exportType === "pdf") {
+                window.location.href =
+                    `${MEDIA_CATALOG_BASE}/export/cart/${encodeURIComponent(cartId)}.pdf`;
+                return;
+            }
+
+            if (exportType === "csv-assets") {
+                window.location.href =
+                    `${MEDIA_CATALOG_BASE}/export/cart/${encodeURIComponent(cartId)}.csv?mode=assets`;
+                return;
+            }
+        }
+
+        if (!event.target.closest(".media-export-menu-wrap")) {
+            closeOwnershipExportMenu();
         }
     });
 }
@@ -2396,10 +3587,20 @@ function bindOwnershipManagement() {
         return;
     }
 
-    $("refreshOwnershipBtn")?.addEventListener(
-        "click",
-        loadOwnershipOwners
-    );
+    $("refreshOwnershipBtn")?.addEventListener("click", loadOwnershipOwners);
+
+    $("toggleOwnershipFindCartBtn")?.addEventListener("click", () => {
+        const panel = $("ownershipFindCartPanel");
+        if (!panel) return;
+
+        panel.classList.toggle("hidden");
+
+        if (!panel.classList.contains("hidden")) {
+            $("ownershipCartSearch")?.focus();
+        }
+    });
+
+    bindOwnershipCartSearch();
 }
 
 function bindRecentActivityFilter() {
@@ -2561,9 +3762,45 @@ function renderOwnershipOwners(owners) {
                                 <button class="mini-btn" type="button" data-view-owner-id="${escapeHtml(owner.owner_user_id)}">
                                     View Carts
                                 </button>
-                                <a class="mini-btn" href="${MEDIA_CATALOG_BASE}/export/user/${encodeURIComponent(owner.owner_user_id)}/carts.pdf">
-                                    Export
-                                </a>
+                                    <div class="media-export-menu-wrap">
+                                        <button
+                                            class="mini-btn"
+                                            type="button"
+                                            data-export-menu-button
+                                            aria-expanded="false"
+                                        >
+                                            Export
+                                        </button>
+
+                                        <div class="media-export-menu hidden">
+                                            <button
+                                                class="media-export-menu-item"
+                                                type="button"
+                                                data-user-export="pdf"
+                                                data-user-id="${escapeHtml(owner.owner_user_id)}"
+                                            >
+                                                PDF
+                                            </button>
+
+                                            <button
+                                                class="media-export-menu-item"
+                                                type="button"
+                                                data-user-export="csv-carts"
+                                                data-user-id="${escapeHtml(owner.owner_user_id)}"
+                                            >
+                                                CSV - Carts Only
+                                            </button>
+
+                                            <button
+                                                class="media-export-menu-item"
+                                                type="button"
+                                                data-user-export="csv-assets"
+                                                data-user-id="${escapeHtml(owner.owner_user_id)}"
+                                            >
+                                                CSV - Assets in Carts
+                                            </button>
+                                        </div>
+                                    </div>
                             </td>
                         </tr>
                     `).join("")}
@@ -2665,12 +3902,6 @@ function renderOwnershipUserCarts(owner, carts) {
                     <h3>${escapeHtml(ownerName)} Carts</h3>
                     <p class="muted">${escapeHtml(carts.length)} assigned cart(s).</p>
                 </div>
-
-                <div class="media-section-actions">
-                    <a class="media-btn ghost" href="${MEDIA_CATALOG_BASE}/export/user/${encodeURIComponent(owner.owner_user_id)}/carts.pdf">
-                        Export User Carts
-                    </a>
-                </div>
             </div>
 
             <div class="sheet-wrap compact">
@@ -2682,6 +3913,7 @@ function renderOwnershipUserCarts(owner, carts) {
                             <th>Room</th>
                             <th>Location</th>
                             <th>Devices</th>
+                            <th>Student Checkouts</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -2705,6 +3937,9 @@ function renderOwnershipUserCarts(owner, carts) {
                                         </span>
                                     </td>
                                     <td>
+                                        ${renderCartCheckoutSummary(cart)}
+                                    </td>
+                                    <td>
                                     <button
                                         class="mini-btn"
                                         type="button"
@@ -2721,12 +3956,36 @@ function renderOwnershipUserCarts(owner, carts) {
                                         Unassign Cart
                                     </button>
 
-                                    <a
-                                        class="mini-btn"
-                                        href="${MEDIA_CATALOG_BASE}/export/cart/${encodeURIComponent(cart.id)}.pdf"
-                                    >
-                                        Export
-                                    </a>
+                                    <div class="media-export-menu-wrap">
+                                        <button
+                                            class="mini-btn"
+                                            type="button"
+                                            data-export-menu-button
+                                            aria-expanded="false"
+                                        >
+                                            Export
+                                        </button>
+
+                                        <div class="media-export-menu hidden">
+                                            <button
+                                                class="media-export-menu-item"
+                                                type="button"
+                                                data-cart-export="pdf"
+                                                data-cart-id="${escapeHtml(cart.id)}"
+                                            >
+                                                PDF
+                                            </button>
+
+                                            <button
+                                                class="media-export-menu-item"
+                                                type="button"
+                                                data-cart-export="csv-assets"
+                                                data-cart-id="${escapeHtml(cart.id)}"
+                                            >
+                                                CSV - Assets in Cart
+                                            </button>
+                                        </div>
+                                    </div>
                                         ${cart.asset_url ? `<a class="mini-btn" href="${escapeHtml(cart.asset_url)}" target="_blank" rel="noopener">Snipe-IT</a>` : ""}
                                     </td>
                                 </tr>
@@ -2795,6 +4054,16 @@ function bindOwnershipUserCartEvents(carts) {
             activateAdminInlineEdit(wrapper, carts);
         });
     });
+
+    document.querySelectorAll("#ownershipUserCartsBody [data-cart-checkouts-id]").forEach(btn => {
+        btn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const cart = carts.find(item => String(item.id) === String(btn.dataset.cartCheckoutsId));
+            if (cart) openCartCheckoutDetails(cart);
+        });
+    });
 }
 
 
@@ -2820,8 +4089,18 @@ function activateAdminInlineEdit(wrapper, carts) {
     input.focus();
     input.select();
 
+    let finished = false;
+
     const finish = async () => {
-        await saveAdminInlineEdit(input, wrapper, carts);
+        if (finished || input.dataset.saving === "1") return;
+
+        const saved = await saveAdminInlineEdit(input, wrapper, carts);
+        if (saved) {
+            finished = true;
+        } else {
+            input.focus();
+            input.select();
+        }
     };
 
     input.addEventListener("keydown", async event => {
@@ -2832,6 +4111,7 @@ function activateAdminInlineEdit(wrapper, carts) {
 
         if (event.key === "Escape") {
             event.preventDefault();
+            finished = true;
             cancelInlineEdit(wrapper);
         }
     }, { once: false });
@@ -2839,20 +4119,105 @@ function activateAdminInlineEdit(wrapper, carts) {
     input.addEventListener("blur", finish, { once: true });
 }
 
+function captureScrollState() {
+    return {
+        x: window.scrollX || 0,
+        y: window.scrollY || 0,
+    };
+}
+
+
+function restoreScrollState(state) {
+    if (!state) return;
+
+    window.requestAnimationFrame(() => {
+        window.scrollTo(state.x, state.y);
+    });
+}
+
+
+function mergeCartUpdate(existingCart, updatedCart) {
+    if (!updatedCart) return existingCart;
+
+    return {
+        ...(existingCart || {}),
+        ...updatedCart,
+        device_count: updatedCart.device_count ?? existingCart?.device_count ?? 0,
+        ownership: {
+            ...(existingCart?.ownership || {}),
+            ...(updatedCart.ownership || {}),
+        },
+    };
+}
+
+
+function syncUpdatedCartIntoState(updatedCart, carts, existingCart) {
+    if (!updatedCart) return existingCart;
+
+    const merged = mergeCartUpdate(existingCart, updatedCart);
+
+    const rowIndex = carts.findIndex(item => String(item.id) === String(merged.id));
+    if (rowIndex >= 0) {
+        carts[rowIndex] = merged;
+    }
+
+    myCartsCache = myCartsCache.map(item =>
+        String(item.id) === String(merged.id)
+            ? mergeCartUpdate(item, merged)
+            : item
+    );
+
+    if (selectedCart && String(selectedCart.id) === String(merged.id)) {
+        selectedCart = mergeCartUpdate(selectedCart, merged);
+
+        const subtitle = $("cartSubtitle");
+        if (subtitle) {
+            subtitle.innerHTML = renderSelectedCartMeta(selectedCart);
+        }
+
+        updateActiveCartSummary();
+    }
+
+    return merged;
+}
+
+
+function applyUpdatedMetadataToRow(row, updatedCart) {
+    if (!row || !updatedCart) return;
+
+    const ownership = updatedCart.ownership || {};
+
+    ["teacher_name", "room_number"].forEach(field => {
+        const wrapper = row.querySelector(`.inline-edit-control[data-field-wrap="${field}"]`);
+        const input = wrapper?.querySelector(`[data-field="${field}"]`);
+        const valueEl = wrapper?.querySelector(".inline-edit-value");
+        const value = String(ownership[field] || "").trim();
+
+        if (input) {
+            input.value = value;
+        }
+
+        if (valueEl) {
+            valueEl.textContent = value || "—";
+        }
+    });
+}
 
 async function saveAdminInlineEdit(input, wrapper, carts) {
     if (!input || input.dataset.saving === "1") return;
 
+    const scrollState = captureScrollState();
     const row = input.closest("tr");
     const cartId = input.dataset.cartId;
     const cart = carts.find(c => String(c.id) === String(cartId));
 
     if (!row || !cart) {
         cancelInlineEdit(wrapper);
-        return;
+        return true;
     }
 
     input.dataset.saving = "1";
+    let saved = false;
 
     const body = {
         teacher_name: row.querySelector('[data-field="teacher_name"]')?.value || "",
@@ -2866,22 +4231,21 @@ async function saveAdminInlineEdit(input, wrapper, carts) {
             "Unable to update cart fields."
         );
 
-        const updatedCart = data.cart || null;
+        const updatedCart = syncUpdatedCartIntoState(data.cart || null, carts, cart);
+        applyUpdatedMetadataToRow(row, updatedCart);
 
-        if (updatedCart && ownershipSelectedUser) {
-            await loadOwnershipUserCarts(ownershipSelectedUser);
-        }
-
-        setStatus("Cart fields updated.", true);
+        setStatus(data.message || "Cart fields updated.", true);
+        saved = true;
+        return true;
     } catch (err) {
         setStatus(err.message || "Unable to update cart fields.", false);
-
-        if (ownershipSelectedUser) {
-            await loadOwnershipUserCarts(ownershipSelectedUser);
-        }
+        return false;
     } finally {
         delete input.dataset.saving;
-        cancelInlineEdit(wrapper);
+        if (saved) {
+            cancelInlineEdit(wrapper);
+        }
+        restoreScrollState(scrollState);
     }
 }
 
@@ -2918,6 +4282,9 @@ function drawMyCartsRows(rows) {
                     <span class="device-count-badge">
                         ${escapeHtml(cart.device_count || 0)}
                     </span>
+                </td>
+                <td>
+                    ${renderCartCheckoutSummary(cart)}
                 </td>
                 <td>
                     <div class="cart-action-group">
@@ -3062,8 +4429,18 @@ function activateInlineEdit(wrapper, carts) {
     input.focus();
     input.select();
 
+    let finished = false;
+
     const finish = async () => {
-        await saveInlineEdit(input, wrapper, carts);
+        if (finished || input.dataset.saving === "1") return;
+
+        const saved = await saveInlineEdit(input, wrapper, carts);
+        if (saved) {
+            finished = true;
+        } else {
+            input.focus();
+            input.select();
+        }
     };
 
     input.addEventListener("keydown", async event => {
@@ -3074,6 +4451,7 @@ function activateInlineEdit(wrapper, carts) {
 
         if (event.key === "Escape") {
             event.preventDefault();
+            finished = true;
             cancelInlineEdit(wrapper);
         }
     }, { once: false });
@@ -3094,16 +4472,18 @@ function cancelInlineEdit(wrapper) {
 async function saveInlineEdit(input, wrapper, carts) {
     if (!input || input.dataset.saving === "1") return;
 
+    const scrollState = captureScrollState();
     const row = input.closest("tr");
     const cartId = input.dataset.cartId;
     const cart = carts.find(c => String(c.id) === String(cartId));
 
     if (!row || !cart) {
         cancelInlineEdit(wrapper);
-        return;
+        return true;
     }
 
     input.dataset.saving = "1";
+    let saved = false;
 
     const body = {
         teacher_name: row.querySelector('[data-field="teacher_name"]')?.value || "",
@@ -3117,26 +4497,21 @@ async function saveInlineEdit(input, wrapper, carts) {
             "Unable to update cart fields."
         );
 
-        const updatedCart = data.cart || null;
+        const updatedCart = syncUpdatedCartIntoState(data.cart || null, carts, cart);
+        applyUpdatedMetadataToRow(row, updatedCart);
 
-        if (updatedCart) {
-            myCartsCache = myCartsCache.map(item =>
-                String(item.id) === String(updatedCart.id) ? updatedCart : item
-            );
-        }
-
-        const valueEl = wrapper.querySelector(".inline-edit-value");
-        if (valueEl) {
-            valueEl.textContent = input.value.trim() || "—";
-        }
-
-        setStatus("Cart fields updated.", true);
+        setStatus(data.message || "Cart fields updated.", true);
+        saved = true;
+        return true;
     } catch (err) {
         setStatus(err.message || "Unable to update cart fields.", false);
-        await loadMyCarts();
+        return false;
     } finally {
         delete input.dataset.saving;
-        cancelInlineEdit(wrapper);
+        if (saved) {
+            cancelInlineEdit(wrapper);
+        }
+        restoreScrollState(scrollState);
     }
 }
 

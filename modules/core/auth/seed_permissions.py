@@ -80,6 +80,7 @@ def seed_permissions():
         ("snipeops.checkout_assets.manage", "Manage Checkout Assets"),
         ("snipeops.media_catalog.view", "Media Catalog"),
         ("snipeops.media_catalog.manage", "Manage Media Catalog"),
+        ("snipeops.media_catalog.student_checkouts.manage", "Student Checkout Management"),
         ("snipeops.media_catalog.ownership.view", "View Media Catalog Ownership"),
         ("snipeops.media_catalog.ownership.manage", "Manage Media Catalog Ownership"),
         ("snipeops.secure_user_rostering.view", "Secure User Rostering"),
@@ -309,6 +310,7 @@ def seed_permissions():
         "snipeops.home.view",
         "snipeops.media_catalog.view",
         "snipeops.media_catalog.manage",
+        "snipeops.media_catalog.student_checkouts.manage",
     ]
 
     for key in media_specialist_permissions:
@@ -325,6 +327,7 @@ def seed_permissions():
         "snipeops.checkout_assets.manage",
         "snipeops.media_catalog.view",
         "snipeops.media_catalog.manage",
+        "snipeops.media_catalog.student_checkouts.manage",
         "snipeops.media_catalog.ownership.view",
         "snipeops.media_catalog.ownership.manage",
         "snipeops.secure_user_rostering.view",

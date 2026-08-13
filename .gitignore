@@ -110,3 +110,5 @@ desktop.ini
 *.swp
 *.swo
 *~
+AGENTS.md
+tests/*

@@ -1,5 +1,5 @@
 {% extends "snipeops/base.html" %}
-{% block title %}SnipeOps • Media Catalog{% endblock %}
+{% block title %}SnipeOps - Media Catalog{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('media_catalog.static', filename='css/media_catalog.css') }}">
@@ -11,29 +11,38 @@
         <div>
             <h1>Media Catalog</h1>
             <p class="muted">
-                Manage carts and devices in a friendly spreadsheet-style view. Warnings help with dirty data, but do not
-                block corrections.
+                Monitor cart operations, manage devices, and track temporary Student Checkouts.
             </p>
         </div>
 
-        <button id="syncSnipeBtn" class="media-btn sync-btn" type="button">
-            <span class="btn-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
-                    <path d="M3 3v5h5" />
-                    <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
-                    <path d="M21 21v-5h-5" />
-                </svg>
-            </span>
-            <span>Sync Snipe-IT</span>
-        </button>
+        <div class="media-header-actions">
+            <button id="syncSnipeBtn" class="media-btn sync-btn" type="button">
+                <span class="btn-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
+                        <path d="M3 3v5h5" />
+                        <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
+                        <path d="M21 21v-5h-5" />
+                    </svg>
+                </span>
+                <span>Sync Snipe-IT</span>
+            </button>
+        </div>
     </div>
 
     <div class="settings-tabs media-catalog-tabs">
-        <button type="button" class="settings-tab active" data-tab="cart-management">
+        <button type="button" class="settings-tab active" data-tab="dashboard">
+            Dashboard
+        </button>
+        <button type="button" class="settings-tab" data-tab="cart-management">
             Cart Management
         </button>
+        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+        <button type="button" class="settings-tab" data-tab="student-checkouts">
+            Student Checkouts
+        </button>
+        {% endif %}
         {% if 'snipeops.media_catalog.ownership.view' in session.get('user_permissions', []) %}
         <button type="button" class="settings-tab" data-tab="ownership-management">
             Ownership Management
@@ -45,7 +54,59 @@
     </div>
 
     <div class="settings-section-stack media-catalog-tab-stack">
-        <div class="settings-tab-panel active" data-panel="cart-management">
+        <div class="settings-tab-panel active" data-panel="dashboard">
+            <section class="media-panel media-wide dashboard-panel">
+                <div class="media-section-head">
+                    <div>
+                        <h2>Operations Overview</h2>
+                        <p class="muted">Cart scope, checkout pressure, and recent custody changes.</p>
+                    </div>
+
+                    <div class="media-section-actions">
+                        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+                        <button class="media-btn ghost" type="button" data-open-checkout-status="active">
+                            View Student Checkouts
+                        </button>
+                        {% endif %}
+                        <button id="refreshDashboardBtn" class="media-btn ghost" type="button">Refresh</button>
+                    </div>
+                </div>
+
+                <div id="dashboardSummary" class="dashboard-metric-grid">
+                    <div class="muted">Loading dashboard...</div>
+                </div>
+            </section>
+
+            <div class="dashboard-ops-grid">
+                <section class="media-panel media-wide">
+                    <div class="media-section-head">
+                        <div>
+                            <h2>Needs Attention</h2>
+                            <p class="muted">Overdue custody records and carts with overdue devices.</p>
+                        </div>
+                    </div>
+
+                    <div id="dashboardAttention" class="dashboard-attention-list">
+                        <div class="muted">Loading attention items...</div>
+                    </div>
+                </section>
+
+                <section class="media-panel media-wide">
+                    <div class="media-section-head">
+                        <div>
+                            <h2>Recent Activity</h2>
+                            <p class="muted">Latest Student Checkout changes in your scope.</p>
+                        </div>
+                    </div>
+
+                    <div id="dashboardRecentCheckouts" class="dashboard-activity-list">
+                        <div class="muted">Loading activity...</div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <div class="settings-tab-panel" data-panel="cart-management">
             <section class="media-panel">
                 <div class="media-section-head">
                     <div>
@@ -83,6 +144,21 @@
                             </span>
                             <span>Find / Claim Cart</span>
                         </button>
+
+                        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+                        <button id="openStudentCheckoutBtn" class="media-btn primary-action icon-btn" type="button">
+                            <span class="btn-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                                    stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                                    <circle cx="9" cy="7" r="4" />
+                                    <path d="M19 8v6" />
+                                    <path d="M22 11h-6" />
+                                </svg>
+                            </span>
+                            <span>Checkout 1:1</span>
+                        </button>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -121,7 +197,7 @@
 
                     <div class="cart-metrics">
                         <div class="metric-card">
-                            <span class="metric-value" id="deviceCount">—</span>
+                            <span class="metric-value" id="deviceCount">-</span>
                             <span class="metric-label">Devices in Cart</span>
                         </div>
                         <div id="status" class="media-status">Ready.</div>
@@ -182,6 +258,79 @@
             </section>
         </div>
 
+        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+        <div class="settings-tab-panel" data-panel="student-checkouts">
+            <section class="media-panel media-wide student-checkouts-panel">
+                <div class="media-section-head">
+                    <div>
+                        <h2>Student Checkouts</h2>
+                        <p class="muted">Temporary student custody records for devices that remain assigned to carts in Snipe-IT.</p>
+                    </div>
+
+                    <div class="media-section-actions">
+                        <button id="openStudentCheckoutFromPageBtn" class="media-btn primary-action" type="button">
+                            Checkout 1:1
+                        </button>
+                        <button id="refreshStudentCheckoutsBtn" class="media-btn ghost" type="button">
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div id="studentCheckoutSummary" class="student-checkout-summary"></div>
+
+                <div class="checkout-filter-bar">
+                    <div class="checkout-status-tabs" role="tablist" aria-label="Student Checkout filters">
+                        <button class="mini-btn active" type="button" data-checkout-status-filter="active">
+                            Active
+                        </button>
+                        <button class="mini-btn" type="button" data-checkout-status-filter="overdue">
+                            Overdue
+                        </button>
+                        <button class="mini-btn" type="button" data-checkout-status-filter="returned">
+                            Returned
+                        </button>
+                        <button class="mini-btn" type="button" data-checkout-status-filter="all">
+                            All
+                        </button>
+                    </div>
+
+                    <input
+                        id="studentCheckoutSearch"
+                        class="media-input"
+                        autocomplete="off"
+                        placeholder="Search student, ID, asset, serial, model, cart, teacher, room, or date..."
+                    >
+                </div>
+
+                <div id="studentCheckoutsEmpty" class="media-empty-state hidden">
+                    No Student Checkouts match this view.
+                </div>
+
+                <div class="sheet-wrap student-checkout-sheet-wrap">
+                    <table class="media-sheet student-checkout-table">
+                        <thead>
+                            <tr>
+                                <th>Device</th>
+                                <th>Student</th>
+                                <th>Cart</th>
+                                <th>Checkout</th>
+                                <th>Return By</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentCheckoutsBody">
+                            <tr>
+                                <td colspan="7" class="muted">Loading Student Checkouts...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+        {% endif %}
+
         {% if 'snipeops.media_catalog.ownership.view' in session.get('user_permissions', []) %}
         <div class="settings-tab-panel" data-panel="ownership-management">
             <section class="media-panel media-wide">
@@ -193,12 +342,56 @@
                     </div>
 
                     <div class="media-section-actions">
-                        <button id="exportAllAssignedCartsBtn" class="media-btn ghost" type="button">
-                            Export All Assigned Carts
+                        <button id="toggleOwnershipFindCartBtn" class="media-btn ghost" type="button">
+                            Find Cart
                         </button>
-                        <button id="refreshOwnershipBtn" class="media-btn ghost" type="button">Refresh</button>
+
+                        <div class="media-export-menu-wrap">
+                            <button id="ownershipExportMenuBtn" class="media-btn ghost" type="button"
+                                aria-expanded="false">
+                                Export
+                            </button>
+
+                            <div id="ownershipExportMenu" class="media-export-menu hidden">
+                                <button class="media-export-menu-item" type="button" data-ownership-export="pdf">
+                                    PDF
+                                </button>
+
+                                <button class="media-export-menu-item" type="button" data-ownership-export="csv-carts">
+                                    CSV - Carts Only
+                                </button>
+
+                                <button class="media-export-menu-item" type="button" data-ownership-export="csv-assets">
+                                    CSV - Assets in Carts
+                                </button>
+                            </div>
+                        </div>
+
+                        <button id="refreshOwnershipBtn" class="media-btn ghost" type="button">
+                            Refresh
+                        </button>
                     </div>
                 </div>
+
+                <section id="ownershipFindCartPanel" class="media-subpanel find-cart-panel hidden">
+                    <div class="media-section-head">
+                        <div>
+                            <h3>Find Cart</h3>
+                            <p class="muted">Search carts district-wide, then open, claim, or assign ownership.</p>
+                        </div>
+                    </div>
+
+                    <div class="form-card">
+                        <label class="media-label" for="ownershipCartSearch">Cart Search</label>
+                        <div class="media-row">
+                            <input id="ownershipCartSearch" class="media-input" autocomplete="off"
+                                placeholder="Search cart by asset tag or name...">
+                            <button id="ownershipCartSearchBtn" class="media-btn" type="button">Search</button>
+                        </div>
+                    </div>
+
+                    <div id="ownershipCartResults" class="cart-pill-grid search-grid"></div>
+                </section>
 
                 <div id="ownershipOwners"></div>
                 <div id="ownershipUserCarts" class="ownership-user-carts"></div>
@@ -208,8 +401,6 @@
 
         <div class="settings-tab-panel" data-panel="recent-activity">
             <div class="recent-activity-stack">
-
-                <!-- Catalog Sync Status -->
                 <section class="media-panel media-wide catalog-sync-panel">
                     <div class="sync-status-header">
                         <div class="sync-status-title">
@@ -225,7 +416,6 @@
 
                             <div>
                                 <h2>Catalog Sync Status</h2>
-
                                 <p class="muted">
                                     Recent hourly synchronization attempts between
                                     Snipe-IT and the Launchpad catalog.
@@ -235,11 +425,9 @@
 
                         {% if catalog_sync_runs %}
                         {% set latest_sync = catalog_sync_runs[0] %}
-
                         <div class="sync-latest-summary">
                             <div class="sync-latest-line">
                                 <span>Latest Run</span>
-
                                 <span class="job-status-badge {{ latest_sync.status }}">
                                     {% if latest_sync.status == 'success' %}
                                     Success
@@ -255,7 +443,7 @@
 
                             <time class="activity-time sync-latest-time"
                                 data-utc="{{ latest_sync.started_at or latest_sync.run_date or '' }}">
-                                {{ latest_sync.started_at or latest_sync.run_date or '—' }}
+                                {{ latest_sync.started_at or latest_sync.run_date or '-' }}
                             </time>
                         </div>
                         {% endif %}
@@ -288,7 +476,7 @@
                                     <td>
                                         <time class="activity-time"
                                             data-utc="{{ run.started_at or run.run_date or '' }}">
-                                            {{ run.started_at or run.run_date or '—' }}
+                                            {{ run.started_at or run.run_date or '-' }}
                                         </time>
                                     </td>
 
@@ -312,7 +500,7 @@
                                         {% elif run.status == 'running' %}
                                         In progress
                                         {% else %}
-                                        —
+                                        -
                                         {% endif %}
                                     </td>
 
@@ -322,7 +510,7 @@
                                             {{ run.finished_at }}
                                         </time>
                                         {% else %}
-                                        —
+                                        -
                                         {% endif %}
                                     </td>
 
@@ -345,7 +533,6 @@
                     {% else %}
                     <div class="catalog-sync-empty">
                         <strong>No catalog sync history is available yet.</strong>
-
                         <span class="muted">
                             History will appear after the next scheduled
                             catalog synchronization runs.
@@ -354,7 +541,6 @@
                     {% endif %}
                 </section>
 
-                <!-- Recent Media Catalog Activity -->
                 <section id="recentActivityPanel" class="media-panel media-wide recent-activity-panel">
                     <div class="recent-activity-header">
                         <div class="recent-activity-title">
@@ -368,7 +554,6 @@
 
                             <div>
                                 <h2>Recent Media Catalog Activity</h2>
-
                                 <p class="muted">
                                     Recent cart and device actions recorded locally in
                                     SnipeOps.
@@ -377,10 +562,7 @@
                         </div>
 
                         <div class="recent-activity-filter">
-                            <label for="recentResultFilter">
-                                Result
-                            </label>
-
+                            <label for="recentResultFilter">Result</label>
                             <select id="recentResultFilter" class="media-select">
                                 <option value="all">All results</option>
                                 <option value="success">Successful only</option>
@@ -425,7 +607,7 @@
                                     data-result="{{ 'success' if r.ok else 'error' }}">
                                     <td>
                                         <time class="activity-time" data-utc="{{ r.created_at or '' }}">
-                                            {{ r.created_at or '—' }}
+                                            {{ r.created_at or '-' }}
                                         </time>
                                     </td>
 
@@ -434,19 +616,19 @@
                                     </td>
 
                                     <td class="activity-user-cell">
-                                        {{ r.actor_display_name or r.actor_email or '—' }}
+                                        {{ r.actor_display_name or r.actor_email or '-' }}
                                     </td>
 
                                     <td class="activity-id-cell">
-                                        {{ r.device_asset_tag or r.device_name or r.device_asset_id or '—' }}
+                                        {{ r.device_asset_tag or r.device_name or r.device_asset_id or '-' }}
                                     </td>
 
                                     <td class="activity-id-cell">
-                                        {{ r.device_serial or '—' }}
+                                        {{ r.device_serial or '-' }}
                                     </td>
 
                                     <td class="activity-id-cell">
-                                        {{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '—' }}
+                                        {{ r.cart_asset_tag or r.cart_asset_name or r.cart_asset_id or '-' }}
                                     </td>
 
                                     <td>
@@ -456,7 +638,7 @@
                                     </td>
 
                                     <td class="activity-message-cell">
-                                        {{ r.message or '—' }}
+                                        {{ r.message or '-' }}
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -464,7 +646,6 @@
                         </table>
                     </div>
                 </section>
-
             </div>
         </div>
     </div>
@@ -542,6 +723,83 @@
         <div id="ownerResults" class="owner-result-grid"></div>
     </div>
 </div>
+
+{% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+<div id="studentCheckoutModal" class="media-modal hidden" role="dialog" aria-modal="true">
+    <div class="media-modal-card student-checkout-modal-card">
+        <div class="modal-head">
+            <div>
+                <p class="media-eyebrow">Student Checkout</p>
+                <h2>Checkout 1:1</h2>
+                <p class="muted">Record temporary student custody without changing the Snipe-IT cart assignment.</p>
+            </div>
+            <button id="closeStudentCheckoutBtn" class="mini-btn" type="button">Close</button>
+        </div>
+
+        <div class="student-checkout-form-grid">
+            <div class="form-card">
+                <label class="media-label" for="studentCheckoutIdentifier">Asset Tag or Serial Number</label>
+                <div class="media-row">
+                    <input id="studentCheckoutIdentifier" class="media-input" autocomplete="off"
+                        placeholder="Scan or type asset tag / serial">
+                    <button id="lookupStudentCheckoutDeviceBtn" class="media-btn" type="button">Locate</button>
+                </div>
+            </div>
+
+            <div id="studentCheckoutLookupResult" class="checkout-lookup-result">
+                <div class="muted">Locate a device to begin checkout.</div>
+            </div>
+
+            <div class="form-card">
+                <label class="media-label" for="studentCheckoutName">Student Name</label>
+                <input id="studentCheckoutName" class="media-input" autocomplete="off" placeholder="Student name">
+            </div>
+
+            <div class="form-card">
+                <label class="media-label" for="studentCheckoutId">Student ID</label>
+                <input id="studentCheckoutId" class="media-input" autocomplete="off" placeholder="Optional">
+            </div>
+
+            <div class="form-card">
+                <label class="media-label" for="studentCheckoutReturnBy">Return By</label>
+                <input id="studentCheckoutReturnBy" class="media-input" type="date">
+            </div>
+        </div>
+
+        <div id="studentCheckoutModalStatus" class="media-status hidden"></div>
+
+        <div class="media-modal-actions">
+            <button id="cancelStudentCheckoutBtn" class="media-btn ghost" type="button">Cancel</button>
+            <button id="completeStudentCheckoutBtn" class="media-btn primary-action" type="button" disabled>
+                Complete Checkout
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="returnStudentCheckoutModal" class="media-modal hidden" role="dialog" aria-modal="true">
+    <div class="media-modal-card device-detail-card">
+        <div class="modal-head">
+            <div>
+                <p class="media-eyebrow">Return Device</p>
+                <h2 id="returnStudentCheckoutTitle">Return Device</h2>
+            </div>
+            <button id="closeReturnStudentCheckoutBtn" class="mini-btn" type="button">Close</button>
+        </div>
+
+        <div id="returnStudentCheckoutBody" class="device-detail-body"></div>
+
+        <div id="returnStudentCheckoutStatus" class="media-status hidden"></div>
+
+        <div class="media-modal-actions">
+            <button id="cancelReturnStudentCheckoutBtn" class="media-btn ghost" type="button">Cancel</button>
+            <button id="confirmReturnStudentCheckoutBtn" class="media-btn primary-action" type="button">
+                Return Device
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -553,6 +811,9 @@
 
     window.MEDIA_CATALOG_CAN_MANAGE_OWNERSHIP =
         {{ 'true' if 'snipeops.media_catalog.ownership.manage' in session.get('user_permissions', []) else 'false' }};
+
+    window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS =
+        {{ 'true' if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) else 'false' }};
 </script>
 <script defer src="{{ url_for('media_catalog.static', filename='js/media_catalog.js') }}"></script>
 {% endblock %}

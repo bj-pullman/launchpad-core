@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from io import BytesIO
+from io import BytesIO, StringIO
+import csv
 import re
 from datetime import datetime
 
@@ -53,9 +54,26 @@ from apps.snipeops.media_catalog.media_catalog_db import (
     reorder_owned_cart,
 )
 
+from apps.snipeops.media_catalog.student_checkout_service import (
+    STUDENT_CHECKOUT_PERMISSION,
+    StudentCheckoutDuplicateError,
+    StudentCheckoutError,
+    attach_checkout_summaries_to_carts,
+    checkout_lookup_payload,
+    create_student_checkout,
+    list_student_checkouts_for_scope,
+    recent_student_checkout_activity,
+    return_student_checkout,
+    scoped_cart_ids_for_user,
+    scoped_cart_rows_for_user,
+    scoped_student_checkout_summary,
+    user_can_access_cart,
+)
+
 from apps.snipeops.media_catalog.snipe import (
     checkin_asset,
     checkout_asset_to_cart,
+    sync_cart_metadata_to_snipe,
 )
 
 from modules.core.settings.settings_service import get_setting
@@ -185,7 +203,7 @@ def _ownership_rows_with_device_counts(rows: list[dict]) -> list[dict]:
 
         payloads.append(payload)
 
-    return payloads
+    return attach_checkout_summaries_to_carts(payloads)
 
 def _safe_filename(value: str) -> str:
     value = (value or "media-catalog-export").strip()
@@ -199,6 +217,22 @@ def _export_date_stamp() -> str:
 
 def _can_manage_ownership() -> bool:
     return "snipeops.media_catalog.ownership.manage" in session.get("user_permissions", [])
+
+
+def _can_manage_student_checkouts() -> bool:
+    return STUDENT_CHECKOUT_PERMISSION in session.get("user_permissions", [])
+
+
+def _student_checkout_error_response(exc: StudentCheckoutError):
+    payload = {
+        "ok": False,
+        "error": exc.message,
+    }
+
+    if isinstance(exc, StudentCheckoutDuplicateError):
+        payload["existing_checkout"] = exc.existing_checkout
+
+    return jsonify(payload), exc.status_code
 
 
 def _cart_export_payload(cart_id: int) -> dict | None:
@@ -319,6 +353,130 @@ def _send_pdf(buffer: BytesIO, filename: str):
         download_name=filename,
     )
 
+def _send_csv(csv_text: str, filename: str):
+    buffer = BytesIO(csv_text.encode("utf-8-sig"))
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+def _sync_cart_metadata_fields(cart: dict, ownership: dict) -> tuple[dict | None, str | None]:
+    try:
+        devices = get_assets_assigned_to_asset(int(cart["id"]))
+        result = sync_cart_metadata_to_snipe(
+            cart_asset=cart,
+            device_assets=devices,
+            teacher_name=ownership.get("teacher_name") or "",
+            room_number=ownership.get("room_number") or "",
+        )
+        return result, None
+    except Exception as exc:
+        return None, str(exc)
+
+
+def _metadata_message(base_message: str, sync_result: dict | None, sync_error: str | None) -> str:
+    if sync_error:
+        return f"{base_message} Snipe-IT sync warning: {sync_error}"
+
+    if not sync_result:
+        return base_message
+
+    message = (
+        f"{base_message} Synced custom fields to "
+        f"{int(sync_result.get('updated_assets') or 0)} Snipe-IT asset(s)."
+    )
+
+    skipped_model_ids = sync_result.get("skipped_model_ids") or []
+    if skipped_model_ids:
+        message += (
+            " Some models already have a different custom fieldset and were not changed: "
+            + ", ".join(str(item) for item in skipped_model_ids)
+            + "."
+        )
+
+    return message
+
+
+def _build_carts_csv(cart_payloads: list[dict], *, include_devices: bool) -> str:
+    output = StringIO()
+
+    if include_devices:
+        fieldnames = [
+            "assigned_to_cart_asset_tag",
+            "device_asset_tag",
+            "device_serial",
+            "device_name",
+            "device_model",
+            "device_status",
+            "device_location",
+            "device_snipe_url",
+        ]
+
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for payload in cart_payloads:
+            cart = payload.get("cart") or {}
+            devices = payload.get("devices") or []
+            cart_asset_tag = cart.get("asset_tag") or ""
+
+            for device in devices:
+                writer.writerow({
+                    "assigned_to_cart_asset_tag": cart_asset_tag,
+                    "device_asset_tag": device.get("asset_tag") or "",
+                    "device_serial": device.get("serial") or "",
+                    "device_name": device.get("name") or "",
+                    "device_model": device.get("model_name") or "",
+                    "device_status": device.get("status_name") or "",
+                    "device_location": device.get("location_name") or "",
+                    "device_snipe_url": device.get("asset_url") or "",
+                })
+
+        return output.getvalue()
+
+    fieldnames = [
+        "owner_name",
+        "owner_email",
+        "cart_asset_tag",
+        "cart_name",
+        "cart_model",
+        "cart_status",
+        "cart_location",
+        "teacher_name",
+        "room_number",
+        "device_count",
+        "cart_snipe_url",
+    ]
+
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for payload in cart_payloads:
+        cart = payload.get("cart") or {}
+        ownership = payload.get("ownership") or {}
+        devices = payload.get("devices") or []
+
+        writer.writerow({
+            "owner_name": ownership.get("owner_display_name") or "",
+            "owner_email": ownership.get("owner_email") or "",
+            "cart_asset_tag": cart.get("asset_tag") or "",
+            "cart_name": cart.get("name") or "",
+            "cart_model": cart.get("model_name") or "",
+            "cart_status": cart.get("status_name") or "",
+            "cart_location": cart.get("location_name") or "",
+            "teacher_name": ownership.get("teacher_name") or "",
+            "room_number": ownership.get("room_number") or "",
+            "device_count": len(devices),
+            "cart_snipe_url": cart.get("asset_url") or "",
+        })
+
+    return output.getvalue()
+
 def _catalog_sync_runs(limit: int = 15) -> list[dict]:
     runs = get_recent_job_runs(
         job_id="snipe.catalog_sync",
@@ -401,6 +559,63 @@ def api_me():
             "office_location": user.get("office_location") or "",
             "department": user.get("department") or "",
         },
+    })
+
+
+@bp.get("/api/dashboard")
+@login_required
+@require_permission("snipeops.media_catalog.view")
+def api_dashboard():
+    user = _current_user_profile()
+
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+
+    rows = scoped_cart_rows_for_user(
+        user,
+        can_manage_ownership=_can_manage_ownership(),
+    )
+    carts = _ownership_rows_with_device_counts(rows)
+    cart_ids = [
+        int(cart["id"])
+        for cart in carts
+        if cart.get("id") is not None
+    ]
+
+    checkout_summary = scoped_student_checkout_summary(cart_ids)
+    overdue_carts = [
+        cart
+        for cart in carts
+        if int(
+            (cart.get("student_checkout_summary") or {}).get(
+                "overdue_count",
+                0,
+            )
+            or 0
+        ) > 0
+    ]
+
+    return jsonify({
+        "ok": True,
+        "summary": {
+            "cart_count": len(carts),
+            "device_count": sum(
+                int(cart.get("device_count") or 0)
+                for cart in carts
+            ),
+            "active_checkout_count": checkout_summary["active_count"],
+            "overdue_checkout_count": checkout_summary["overdue_count"],
+        },
+        "attention": {
+            "overdue_carts": overdue_carts[:8],
+        },
+        "carts": carts[:12],
+        "recent_student_checkouts": recent_student_checkout_activity(
+            cart_asset_ids=cart_ids,
+            limit=8,
+        ),
+        "can_manage_student_checkouts": _can_manage_student_checkouts(),
+        "can_manage_ownership": _can_manage_ownership(),
     })
 
 
@@ -1000,6 +1215,171 @@ def api_search():
         "results": [_asset_payload(row) for row in rows],
     })
 
+
+@bp.get("/api/student-checkouts/lookup")
+@login_required
+@require_permission(STUDENT_CHECKOUT_PERMISSION)
+def api_student_checkout_lookup():
+    user = _current_user_profile()
+    query = (request.args.get("q") or "").strip()
+
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+
+    if not query:
+        return jsonify({
+            "ok": False,
+            "error": "Asset Tag or Serial Number is required.",
+        }), 400
+
+    try:
+        payload = checkout_lookup_payload(query)
+    except StudentCheckoutError as exc:
+        return _student_checkout_error_response(exc)
+
+    cart = payload.get("cart") or {}
+    cart_id = cart.get("id")
+
+    if cart_id and not user_can_access_cart(
+        int(cart_id),
+        user,
+        can_manage_ownership=_can_manage_ownership(),
+    ):
+        return jsonify({
+            "ok": False,
+            "error": "You can only check out devices from carts in your Media Catalog scope.",
+        }), 403
+
+    return jsonify({
+        "ok": True,
+        **payload,
+    })
+
+
+@bp.get("/api/student-checkouts")
+@login_required
+@require_permission(STUDENT_CHECKOUT_PERMISSION)
+def api_student_checkouts():
+    user = _current_user_profile()
+
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+
+    status_filter = (request.args.get("status") or "active").strip().lower()
+    query = (request.args.get("q") or "").strip()
+    cart_ids = scoped_cart_ids_for_user(
+        user,
+        can_manage_ownership=_can_manage_ownership(),
+    )
+
+    rows = list_student_checkouts_for_scope(
+        cart_asset_ids=cart_ids,
+        status_filter=status_filter,
+        query=query,
+        limit=1500,
+    )
+
+    summary = scoped_student_checkout_summary(cart_ids)
+
+    return jsonify({
+        "ok": True,
+        "checkouts": rows,
+        "summary": {
+            "active_checkout_count": summary["active_count"],
+            "overdue_checkout_count": summary["overdue_count"],
+        },
+        "status": status_filter,
+        "query": query,
+    })
+
+
+@bp.post("/api/student-checkouts")
+@login_required
+@require_permission(STUDENT_CHECKOUT_PERMISSION)
+def api_create_student_checkout():
+    user = _current_user_profile()
+    body = _body()
+
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+
+    try:
+        checkout = create_student_checkout(
+            actor_user=user,
+            identifier=body.get("identifier") or body.get("asset_identifier"),
+            device_id=body.get("device_id") or None,
+            student_name=body.get("student_name") or "",
+            student_id=body.get("student_id") or "",
+            return_by_date=body.get("return_by_date") or None,
+            can_manage_ownership=_can_manage_ownership(),
+        )
+    except StudentCheckoutError as exc:
+        return _student_checkout_error_response(exc)
+
+    return jsonify({
+        "ok": True,
+        "message": "Student Checkout created.",
+        "checkout": checkout,
+    })
+
+
+@bp.post("/api/student-checkouts/<int:checkout_id>/return")
+@login_required
+@require_permission(STUDENT_CHECKOUT_PERMISSION)
+def api_return_student_checkout(checkout_id: int):
+    user = _current_user_profile()
+
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+
+    try:
+        checkout = return_student_checkout(
+            checkout_id=checkout_id,
+            actor_user=user,
+            can_manage_ownership=_can_manage_ownership(),
+        )
+    except StudentCheckoutError as exc:
+        return _student_checkout_error_response(exc)
+
+    return jsonify({
+        "ok": True,
+        "message": "Student Checkout returned.",
+        "checkout": checkout,
+    })
+
+
+@bp.get("/api/ownership/carts/<int:cart_id>/student-checkouts")
+@login_required
+@require_permission("snipeops.media_catalog.ownership.view")
+def api_ownership_cart_student_checkouts(cart_id: int):
+    user = _current_user_profile()
+
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+
+    if not user_can_access_cart(
+        cart_id,
+        user,
+        can_manage_ownership=_can_manage_ownership(),
+    ):
+        return jsonify({
+            "ok": False,
+            "error": "You do not have access to this cart's Student Checkouts.",
+        }), 403
+
+    rows = list_student_checkouts_for_scope(
+        cart_asset_ids=[cart_id],
+        status_filter="all",
+        query="",
+        limit=250,
+    )
+
+    return jsonify({
+        "ok": True,
+        "checkouts": rows,
+        "can_return": _can_manage_student_checkouts(),
+    })
+
 @bp.get("/api/users/search")
 @login_required
 @require_permission("snipeops.media_catalog.ownership.view")
@@ -1115,18 +1495,25 @@ def api_update_cart_metadata(cart_id: int):
         room_number=body.get("room_number"),
     )
 
+    sync_result, sync_error = _sync_cart_metadata_fields(cart, updated or {})
+    message = _metadata_message(
+        "Cart friendly fields updated.",
+        sync_result,
+        sync_error,
+    )
+
     log_media_action(
         action="updated_cart_metadata",
         cart_asset=cart,
         device_asset=None,
         ok=True,
-        message="Cart friendly fields updated.",
+        message=message,
         actor_user=user,
     )
 
     return jsonify({
         "ok": True,
-        "message": "Cart friendly fields updated.",
+        "message": message,
         "cart": _ownership_payload(updated),
     })
 
@@ -1210,7 +1597,7 @@ def api_ownership_all_carts():
 
     return jsonify({
         "ok": True,
-        "carts": [_ownership_payload(row) for row in rows],
+        "carts": _ownership_rows_with_device_counts(rows),
     })
 
 
@@ -1239,18 +1626,25 @@ def api_admin_update_cart_metadata(cart_id: int):
         room_number=body.get("room_number"),
     )
 
+    sync_result, sync_error = _sync_cart_metadata_fields(cart, updated or {})
+    message = _metadata_message(
+        "Cart friendly fields updated by admin.",
+        sync_result,
+        sync_error,
+    )
+
     log_media_action(
         action="admin_updated_cart_metadata",
         cart_asset=cart,
         device_asset=None,
         ok=True,
-        message="Cart friendly fields updated by admin.",
+        message=message,
         actor_user=actor_user,
     )
 
     return jsonify({
         "ok": True,
-        "message": "Cart friendly fields updated.",
+        "message": message,
         "cart": _ownership_payload(updated),
     })
 
@@ -1282,6 +1676,32 @@ def export_cart_pdf(cart_id: int):
     )
 
     return _send_pdf(pdf, filename)
+
+@bp.get("/export/cart/<int:cart_id>.csv")
+@login_required
+@require_permission("snipeops.media_catalog.view")
+def export_cart_csv(cart_id: int):
+    payload = _cart_export_payload(cart_id)
+
+    if not payload:
+        return jsonify({"ok": False, "error": "Cart not found."}), 404
+
+    ownership = payload.get("ownership") or {}
+    user = _current_user_profile()
+
+    if not _can_manage_ownership():
+        if not user or int(ownership.get("owner_user_id") or 0) != int(user["id"]):
+            return jsonify({"ok": False, "error": "You can only export carts assigned to you."}), 403
+
+    cart = payload["cart"] or {}
+    filename = _safe_filename(
+        f"cart-{cart.get('asset_tag') or cart_id}-assets-in-cart-{_export_date_stamp()}.csv"
+    )
+
+    return _send_csv(
+        _build_carts_csv([payload], include_devices=True),
+        filename,
+    )
 
 
 @bp.get("/export/my-carts.pdf")
@@ -1356,6 +1776,55 @@ def export_all_assigned_carts_pdf():
     return _send_pdf(
         pdf,
         f"all-assigned-media-carts-{_export_date_stamp()}.pdf",
+    )
+
+@bp.get("/export/all-assigned-carts.csv")
+@login_required
+@require_permission("snipeops.media_catalog.ownership.view")
+def export_all_assigned_carts_csv():
+    mode = (request.args.get("mode") or "carts").strip().lower()
+    include_devices = mode in {"devices", "assets", "assigned-assets", "assets-in-carts"}
+
+    rows = list_all_owned_carts()
+    payloads = [
+        payload
+        for row in rows
+        if (payload := _cart_export_payload(int(row["cart_asset_id"])))
+    ]
+
+    suffix = "assets-in-carts" if include_devices else "carts-only"
+
+    return _send_csv(
+        _build_carts_csv(payloads, include_devices=include_devices),
+        f"all-assigned-media-carts-{suffix}-{_export_date_stamp()}.csv",
+    )
+
+
+@bp.get("/export/user/<int:user_id>/carts.csv")
+@login_required
+@require_permission("snipeops.media_catalog.ownership.view")
+def export_user_carts_csv(user_id: int):
+    owner = get_user_by_id(user_id)
+
+    if not owner:
+        return jsonify({"ok": False, "error": "User not found."}), 404
+
+    mode = (request.args.get("mode") or "carts").strip().lower()
+    include_devices = mode in {"devices", "assets", "assigned-assets", "assets-in-carts"}
+
+    rows = list_owned_carts(user_id)
+    payloads = [
+        payload
+        for row in rows
+        if (payload := _cart_export_payload(int(row["cart_asset_id"])))
+    ]
+
+    owner_label = owner.get("display_name") or owner.get("email") or f"user-{user_id}"
+    suffix = "assets-in-carts" if include_devices else "carts-only"
+
+    return _send_csv(
+        _build_carts_csv(payloads, include_devices=include_devices),
+        _safe_filename(f"media-carts-{owner_label}-{suffix}-{_export_date_stamp()}.csv"),
     )
 
 
