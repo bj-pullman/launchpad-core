@@ -256,38 +256,131 @@ function dashboardMetricIcon(name) {
 
 function renderDashboard(data) {
     const summary = data.summary || {};
-    const summaryEl = $("dashboardSummary");
-    const attentionEl = $("dashboardAttention");
-    const activityEl = $("dashboardRecentCheckouts");
+
+    const summaryEl =
+        $("dashboardSummary");
+
+    const attentionEl =
+        $("dashboardAttention");
+
+    const activityEl =
+        $("dashboardRecentCheckouts");
 
     const managementScope =
         data.scope_mode === "management";
 
-    const cartsLabel = managementScope
-        ? "Managed Carts"
-        : "My Carts";
 
-    const cartsDescription = managementScope
-        ? "All assigned carts across Media Catalog"
-        : "Carts assigned to you";
+    // ---------------------------------------------------------
+    // Dashboard scope-aware headings
+    // ---------------------------------------------------------
 
-    const devicesDescription = managementScope
-        ? "Devices across all assigned carts"
-        : "Devices in your assigned carts";
+    const overviewHeading =
+        $("dashboardOverviewHeading");
+
+    const overviewDescription =
+        $("dashboardOverviewDescription");
+
+    const attentionHeading =
+        $("dashboardAttentionHeading");
+
+    const attentionDescription =
+        $("dashboardAttentionDescription");
+
+    const activityHeading =
+        $("dashboardActivityHeading");
+
+    const activityDescription =
+        $("dashboardActivityDescription");
+
+
+    if (overviewHeading) {
+        overviewHeading.textContent =
+            managementScope
+                ? "Management Overview"
+                : "My Overview";
+    }
+
+    if (overviewDescription) {
+        overviewDescription.textContent =
+            managementScope
+                ? "Media Catalog-wide carts, devices, student checkouts, and recent activity."
+                : "Your carts, devices, student checkouts, and recent activity.";
+    }
+
+    if (attentionHeading) {
+        attentionHeading.textContent =
+            "Needs Attention";
+    }
+
+    if (attentionDescription) {
+        attentionDescription.textContent =
+            managementScope
+                ? "Overdue Student Checkouts across managed carts."
+                : "Overdue Student Checkouts from your carts.";
+    }
+
+    if (activityHeading) {
+        activityHeading.textContent =
+            "Recent Activity";
+    }
+
+    if (activityDescription) {
+        activityDescription.textContent =
+            managementScope
+                ? "Latest Student Checkout activity across managed carts."
+                : "Latest Student Checkout activity from your carts.";
+    }
+
+
+    // ---------------------------------------------------------
+    // Scope-aware KPI wording
+    // ---------------------------------------------------------
+
+    const cartsLabel =
+        managementScope
+            ? "Managed Carts"
+            : "My Carts";
+
+    const cartsDescription =
+        managementScope
+            ? "All carts in your management scope"
+            : "Carts assigned to you";
+
+    const devicesLabel =
+        managementScope
+            ? "Managed Devices"
+            : "My Devices";
+
+    const devicesDescription =
+        managementScope
+            ? "Devices across managed carts"
+            : "Devices in your carts";
+
+    const activeCheckoutLabel =
+        "Active Checkouts";
 
     const activeCheckoutDescription =
         managementScope
-            ? "Active student custody district-wide"
-            : "Devices currently with students";
+            ? "Active student custody across managed carts"
+            : "Active student custody from your carts";
+
+    const overdueLabel =
+        "Overdue";
 
     const overdueCheckoutDescription =
         managementScope
-            ? "Overdue custody records district-wide"
-            : "Past the Return By date";
+            ? "Overdue checkouts across managed carts"
+            : "Overdue checkouts from your carts";
+
+
+    // ---------------------------------------------------------
+    // KPI cards
+    // ---------------------------------------------------------
 
     if (summaryEl) {
         const activeCheckoutCard =
-            window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
+            window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS ||
+            window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP
                 ? `
                     <button
                         class="dashboard-metric-card"
@@ -297,13 +390,19 @@ function renderDashboard(data) {
                         ${dashboardMetricIcon("active")}
 
                         <span class="dashboard-metric-value">
-                            ${escapeHtml(summary.active_checkout_count || 0)}
+                            ${escapeHtml(
+                                summary.active_checkout_count || 0
+                            )}
                         </span>
 
-                        <strong>Active Checkouts</strong>
+                        <strong>
+                            ${escapeHtml(activeCheckoutLabel)}
+                        </strong>
 
                         <small>
-                            ${escapeHtml(activeCheckoutDescription)}
+                            ${escapeHtml(
+                                activeCheckoutDescription
+                            )}
                         </small>
                     </button>
                 `
@@ -312,19 +411,27 @@ function renderDashboard(data) {
                         ${dashboardMetricIcon("active")}
 
                         <span class="dashboard-metric-value">
-                            ${escapeHtml(summary.active_checkout_count || 0)}
+                            ${escapeHtml(
+                                summary.active_checkout_count || 0
+                            )}
                         </span>
 
-                        <strong>Active Checkouts</strong>
+                        <strong>
+                            ${escapeHtml(activeCheckoutLabel)}
+                        </strong>
 
                         <small>
-                            ${escapeHtml(activeCheckoutDescription)}
+                            ${escapeHtml(
+                                activeCheckoutDescription
+                            )}
                         </small>
                     </div>
                 `;
 
+
         const overdueCheckoutCard =
-            window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
+            window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS ||
+            window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP
                 ? `
                     <button
                         class="dashboard-metric-card overdue"
@@ -334,13 +441,19 @@ function renderDashboard(data) {
                         ${dashboardMetricIcon("overdue")}
 
                         <span class="dashboard-metric-value">
-                            ${escapeHtml(summary.overdue_checkout_count || 0)}
+                            ${escapeHtml(
+                                summary.overdue_checkout_count || 0
+                            )}
                         </span>
 
-                        <strong>Overdue</strong>
+                        <strong>
+                            ${escapeHtml(overdueLabel)}
+                        </strong>
 
                         <small>
-                            ${escapeHtml(overdueCheckoutDescription)}
+                            ${escapeHtml(
+                                overdueCheckoutDescription
+                            )}
                         </small>
                     </button>
                 `
@@ -349,16 +462,23 @@ function renderDashboard(data) {
                         ${dashboardMetricIcon("overdue")}
 
                         <span class="dashboard-metric-value">
-                            ${escapeHtml(summary.overdue_checkout_count || 0)}
+                            ${escapeHtml(
+                                summary.overdue_checkout_count || 0
+                            )}
                         </span>
 
-                        <strong>Overdue</strong>
+                        <strong>
+                            ${escapeHtml(overdueLabel)}
+                        </strong>
 
                         <small>
-                            ${escapeHtml(overdueCheckoutDescription)}
+                            ${escapeHtml(
+                                overdueCheckoutDescription
+                            )}
                         </small>
                     </div>
                 `;
+
 
         summaryEl.innerHTML = `
             <button
@@ -373,7 +493,9 @@ function renderDashboard(data) {
                 ${dashboardMetricIcon("carts")}
 
                 <span class="dashboard-metric-value">
-                    ${escapeHtml(summary.cart_count || 0)}
+                    ${escapeHtml(
+                        summary.cart_count || 0
+                    )}
                 </span>
 
                 <strong>
@@ -384,6 +506,7 @@ function renderDashboard(data) {
                     ${escapeHtml(cartsDescription)}
                 </small>
             </button>
+
 
             <button
                 class="dashboard-metric-card"
@@ -397,51 +520,89 @@ function renderDashboard(data) {
                 ${dashboardMetricIcon("devices")}
 
                 <span class="dashboard-metric-value">
-                    ${escapeHtml(summary.device_count || 0)}
+                    ${escapeHtml(
+                        summary.device_count || 0
+                    )}
                 </span>
 
-                <strong>Devices</strong>
+                <strong>
+                    ${escapeHtml(devicesLabel)}
+                </strong>
 
                 <small>
                     ${escapeHtml(devicesDescription)}
                 </small>
             </button>
 
+
             ${activeCheckoutCard}
+
             ${overdueCheckoutCard}
         `;
 
+
+        // -----------------------------------------------------
+        // Cart / device KPI navigation
+        // -----------------------------------------------------
+
         summaryEl
-            .querySelectorAll("[data-dashboard-target]")
+            .querySelectorAll(
+                "[data-dashboard-target]"
+            )
             .forEach(btn => {
-                btn.addEventListener("click", () => {
-                    document.querySelector(
-                        `[data-tab="${btn.dataset.dashboardTarget}"]`
-                    )?.click();
-                });
+                btn.addEventListener(
+                    "click",
+                    () => {
+                        document.querySelector(
+                            `[data-tab="${btn.dataset.dashboardTarget}"]`
+                        )?.click();
+                    }
+                );
             });
+
+
+        // -----------------------------------------------------
+        // Student Checkout KPI navigation
+        //
+        // Management dashboard -> managed checkout scope
+        // Personal dashboard   -> personal checkout scope
+        // -----------------------------------------------------
 
         summaryEl
             .querySelectorAll(
                 "[data-dashboard-checkout-status]"
             )
             .forEach(btn => {
-                btn.addEventListener("click", () => {
-                    openStudentCheckoutsTab(
-                        btn.dataset.dashboardCheckoutStatus ||
-                        "active",
-                        "",
-                        data.scope_mode === "management"
-                            ? "managed"
-                            : "mine"
-                    );
-                });
+                btn.addEventListener(
+                    "click",
+                    () => {
+                        openStudentCheckoutsTab(
+                            btn.dataset
+                                .dashboardCheckoutStatus ||
+                                "active",
+                            "",
+                            managementScope
+                                ? "managed"
+                                : "mine"
+                        );
+                    }
+                );
             });
     }
+
+
+    // ---------------------------------------------------------
+    // Needs Attention
+    // ---------------------------------------------------------
 
     if (attentionEl) {
         renderDashboardAttention(data);
     }
+
+
+    // ---------------------------------------------------------
+    // Recent Student Checkout activity
+    // ---------------------------------------------------------
 
     if (activityEl) {
         renderDashboardRecentCheckouts(
