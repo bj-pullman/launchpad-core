@@ -19,8 +19,10 @@ let dashboardCache = null;
 let studentCheckoutLookup = null;
 let studentCheckoutsCache = [];
 let studentCheckoutStatusFilter = "active";
+let studentCheckoutScopeFilter = "mine";
 let studentCheckoutSearchQuery = "";
 let pendingReturnCheckout = null;
+let studentCheckoutScopeInitialized = false;
 
 const sheetDevices = new Map();
 const cartMetadataSaveQueues = new Map();
@@ -255,81 +257,186 @@ function dashboardMetricIcon(name) {
 function renderDashboard(data) {
     const summary = data.summary || {};
     const summaryEl = $("dashboardSummary");
-    const cartsEl = $("dashboardMyCarts");
     const attentionEl = $("dashboardAttention");
     const activityEl = $("dashboardRecentCheckouts");
 
-    if (summaryEl) {
-        const activeCheckoutCard = window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
-            ? `
-                <button class="dashboard-metric-card" type="button" data-dashboard-checkout-status="active">
-                    ${dashboardMetricIcon("active")}
-                    <span class="dashboard-metric-value">${escapeHtml(summary.active_checkout_count || 0)}</span>
-                    <strong>Active Checkouts</strong>
-                    <small>Devices currently with students</small>
-                </button>
-            `
-            : `
-                <div class="dashboard-metric-card">
-                    ${dashboardMetricIcon("active")}
-                    <span class="dashboard-metric-value">${escapeHtml(summary.active_checkout_count || 0)}</span>
-                    <strong>Active Checkouts</strong>
-                    <small>Devices currently with students</small>
-                </div>
-            `;
+    const managementScope =
+        data.scope_mode === "management";
 
-        const overdueCheckoutCard = window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
-            ? `
-                <button class="dashboard-metric-card overdue" type="button" data-dashboard-checkout-status="overdue">
-                    ${dashboardMetricIcon("overdue")}
-                    <span class="dashboard-metric-value">${escapeHtml(summary.overdue_checkout_count || 0)}</span>
-                    <strong>Overdue</strong>
-                    <small>Past the Return By date</small>
-                </button>
-            `
-            : `
-                <div class="dashboard-metric-card overdue">
-                    ${dashboardMetricIcon("overdue")}
-                    <span class="dashboard-metric-value">${escapeHtml(summary.overdue_checkout_count || 0)}</span>
-                    <strong>Overdue</strong>
-                    <small>Past the Return By date</small>
-                </div>
-            `;
+    const cartsLabel = managementScope
+        ? "Managed Carts"
+        : "My Carts";
+
+    const cartsDescription = managementScope
+        ? "All assigned carts across Media Catalog"
+        : "Carts assigned to you";
+
+    const devicesDescription = managementScope
+        ? "Devices across all assigned carts"
+        : "Devices in your assigned carts";
+
+    const activeCheckoutDescription =
+        managementScope
+            ? "Active student custody district-wide"
+            : "Devices currently with students";
+
+    const overdueCheckoutDescription =
+        managementScope
+            ? "Overdue custody records district-wide"
+            : "Past the Return By date";
+
+    if (summaryEl) {
+        const activeCheckoutCard =
+            window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
+                ? `
+                    <button
+                        class="dashboard-metric-card"
+                        type="button"
+                        data-dashboard-checkout-status="active"
+                    >
+                        ${dashboardMetricIcon("active")}
+
+                        <span class="dashboard-metric-value">
+                            ${escapeHtml(summary.active_checkout_count || 0)}
+                        </span>
+
+                        <strong>Active Checkouts</strong>
+
+                        <small>
+                            ${escapeHtml(activeCheckoutDescription)}
+                        </small>
+                    </button>
+                `
+                : `
+                    <div class="dashboard-metric-card">
+                        ${dashboardMetricIcon("active")}
+
+                        <span class="dashboard-metric-value">
+                            ${escapeHtml(summary.active_checkout_count || 0)}
+                        </span>
+
+                        <strong>Active Checkouts</strong>
+
+                        <small>
+                            ${escapeHtml(activeCheckoutDescription)}
+                        </small>
+                    </div>
+                `;
+
+        const overdueCheckoutCard =
+            window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
+                ? `
+                    <button
+                        class="dashboard-metric-card overdue"
+                        type="button"
+                        data-dashboard-checkout-status="overdue"
+                    >
+                        ${dashboardMetricIcon("overdue")}
+
+                        <span class="dashboard-metric-value">
+                            ${escapeHtml(summary.overdue_checkout_count || 0)}
+                        </span>
+
+                        <strong>Overdue</strong>
+
+                        <small>
+                            ${escapeHtml(overdueCheckoutDescription)}
+                        </small>
+                    </button>
+                `
+                : `
+                    <div class="dashboard-metric-card overdue">
+                        ${dashboardMetricIcon("overdue")}
+
+                        <span class="dashboard-metric-value">
+                            ${escapeHtml(summary.overdue_checkout_count || 0)}
+                        </span>
+
+                        <strong>Overdue</strong>
+
+                        <small>
+                            ${escapeHtml(overdueCheckoutDescription)}
+                        </small>
+                    </div>
+                `;
 
         summaryEl.innerHTML = `
-            <button class="dashboard-metric-card" type="button" data-dashboard-target="cart-management">
+            <button
+                class="dashboard-metric-card"
+                type="button"
+                data-dashboard-target="${
+                    managementScope
+                        ? "ownership-management"
+                        : "cart-management"
+                }"
+            >
                 ${dashboardMetricIcon("carts")}
-                <span class="dashboard-metric-value">${escapeHtml(summary.cart_count || 0)}</span>
-                <strong>My Carts</strong>
-                <small>Assigned or managed in your scope</small>
+
+                <span class="dashboard-metric-value">
+                    ${escapeHtml(summary.cart_count || 0)}
+                </span>
+
+                <strong>
+                    ${escapeHtml(cartsLabel)}
+                </strong>
+
+                <small>
+                    ${escapeHtml(cartsDescription)}
+                </small>
             </button>
 
-            <button class="dashboard-metric-card" type="button" data-dashboard-target="cart-management">
+            <button
+                class="dashboard-metric-card"
+                type="button"
+                data-dashboard-target="${
+                    managementScope
+                        ? "ownership-management"
+                        : "cart-management"
+                }"
+            >
                 ${dashboardMetricIcon("devices")}
-                <span class="dashboard-metric-value">${escapeHtml(summary.device_count || 0)}</span>
+
+                <span class="dashboard-metric-value">
+                    ${escapeHtml(summary.device_count || 0)}
+                </span>
+
                 <strong>Devices</strong>
-                <small>Total devices in scoped carts</small>
+
+                <small>
+                    ${escapeHtml(devicesDescription)}
+                </small>
             </button>
 
             ${activeCheckoutCard}
             ${overdueCheckoutCard}
         `;
 
-        summaryEl.querySelectorAll("[data-dashboard-target]").forEach(btn => {
-            btn.addEventListener("click", () => {
-                document.querySelector(`[data-tab="${btn.dataset.dashboardTarget}"]`)?.click();
+        summaryEl
+            .querySelectorAll("[data-dashboard-target]")
+            .forEach(btn => {
+                btn.addEventListener("click", () => {
+                    document.querySelector(
+                        `[data-tab="${btn.dataset.dashboardTarget}"]`
+                    )?.click();
+                });
             });
-        });
 
-        summaryEl.querySelectorAll("[data-dashboard-checkout-status]").forEach(btn => {
-            btn.addEventListener("click", () => {
-                openStudentCheckoutsTab(btn.dataset.dashboardCheckoutStatus || "active");
+        summaryEl
+            .querySelectorAll(
+                "[data-dashboard-checkout-status]"
+            )
+            .forEach(btn => {
+                btn.addEventListener("click", () => {
+                    openStudentCheckoutsTab(
+                        btn.dataset.dashboardCheckoutStatus ||
+                        "active",
+                        "",
+                        data.scope_mode === "management"
+                            ? "managed"
+                            : "mine"
+                    );
+                });
             });
-        });
-    }
-
-    if (cartsEl) {
-        renderDashboardCarts(data.carts || []);
     }
 
     if (attentionEl) {
@@ -337,7 +444,9 @@ function renderDashboard(data) {
     }
 
     if (activityEl) {
-        renderDashboardRecentCheckouts(data.recent_student_checkouts || []);
+        renderDashboardRecentCheckouts(
+            data.recent_student_checkouts || []
+        );
     }
 }
 
@@ -345,70 +454,199 @@ function renderDashboardAttention(data) {
     const el = $("dashboardAttention");
     if (!el) return;
 
-    const summary = data.summary || {};
     const attention = data.attention || {};
-    const overdueCount = Number(summary.overdue_checkout_count || 0);
-    const overdueCarts = attention.overdue_carts || [];
-    const items = [];
+    const overdueCheckouts =
+        attention.overdue_checkouts || [];
 
-    if (overdueCount > 0) {
-        items.push(`
-            <button class="dashboard-attention-item priority" type="button" data-attention-checkout-status="overdue">
-                <span>${escapeHtml(overdueCount)}</span>
-                <div>
-                    <strong>Overdue Student Checkouts</strong>
-                    <p>${escapeHtml(overdueCount)} device${overdueCount === 1 ? "" : "s"} past the Return By date</p>
-                </div>
-            </button>
-        `);
-    }
+    const overdueCount =
+        Number(
+            data.summary?.overdue_checkout_count || 0
+        );
 
-    overdueCarts.slice(0, 5).forEach(cart => {
-        const checkoutSummary = cart.student_checkout_summary || {};
-        const ownership = cart.ownership || {};
-        const overdue = Number(checkoutSummary.overdue_count || 0);
-        const teacher = ownership.teacher_name || ownership.owner_display_name || ownership.owner_email || "Unassigned";
-        const room = ownership.room_number ? `Room ${ownership.room_number}` : "No room";
+    const checkoutScope =
+        data.scope_mode === "management"
+            ? "managed"
+            : "mine";
 
-        if (!overdue) return;
-
-        items.push(`
-            <button class="dashboard-attention-item" type="button" data-attention-open-cart="${escapeHtml(cart.id)}">
-                <span>${escapeHtml(overdue)}</span>
-                <div>
-                    <strong>${escapeHtml(cart.asset_tag ? `Cart ${cart.asset_tag}` : cart.name || "Cart")}</strong>
-                    <p>${escapeHtml(teacher)} - ${escapeHtml(room)}</p>
-                </div>
-            </button>
-        `);
-    });
-
-    if (!items.length) {
+    if (!overdueCount) {
         el.innerHTML = `
             <div class="dashboard-empty-state">
-                <strong>No checkout items need attention</strong>
-                <p class="muted">Overdue Student Checkouts will surface here when they occur.</p>
+                <strong>
+                    Nothing needs attention right now.
+                </strong>
+
+                <p class="muted">
+                    There are no overdue Student Checkouts
+                    in the current dashboard scope.
+                </p>
             </div>
         `;
+
         return;
     }
 
-    el.innerHTML = items.join("");
+    if (!overdueCheckouts.length) {
+        el.innerHTML = `
+            <div class="dashboard-attention-summary">
+                <div>
+                    <strong>
+                        ${escapeHtml(overdueCount)}
+                        overdue Student Checkout${overdueCount === 1 ? "" : "s"}
+                    </strong>
 
-    el.querySelectorAll("[data-attention-checkout-status]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            openStudentCheckoutsTab(btn.dataset.attentionCheckoutStatus || "overdue");
-        });
-    });
+                    <p class="muted">
+                        Open Student Checkouts to review
+                        overdue devices.
+                    </p>
+                </div>
 
-    el.querySelectorAll("[data-attention-open-cart]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            const carts = data.carts || [];
-            const cart = carts.find(item => String(item.id) === String(btn.dataset.attentionOpenCart));
-            openCartManagementTab();
-            if (cart) selectCart(cart);
+                <button
+                    class="mini-btn"
+                    type="button"
+                    data-dashboard-open-overdue
+                >
+                    Review Overdue
+                </button>
+            </div>
+        `;
+
+        el
+            .querySelector(
+                "[data-dashboard-open-overdue]"
+            )
+            ?.addEventListener(
+                "click",
+                () => {
+                    openStudentCheckoutsTab(
+                        "overdue",
+                        "",
+                        checkoutScope
+                    );
+                }
+            );
+
+        return;
+    }
+
+    const rows = overdueCheckouts
+        .slice(0, 8)
+        .map(checkout => {
+            const device =
+                checkout.device_asset_tag ||
+                checkout.device_serial ||
+                checkout.device_name ||
+                `Device ${checkout.device_asset_id || ""}`;
+
+            const cart =
+                checkout.original_cart_asset_tag ||
+                checkout.original_cart_name ||
+                "";
+
+            const student =
+                checkout.student_name ||
+                "Unknown student";
+
+            const returnBy =
+                checkout.return_by_date
+                    ? checkout.return_by_date
+                    : "No return date";
+
+            const daysOverdue =
+                Number(
+                    checkout.days_overdue || 0
+                );
+
+            return `
+                <button
+                    class="dashboard-attention-item priority"
+                    type="button"
+                    data-dashboard-overdue-checkout
+                >
+                    <span>
+                        ${escapeHtml(
+                            daysOverdue > 0
+                                ? daysOverdue
+                                : "!"
+                        )}
+                    </span>
+
+                    <div>
+                        <strong>
+                            ${escapeHtml(device)}
+                            · ${escapeHtml(student)}
+                        </strong>
+
+                        <p>
+                            ${
+                                cart
+                                    ? `Cart ${escapeHtml(cart)} · `
+                                    : ""
+                            }
+                            Due ${escapeHtml(returnBy)}
+                            ${
+                                daysOverdue > 0
+                                    ? ` · ${escapeHtml(daysOverdue)} day${daysOverdue === 1 ? "" : "s"} overdue`
+                                    : ""
+                            }
+                        </p>
+                    </div>
+                </button>
+            `;
+        })
+        .join("");
+
+    const shownCount =
+        Math.min(
+            overdueCheckouts.length,
+            8
+        );
+
+    const remaining =
+        Math.max(
+            0,
+            overdueCount - shownCount
+        );
+
+    el.innerHTML = `
+        <div class="dashboard-attention-list-inner">
+            ${rows}
+        </div>
+
+        <div class="dashboard-attention-footer">
+            <span class="muted">
+                ${
+                    remaining > 0
+                        ? `${escapeHtml(remaining)} more overdue checkout${remaining === 1 ? "" : "s"} not shown.`
+                        : `${escapeHtml(overdueCount)} overdue checkout${overdueCount === 1 ? "" : "s"} total.`
+                }
+            </span>
+
+            <button
+                class="mini-btn"
+                type="button"
+                data-dashboard-open-overdue
+            >
+                View All Overdue
+            </button>
+        </div>
+    `;
+
+    el
+        .querySelectorAll(
+            "[data-dashboard-open-overdue], [data-dashboard-overdue-checkout]"
+        )
+        .forEach(btn => {
+            btn.addEventListener(
+                "click",
+                () => {
+                    openStudentCheckoutsTab(
+                        "overdue",
+                        "",
+                        checkoutScope
+                    );
+                }
+            );
         });
-    });
 }
 
 function renderDashboardCarts(carts) {
@@ -510,32 +748,84 @@ function renderDashboardRecentCheckouts(checkouts) {
         el.innerHTML = `
             <div class="dashboard-empty-state">
                 <strong>No recent Student Checkout activity</strong>
-                <p class="muted">Checkout and return records will appear here once devices move through student custody.</p>
+                <p class="muted">
+                    Checkout and return records will appear here once devices
+                    move through student custody.
+                </p>
             </div>
         `;
         return;
     }
 
-    el.innerHTML = checkouts.slice(0, 8).map(checkout => {
-        const returned = Boolean(checkout.returned_at);
-        const action = returned ? "Returned" : "Checked out";
-        const when = returned ? checkout.returned_at : checkout.checked_out_at;
+    el.innerHTML = checkouts
+        .slice(0, 8)
+        .map(checkout => {
+            const returned =
+                Boolean(checkout.returned_at);
 
-        return `
-        <article class="dashboard-activity-item">
-            <div>
-                <strong>${escapeHtml(action)} ${escapeHtml(checkout.device_asset_tag || checkout.device_serial || "Device")}</strong>
-                <p>
-                    ${escapeHtml(checkout.student_name || "Student")}
-                    - ${escapeHtml(checkout.original_cart_asset_tag || checkout.original_cart_name || "Cart")}
-                </p>
-                <span class="muted">${escapeHtml(formatActivityDateTime(when))}</span>
-            </div>
-            ${renderCheckoutStatusBadge(checkout)}
-        </article>
-        `;
-    }).join("");
+            const action =
+                returned
+                    ? "Returned"
+                    : "Checked out";
+
+            const when =
+                returned
+                    ? checkout.returned_at
+                    : checkout.checked_out_at;
+
+            const actor =
+                returned
+                    ? (
+                        checkout.return_actor_display_name ||
+                        checkout.return_actor_email ||
+                        "Unknown user"
+                    )
+                    : (
+                        checkout.checkout_actor_display_name ||
+                        checkout.checkout_actor_email ||
+                        "Unknown user"
+                    );
+
+            const device =
+                checkout.device_asset_tag ||
+                checkout.device_serial ||
+                "Device";
+
+            const student =
+                checkout.student_name ||
+                "Student";
+
+            const cart =
+                checkout.original_cart_asset_tag ||
+                checkout.original_cart_name ||
+                "Cart";
+
+            return `
+                <article class="dashboard-activity-item">
+                    <div>
+                        <strong>
+                            ${escapeHtml(action)}
+                            ${escapeHtml(device)}
+                        </strong>
+
+                        <p>
+                            ${escapeHtml(student)}
+                            · ${escapeHtml(cart)}
+                        </p>
+
+                        <span class="muted">
+                            ${escapeHtml(formatActivityDateTime(when))}
+                            · by ${escapeHtml(actor)}
+                        </span>
+                    </div>
+
+                    ${renderCheckoutStatusBadge(checkout)}
+                </article>
+            `;
+        })
+        .join("");
 }
+
 
 function bindFindCartToggle() {
     $("toggleFindCartBtn")?.addEventListener("click", () => {
@@ -2711,51 +3001,137 @@ function openCartDetails(cart) {
     });
 }
 
-function openStudentCheckoutsTab(status = "active", query = "") {
-    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) {
-        setStatus("You do not have permission to manage Student Checkouts.", false);
+function openStudentCheckoutsTab(
+    status = "active",
+    query = "",
+    scope = null
+) {
+    const canView =
+        window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS ||
+        window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP;
+
+    if (!canView) {
+        setStatus(
+            "You do not have permission to view Student Checkouts.",
+            false
+        );
         return;
     }
 
-    setStudentCheckoutListState(status || "active", query || "");
+    setStudentCheckoutListState(
+        status || "active",
+        query || ""
+    );
 
-    const tab = document.querySelector('[data-tab="student-checkouts"]');
+    /*
+     * Dashboard is management-wide for Ownership Management users.
+     *
+     * If a scope is explicitly supplied, use it.
+     */
+    if (scope) {
+        studentCheckoutScopeFilter = scope;
+    }
+
+    updateStudentCheckoutScopeButtons();
+
+    const tab = document.querySelector(
+        '[data-tab="student-checkouts"]'
+    );
+
     if (tab) {
         tab.click();
     }
+
     loadStudentCheckouts();
 }
 
 function bindStudentCheckoutsPage() {
-    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) return;
+    const canView =
+        window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS ||
+        window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP;
 
-    $("refreshStudentCheckoutsBtn")?.addEventListener("click", loadStudentCheckouts);
-    $("openStudentCheckoutFromPageBtn")?.addEventListener("click", openStudentCheckoutModal);
+    if (!canView) return;
 
-    document.querySelectorAll("[data-checkout-status-filter]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            studentCheckoutStatusFilter = btn.dataset.checkoutStatusFilter || "active";
-            updateStudentCheckoutFilterButtons();
-            loadStudentCheckouts();
+    $("refreshStudentCheckoutsBtn")
+        ?.addEventListener(
+            "click",
+            loadStudentCheckouts
+        );
+
+    if (
+        window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS
+    ) {
+        $("openStudentCheckoutFromPageBtn")
+            ?.addEventListener(
+                "click",
+                openStudentCheckoutModal
+            );
+    }
+
+    document
+        .querySelectorAll(
+            "[data-checkout-scope-filter]"
+        )
+        .forEach(btn => {
+            btn.addEventListener("click", () => {
+                studentCheckoutScopeFilter =
+                    btn.dataset.checkoutScopeFilter ||
+                    "mine";
+
+                updateStudentCheckoutScopeButtons();
+
+                loadStudentCheckouts();
+            });
         });
-    });
 
-    const search = $("studentCheckoutSearch");
+    document
+        .querySelectorAll(
+            "[data-checkout-status-filter]"
+        )
+        .forEach(btn => {
+            btn.addEventListener("click", () => {
+                studentCheckoutStatusFilter =
+                    btn.dataset.checkoutStatusFilter ||
+                    "active";
+
+                updateStudentCheckoutFilterButtons();
+
+                loadStudentCheckouts();
+            });
+        });
+
+    const search =
+        $("studentCheckoutSearch");
+
     if (search) {
         const run = debounce(() => {
-            studentCheckoutSearchQuery = search.value.trim();
+            studentCheckoutSearchQuery =
+                search.value.trim();
+
             loadStudentCheckouts();
         }, 250);
 
-        search.addEventListener("input", run);
-        search.addEventListener("keydown", event => {
-            if (event.key === "Enter") {
-                event.preventDefault();
-                studentCheckoutSearchQuery = search.value.trim();
-                loadStudentCheckouts();
+        search.addEventListener(
+            "input",
+            run
+        );
+
+        search.addEventListener(
+            "keydown",
+            event => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+
+                    studentCheckoutSearchQuery =
+                        search.value.trim();
+
+                    loadStudentCheckouts();
+                }
             }
-        });
+        );
     }
+
+    updateStudentCheckoutScopeButtons();
 }
 
 function updateStudentCheckoutFilterButtons() {
@@ -2767,25 +3143,115 @@ function updateStudentCheckoutFilterButtons() {
     });
 }
 
-async function loadStudentCheckouts() {
-    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) return;
+function updateStudentCheckoutScopeButtons() {
+    document
+        .querySelectorAll(
+            "[data-checkout-scope-filter]"
+        )
+        .forEach(btn => {
+            btn.classList.toggle(
+                "active",
+                btn.dataset.checkoutScopeFilter ===
+                    studentCheckoutScopeFilter
+            );
+        });
+}
 
-    const tbody = $("studentCheckoutsBody");
+async function loadStudentCheckouts() {
+    const canView =
+        window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS ||
+        window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP;
+
+    if (!canView) return;
+
+    const tbody =
+        $("studentCheckoutsBody");
+
     if (!tbody) return;
 
-    tbody.innerHTML = `<tr><td colspan="7" class="muted">Loading Student Checkouts...</td></tr>`;
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="7" class="muted">
+                Loading Student Checkouts...
+            </td>
+        </tr>
+    `;
 
     try {
+        /*
+         * On the first load only, determine whether this user
+         * actually owns any carts.
+         *
+         * Ownership Management users with zero personal carts
+         * should default to the management-wide scope.
+         */
+        if (
+            !studentCheckoutScopeInitialized &&
+            window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP
+        ) {
+            const myCartsData = await apiGet(
+                "/api/my-carts",
+                "Unable to determine Student Checkout scope."
+            );
+
+            const myCarts =
+                myCartsData.carts || [];
+
+            studentCheckoutScopeFilter =
+                myCarts.length === 0
+                    ? "managed"
+                    : "mine";
+
+            studentCheckoutScopeInitialized = true;
+
+            updateStudentCheckoutScopeButtons();
+        }
+
+        const effectiveScope =
+            (
+                studentCheckoutScopeFilter === "managed" &&
+                window.MEDIA_CATALOG_CAN_VIEW_OWNERSHIP
+            )
+                ? "managed"
+                : "mine";
+
         const data = await apiGet(
-            `/api/student-checkouts?status=${encodeURIComponent(studentCheckoutStatusFilter)}&q=${encodeURIComponent(studentCheckoutSearchQuery)}`,
+            `/api/student-checkouts` +
+            `?scope=${encodeURIComponent(effectiveScope)}` +
+            `&status=${encodeURIComponent(studentCheckoutStatusFilter)}` +
+            `&q=${encodeURIComponent(studentCheckoutSearchQuery)}`,
             "Unable to load Student Checkouts."
         );
 
-        studentCheckoutsCache = data.checkouts || [];
-        renderStudentCheckoutSummary(data.summary || {});
-        renderStudentCheckouts(studentCheckoutsCache);
+        studentCheckoutsCache =
+            data.checkouts || [];
+
+        studentCheckoutScopeFilter =
+            data.scope || effectiveScope;
+
+        studentCheckoutScopeInitialized = true;
+
+        updateStudentCheckoutScopeButtons();
+
+        renderStudentCheckoutSummary(
+            data.summary || {}
+        );
+
+        renderStudentCheckouts(
+            studentCheckoutsCache
+        );
+
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(err.message || "Unable to load Student Checkouts.")}</td></tr>`;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="muted">
+                    ${escapeHtml(
+                        err.message ||
+                        "Unable to load Student Checkouts."
+                    )}
+                </td>
+            </tr>
+        `;
     }
 }
 
@@ -2815,68 +3281,172 @@ function renderStudentCheckoutSummary(summary) {
 
 function renderStudentCheckouts(checkouts) {
     const tbody = $("studentCheckoutsBody");
-    const empty = $("studentCheckoutsEmpty");
     if (!tbody) return;
 
     if (!checkouts.length) {
-        tbody.innerHTML = "";
-        empty?.classList.remove("hidden");
+        tbody.innerHTML = `
+            <tr class="student-checkouts-empty-row">
+                <td colspan="7">
+                    <div class="dashboard-empty-state">
+                        <strong>No Student Checkouts match this view.</strong>
+                        <p class="muted">
+                            Try changing the scope, status, or search filters.
+                        </p>
+                    </div>
+                </td>
+            </tr>
+        `;
+
         return;
     }
 
-    empty?.classList.add("hidden");
-
     tbody.innerHTML = checkouts.map(checkout => {
-        const canReturn = checkout.status !== "returned";
+        const canReturn =
+            window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS &&
+            checkout.status !== "returned";
 
         return `
             <tr data-student-checkout-id="${escapeHtml(checkout.id)}">
                 <td>
-                    <strong>${escapeHtml(checkout.device_asset_tag || "No tag")}</strong>
-                    <div class="muted mono">${escapeHtml(checkout.device_serial || "No serial")}</div>
-                    <div class="muted">${escapeHtml(checkout.device_model_name || "")}</div>
+                    <strong>
+                        ${escapeHtml(checkout.device_asset_tag || "No tag")}
+                    </strong>
+
+                    <div class="muted mono">
+                        ${escapeHtml(checkout.device_serial || "No serial")}
+                    </div>
+
+                    <div class="muted">
+                        ${escapeHtml(checkout.device_model_name || "")}
+                    </div>
                 </td>
+
                 <td>
-                    <strong>${escapeHtml(checkout.student_name || "")}</strong>
-                    <div class="muted">${escapeHtml(checkout.student_id || "No Student ID")}</div>
+                    <strong>
+                        ${escapeHtml(checkout.student_name || "")}
+                    </strong>
+
+                    <div class="muted">
+                        ${escapeHtml(checkout.student_id || "No Student ID")}
+                    </div>
                 </td>
+
                 <td>
-                    <strong>${escapeHtml(checkout.original_cart_asset_tag || checkout.original_cart_name || "Cart")}</strong>
-                    <div class="muted">${escapeHtml(checkout.original_cart_teacher_name || "")}</div>
-                    <div class="muted">${escapeHtml(checkout.original_cart_room_number ? "Room " + checkout.original_cart_room_number : "")}</div>
+                    <strong>
+                        ${escapeHtml(
+                            checkout.original_cart_asset_tag ||
+                            checkout.original_cart_name ||
+                            "Cart"
+                        )}
+                    </strong>
+
+                    <div class="muted">
+                        ${escapeHtml(
+                            checkout.original_cart_teacher_name || ""
+                        )}
+                    </div>
+
+                    <div class="muted">
+                        ${escapeHtml(
+                            checkout.original_cart_room_number
+                                ? "Room " + checkout.original_cart_room_number
+                                : ""
+                        )}
+                    </div>
                 </td>
-                <td>${escapeHtml(formatActivityDateTime(checkout.checked_out_at))}</td>
-                <td>${escapeHtml(checkout.return_by_date || "-")}</td>
-                <td>${renderCheckoutStatusBadge(checkout)}</td>
+
+                <td>
+                    ${escapeHtml(
+                        formatActivityDateTime(
+                            checkout.checked_out_at
+                        )
+                    )}
+                </td>
+
+                <td>
+                    ${escapeHtml(
+                        checkout.return_by_date || "-"
+                    )}
+                </td>
+
+                <td>
+                    ${renderCheckoutStatusBadge(checkout)}
+                </td>
+
                 <td>
                     <div class="cart-action-group">
-                        <button class="mini-btn" type="button" data-checkout-details-id="${escapeHtml(checkout.id)}">
+                        <button
+                            class="mini-btn"
+                            type="button"
+                            data-checkout-details-id="${escapeHtml(checkout.id)}"
+                        >
                             Details
                         </button>
-                        ${canReturn ? `
-                            <button class="mini-btn" type="button" data-return-checkout-id="${escapeHtml(checkout.id)}">
-                                Return
-                            </button>
-                        ` : ""}
+
+                        ${
+                            canReturn
+                                ? `
+                                    <button
+                                        class="mini-btn"
+                                        type="button"
+                                        data-return-checkout-id="${escapeHtml(checkout.id)}"
+                                    >
+                                        Return
+                                    </button>
+                                `
+                                : ""
+                        }
                     </div>
                 </td>
             </tr>
         `;
     }).join("");
 
-    tbody.querySelectorAll("[data-checkout-details-id]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            const checkout = studentCheckoutsCache.find(item => String(item.id) === String(btn.dataset.checkoutDetailsId));
-            if (checkout) openStudentCheckoutDetails(checkout);
-        });
-    });
+    tbody
+        .querySelectorAll(
+            "[data-checkout-details-id]"
+        )
+        .forEach(btn => {
+            btn.addEventListener("click", () => {
+                const checkout =
+                    studentCheckoutsCache.find(
+                        item =>
+                            String(item.id) ===
+                            String(
+                                btn.dataset.checkoutDetailsId
+                            )
+                    );
 
-    tbody.querySelectorAll("[data-return-checkout-id]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            const checkout = studentCheckoutsCache.find(item => String(item.id) === String(btn.dataset.returnCheckoutId));
-            if (checkout) openReturnStudentCheckoutModal(checkout);
+                if (checkout) {
+                    openStudentCheckoutDetails(
+                        checkout
+                    );
+                }
+            });
         });
-    });
+
+    tbody
+        .querySelectorAll(
+            "[data-return-checkout-id]"
+        )
+        .forEach(btn => {
+            btn.addEventListener("click", () => {
+                const checkout =
+                    studentCheckoutsCache.find(
+                        item =>
+                            String(item.id) ===
+                            String(
+                                btn.dataset.returnCheckoutId
+                            )
+                    );
+
+                if (checkout) {
+                    openReturnStudentCheckoutModal(
+                        checkout
+                    );
+                }
+            });
+        });
 }
 
 function renderCheckoutStatusBadge(checkout) {

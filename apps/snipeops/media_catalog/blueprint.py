@@ -218,6 +218,11 @@ def _export_date_stamp() -> str:
 def _can_manage_ownership() -> bool:
     return "snipeops.media_catalog.ownership.manage" in session.get("user_permissions", [])
 
+def _can_view_ownership() -> bool:
+    return (
+        "snipeops.media_catalog.ownership.view"
+        in session.get("user_permissions", [])
+    )
 
 def _can_manage_student_checkouts() -> bool:
     return STUDENT_CHECKOUT_PERMISSION in session.get("user_permissions", [])
@@ -569,53 +574,159 @@ def api_dashboard():
     user = _current_user_profile()
 
     if not user:
-        return jsonify({"ok": False, "error": "User profile not found."}), 404
+        return jsonify({
+            "ok": False,
+            "error": "User profile not found.",
+        }), 404
 
-    rows = scoped_cart_rows_for_user(
-        user,
-        can_manage_ownership=_can_manage_ownership(),
-    )
-    carts = _ownership_rows_with_device_counts(rows)
+    # ---------------------------------------------------------
+    # Determine dashboard scope.
+    #
+    # Anyone with Ownership Management VIEW access gets the
+    # management-wide dashboard.
+    #
+    # Everyone else gets only carts assigned to them.
+    # ---------------------------------------------------------
+    management_scope = _can_view_ownership()
+
+    if management_scope:
+        scope_rows = list_all_owned_carts()
+    else:
+        scope_rows = list_owned_carts(
+            int(user["id"])
+        )
+
     cart_ids = [
-        int(cart["id"])
-        for cart in carts
-        if cart.get("id") is not None
+        int(row["cart_asset_id"])
+        for row in scope_rows
+        if row.get("cart_asset_id") is not None
     ]
 
-    checkout_summary = scoped_student_checkout_summary(cart_ids)
-    overdue_carts = [
-        cart
-        for cart in carts
-        if int(
-            (cart.get("student_checkout_summary") or {}).get(
-                "overdue_count",
-                0,
+    # ---------------------------------------------------------
+    # Device totals
+    #
+    # Use the aggregate catalog helper so we do not load every
+    # device record into memory just to calculate the dashboard.
+    # ---------------------------------------------------------
+    device_counts = (
+        count_assets_assigned_to_assets(cart_ids)
+        if cart_ids
+        else {}
+    )
+
+    total_devices = sum(
+        int(device_counts.get(cart_id, 0))
+        for cart_id in cart_ids
+    )
+
+    # ---------------------------------------------------------
+    # Student Checkout totals
+    #
+    # This uses THE SAME cart scope as the device/cart totals.
+    #
+    # Ownership Management viewer:
+    #     all assigned Media Catalog carts
+    #
+    # Normal Media Specialist:
+    #     only their assigned carts
+    # ---------------------------------------------------------
+    if cart_ids:
+        checkout_summary = (
+            scoped_student_checkout_summary(
+                cart_ids
             )
-            or 0
-        ) > 0
-    ]
+        )
+    else:
+        checkout_summary = {
+            "active_count": 0,
+            "overdue_count": 0,
+        }
+
+    # ---------------------------------------------------------
+    # Needs Attention
+    #
+    # Show actual overdue checkout records rather than hydrating
+    # cart objects just to create warnings.
+    #
+    # IMPORTANT:
+    # This uses the SAME district/personal scope determined above.
+    # ---------------------------------------------------------
+    overdue_checkouts = (
+        list_student_checkouts_for_scope(
+            cart_asset_ids=cart_ids,
+            status_filter="overdue",
+            query="",
+            limit=8,
+        )
+        if cart_ids
+        else []
+    )
+
+    # ---------------------------------------------------------
+    # Recent Activity
+    #
+    # This must also use THE SAME dashboard scope.
+    #
+    # An Ownership Management viewer therefore sees recent
+    # Student Checkout activity across all assigned carts.
+    # ---------------------------------------------------------
+    recent_checkouts = (
+        recent_student_checkout_activity(
+            cart_asset_ids=cart_ids,
+            limit=8,
+        )
+        if cart_ids
+        else []
+    )
 
     return jsonify({
         "ok": True,
-        "summary": {
-            "cart_count": len(carts),
-            "device_count": sum(
-                int(cart.get("device_count") or 0)
-                for cart in carts
-            ),
-            "active_checkout_count": checkout_summary["active_count"],
-            "overdue_checkout_count": checkout_summary["overdue_count"],
-        },
-        "attention": {
-            "overdue_carts": overdue_carts[:8],
-        },
-        "carts": carts[:12],
-        "recent_student_checkouts": recent_student_checkout_activity(
-            cart_asset_ids=cart_ids,
-            limit=8,
+
+        # Frontend uses this to change dashboard wording.
+        "scope_mode": (
+            "management"
+            if management_scope
+            else "personal"
         ),
-        "can_manage_student_checkouts": _can_manage_student_checkouts(),
-        "can_manage_ownership": _can_manage_ownership(),
+
+        "summary": {
+            "cart_count": len(cart_ids),
+
+            "device_count":
+                total_devices,
+
+            "active_checkout_count":
+                checkout_summary["active_count"],
+
+            "overdue_checkout_count":
+                checkout_summary["overdue_count"],
+        },
+
+        # -----------------------------------------------------
+        # Needs Attention
+        # -----------------------------------------------------
+        "attention": {
+            "overdue_checkouts":
+                overdue_checkouts,
+        },
+
+        # -----------------------------------------------------
+        # Recent Activity
+        # -----------------------------------------------------
+        "recent_student_checkouts":
+            recent_checkouts,
+
+        # -----------------------------------------------------
+        # Permission / scope metadata
+        # -----------------------------------------------------
+        "can_manage_student_checkouts":
+            _can_manage_student_checkouts(),
+
+        "can_view_ownership":
+            management_scope,
+
+        "can_manage_ownership":
+            _can_manage_ownership(),
     })
 
 
@@ -1258,38 +1369,138 @@ def api_student_checkout_lookup():
 
 @bp.get("/api/student-checkouts")
 @login_required
-@require_permission(STUDENT_CHECKOUT_PERMISSION)
+@require_permission("snipeops.media_catalog.view")
 def api_student_checkouts():
     user = _current_user_profile()
 
     if not user:
-        return jsonify({"ok": False, "error": "User profile not found."}), 404
+        return jsonify({
+            "ok": False,
+            "error": "User profile not found.",
+        }), 404
 
-    status_filter = (request.args.get("status") or "active").strip().lower()
-    query = (request.args.get("q") or "").strip()
-    cart_ids = scoped_cart_ids_for_user(
-        user,
-        can_manage_ownership=_can_manage_ownership(),
+    can_manage_checkouts = (
+        _can_manage_student_checkouts()
     )
 
-    rows = list_student_checkouts_for_scope(
-        cart_asset_ids=cart_ids,
-        status_filter=status_filter,
-        query=query,
-        limit=1500,
+    can_view_ownership = (
+        _can_view_ownership()
     )
 
-    summary = scoped_student_checkout_summary(cart_ids)
+    # A user must either be a Student Checkout manager
+    # or have Ownership Management visibility.
+    if not (
+        can_manage_checkouts
+        or can_view_ownership
+    ):
+        return jsonify({
+            "ok": False,
+            "error": (
+                "You do not have permission "
+                "to view Student Checkouts."
+            ),
+        }), 403
+
+    status_filter = (
+        request.args.get("status")
+        or "active"
+    ).strip().lower()
+
+    query = (
+        request.args.get("q")
+        or ""
+    ).strip()
+
+    requested_scope = (
+        request.args.get("scope")
+        or "mine"
+    ).strip().lower()
+
+    # ---------------------------------------------------------
+    # Scope
+    #
+    # mine:
+    #   carts assigned directly to current user
+    #
+    # managed:
+    #   every assigned Media Catalog cart
+    #
+    # Only Ownership Management viewers can use managed scope.
+    # ---------------------------------------------------------
+    if (
+        requested_scope == "managed"
+        and can_view_ownership
+    ):
+        scope_rows = (
+            list_all_owned_carts()
+        )
+
+        effective_scope = "managed"
+
+    else:
+        scope_rows = (
+            list_owned_carts(
+                int(user["id"])
+            )
+        )
+
+        effective_scope = "mine"
+
+    cart_ids = [
+        int(row["cart_asset_id"])
+        for row in scope_rows
+        if row.get("cart_asset_id") is not None
+    ]
+
+    rows = (
+        list_student_checkouts_for_scope(
+            cart_asset_ids=cart_ids,
+            status_filter=status_filter,
+            query=query,
+            limit=1500,
+        )
+        if cart_ids
+        else []
+    )
+
+    summary = (
+        scoped_student_checkout_summary(
+            cart_ids
+        )
+        if cart_ids
+        else {
+            "active_count": 0,
+            "overdue_count": 0,
+        }
+    )
 
     return jsonify({
         "ok": True,
+
         "checkouts": rows,
+
         "summary": {
-            "active_checkout_count": summary["active_count"],
-            "overdue_checkout_count": summary["overdue_count"],
+            "active_checkout_count":
+                summary["active_count"],
+
+            "overdue_checkout_count":
+                summary["overdue_count"],
         },
-        "status": status_filter,
-        "query": query,
+
+        "scope":
+            effective_scope,
+
+        "can_view_managed_scope":
+            can_view_ownership,
+
+        "can_manage_student_checkouts":
+            can_manage_checkouts,
+
+        "status":
+            status_filter,
+
+        "query":
+            query,
     })
 
 

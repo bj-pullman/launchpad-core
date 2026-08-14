@@ -18,8 +18,8 @@
         <div class="media-header-actions">
             <button id="syncSnipeBtn" class="media-btn sync-btn" type="button">
                 <span class="btn-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25"
-                        stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                        stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
                         <path d="M3 3v5h5" />
                         <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
@@ -38,7 +38,12 @@
         <button type="button" class="settings-tab" data-tab="cart-management">
             Cart Management
         </button>
-        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+        {% set media_catalog_permissions = session.get('user_permissions', []) %}
+
+        {% if
+        'snipeops.media_catalog.student_checkouts.manage' in media_catalog_permissions
+        or 'snipeops.media_catalog.ownership.view' in media_catalog_permissions
+        %}
         <button type="button" class="settings-tab" data-tab="student-checkouts">
             Student Checkouts
         </button>
@@ -63,7 +68,8 @@
                     </div>
 
                     <div class="media-section-actions">
-                        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+                        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', [])
+                        %}
                         <button class="media-btn ghost" type="button" data-open-checkout-status="active">
                             View Student Checkouts
                         </button>
@@ -145,7 +151,8 @@
                             <span>Find / Claim Cart</span>
                         </button>
 
-                        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+                        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', [])
+                        %}
                         <button id="openStudentCheckoutBtn" class="media-btn primary-action icon-btn" type="button">
                             <span class="btn-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
@@ -258,19 +265,26 @@
             </section>
         </div>
 
-        {% if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) %}
+        {% if
+        'snipeops.media_catalog.student_checkouts.manage' in media_catalog_permissions
+        or 'snipeops.media_catalog.ownership.view' in media_catalog_permissions
+        %}
         <div class="settings-tab-panel" data-panel="student-checkouts">
             <section class="media-panel media-wide student-checkouts-panel">
                 <div class="media-section-head">
                     <div>
                         <h2>Student Checkouts</h2>
-                        <p class="muted">Temporary student custody records for devices that remain assigned to carts in Snipe-IT.</p>
+                        <p class="muted">Temporary student custody records for devices that remain assigned to carts in
+                            Snipe-IT.</p>
                     </div>
 
                     <div class="media-section-actions">
+                        {% if 'snipeops.media_catalog.student_checkouts.manage' in media_catalog_permissions %}
                         <button id="openStudentCheckoutFromPageBtn" class="media-btn primary-action" type="button">
                             Checkout 1:1
                         </button>
+                        {% endif %}
+
                         <button id="refreshStudentCheckoutsBtn" class="media-btn ghost" type="button">
                             Refresh
                         </button>
@@ -279,28 +293,54 @@
 
                 <div id="studentCheckoutSummary" class="student-checkout-summary"></div>
 
-                <div class="checkout-filter-bar">
-                    <div class="checkout-status-tabs" role="tablist" aria-label="Student Checkout filters">
-                        <button class="mini-btn active" type="button" data-checkout-status-filter="active">
-                            Active
-                        </button>
-                        <button class="mini-btn" type="button" data-checkout-status-filter="overdue">
-                            Overdue
-                        </button>
-                        <button class="mini-btn" type="button" data-checkout-status-filter="returned">
-                            Returned
-                        </button>
-                        <button class="mini-btn" type="button" data-checkout-status-filter="all">
-                            All
-                        </button>
+                <div class="checkout-filter-bar checkout-filter-bar-enhanced">
+                    <div class="checkout-filter-groups">
+
+                        {% if 'snipeops.media_catalog.ownership.view' in media_catalog_permissions %}
+                        <div class="checkout-filter-group">
+                            <span class="checkout-filter-label">
+                                Scope
+                            </span>
+
+                            <div class="checkout-status-tabs" role="group" aria-label="Student Checkout scope">
+                                <button class="mini-btn active" type="button" data-checkout-scope-filter="mine">
+                                    My Carts
+                                </button>
+
+                                <button class="mini-btn" type="button" data-checkout-scope-filter="managed">
+                                    All Managed Carts
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="checkout-filter-group">
+                            <span class="checkout-filter-label">
+                                Status
+                            </span>
+
+                            <div class="checkout-status-tabs" role="tablist" aria-label="Student Checkout filters">
+                                <button class="mini-btn active" type="button" data-checkout-status-filter="active">
+                                    Active
+                                </button>
+
+                                <button class="mini-btn" type="button" data-checkout-status-filter="overdue">
+                                    Overdue
+                                </button>
+
+                                <button class="mini-btn" type="button" data-checkout-status-filter="returned">
+                                    Returned
+                                </button>
+
+                                <button class="mini-btn" type="button" data-checkout-status-filter="all">
+                                    All
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
-                    <input
-                        id="studentCheckoutSearch"
-                        class="media-input"
-                        autocomplete="off"
-                        placeholder="Search student, ID, asset, serial, model, cart, teacher, room, or date..."
-                    >
+                    <input id="studentCheckoutSearch" class="media-input" autocomplete="off"
+                        placeholder="Search student, ID, asset, serial, model, cart, teacher, room, or date...">
                 </div>
 
                 <div id="studentCheckoutsEmpty" class="media-empty-state hidden">
