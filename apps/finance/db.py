@@ -683,19 +683,74 @@ def init_finance_db():
                 "ALTER TABLE finance_records ADD COLUMN deleted_at TEXT NULL"
             )
 
-        finance_vendor_columns = [
-            row["name"]
-            for row in conn.execute("PRAGMA table_info(finance_vendors)").fetchall()
-        ]
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "friendly_name",
+            "TEXT NULL",
+        )
 
-        if "status" not in finance_vendor_columns:
-            conn.execute(
-                "ALTER TABLE finance_vendors ADD COLUMN status TEXT DEFAULT 'active'"
-            )
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "vendor_code",
+            "TEXT NULL",
+        )
 
-        if "deleted_at" not in finance_vendor_columns:
-            conn.execute(
-                "ALTER TABLE finance_vendors ADD COLUMN deleted_at TEXT NULL"
-            )
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "website",
+            "TEXT NULL",
+        )
+
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "main_phone",
+            "TEXT NULL",
+        )
+
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "billing_email",
+            "TEXT NULL",
+        )
+
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "support_email",
+            "TEXT NULL",
+        )
+
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "sales_contact_name",
+            "TEXT NULL",
+        )
+
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "sales_contact_email",
+            "TEXT NULL",
+        )
+
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "status",
+            "TEXT DEFAULT 'active'",
+        )
+
+        _ensure_column(
+            conn,
+            "finance_vendors",
+            "deleted_at",
+            "TEXT NULL",
+        )
 
         conn.commit()
