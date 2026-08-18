@@ -21,6 +21,134 @@ def _ensure_column(conn, table_name: str, column_name: str, column_sql: str) -> 
     if column_name not in columns:
         conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
 
+def _migrate_fiscal_year_department_uniqueness(conn) -> None:
+    """
+    Migrate finance_fiscal_years from the legacy global UNIQUE(code)
+    constraint to department-scoped UNIQUE(department_name, code).
+
+    SQLite cannot drop a UNIQUE table constraint directly, so the
+    table must be rebuilt.
+    """
+
+    table_sql_row = conn.execute(
+        """
+        SELECT sql
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = 'finance_fiscal_years'
+        """
+    ).fetchone()
+
+    if not table_sql_row:
+        return
+
+    table_sql = table_sql_row["sql"] or ""
+
+    normalized_sql = " ".join(
+        table_sql.upper().replace("\n", " ").split()
+    )
+
+    # Already migrated.
+    if "UNIQUE(DEPARTMENT_NAME, CODE)" in normalized_sql:
+        return
+
+    # Only rebuild legacy schemas that still enforce global code uniqueness.
+    if "CODE TEXT NOT NULL UNIQUE" not in normalized_sql:
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+
+    try:
+        conn.execute(
+            """
+            CREATE TABLE finance_fiscal_years_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                department_name TEXT NULL,
+                code TEXT NOT NULL,
+                short_code TEXT NULL,
+                year_number INTEGER NOT NULL,
+                friendly_name TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                adopted_budget TEXT NOT NULL DEFAULT '0.00',
+                status TEXT NOT NULL DEFAULT 'planning',
+                is_previous INTEGER NOT NULL DEFAULT 0,
+                is_current INTEGER NOT NULL DEFAULT 0,
+                is_next INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(department_name, code)
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            INSERT INTO finance_fiscal_years_new (
+                id,
+                department_name,
+                code,
+                short_code,
+                year_number,
+                friendly_name,
+                start_date,
+                end_date,
+                adopted_budget,
+                status,
+                is_previous,
+                is_current,
+                is_next,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                department_name,
+                code,
+                short_code,
+                year_number,
+                friendly_name,
+                start_date,
+                end_date,
+                adopted_budget,
+                status,
+                is_previous,
+                is_current,
+                is_next,
+                created_at,
+                updated_at
+            FROM finance_fiscal_years
+            """
+        )
+
+        conn.execute("DROP TABLE finance_fiscal_years")
+
+        conn.execute(
+            """
+            ALTER TABLE finance_fiscal_years_new
+            RENAME TO finance_fiscal_years
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_finance_fiscal_years_status
+            ON finance_fiscal_years(
+                status,
+                is_current,
+                is_next
+            )
+            """
+        )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
 
 def init_finance_db():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -296,7 +424,8 @@ def init_finance_db():
 
             CREATE TABLE IF NOT EXISTS finance_fiscal_years (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                code TEXT NOT NULL UNIQUE,
+                department_name TEXT NULL,
+                code TEXT NOT NULL,
                 short_code TEXT NULL,
                 year_number INTEGER NOT NULL,
                 friendly_name TEXT NOT NULL,
@@ -304,10 +433,12 @@ def init_finance_db():
                 end_date TEXT NOT NULL,
                 adopted_budget TEXT NOT NULL DEFAULT '0.00',
                 status TEXT NOT NULL DEFAULT 'planning',
+                is_previous INTEGER NOT NULL DEFAULT 0,
                 is_current INTEGER NOT NULL DEFAULT 0,
                 is_next INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                UNIQUE(department_name, code)
             );
 
             CREATE TABLE IF NOT EXISTS finance_fiscal_year_aliases (
@@ -486,6 +617,7 @@ def init_finance_db():
         _ensure_column(conn, "finance_fiscal_years", "is_previous", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "finance_fiscal_years", "department_name", "TEXT NULL")
         _ensure_column(conn, "finance_departments", "finance_enabled", "INTEGER NOT NULL DEFAULT 1")
+        _migrate_fiscal_year_department_uniqueness(conn)
 
         starter_categories = [
             "Curriculum Software",

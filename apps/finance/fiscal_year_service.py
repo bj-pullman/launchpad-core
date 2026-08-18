@@ -84,11 +84,25 @@ def get_fiscal_year(fiscal_year_id: int) -> dict | None:
     return dict(row) if row else None
 
 
-def get_current_fiscal_year() -> dict | None:
+def get_current_fiscal_year(department_name: str) -> dict | None:
+    department_name = normalize_text(department_name)
+
+    if not department_name:
+        return None
+
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT * FROM finance_fiscal_years WHERE is_current = 1 ORDER BY year_number DESC LIMIT 1"
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            WHERE department_name = ?
+              AND is_current = 1
+            ORDER BY year_number DESC
+            LIMIT 1
+            """,
+            (department_name,),
         ).fetchone()
+
     return dict(row) if row else None
 
 
@@ -153,11 +167,21 @@ def fiscal_year_dates_overlap(
     end_date: str,
     exclude_fiscal_year_id: int | None = None,
 ) -> bool:
+    department_name = normalize_text(department_name)
+
+    if not department_name:
+        return False
+
     with get_connection() as conn:
-        params = [department_name, end_date, start_date]
+        params = [
+            department_name,
+            end_date,
+            start_date,
+        ]
 
         exclude_sql = ""
-        if exclude_fiscal_year_id:
+
+        if exclude_fiscal_year_id is not None:
             exclude_sql = "AND id != ?"
             params.append(exclude_fiscal_year_id)
 
@@ -335,29 +359,123 @@ def create_fiscal_year(
     return fiscal_year_id
 
 
-def update_fiscal_year_status(*, fiscal_year_id: int, status: str, is_current: bool = False, is_next: bool = False) -> None:
+def update_fiscal_year_status(
+    *,
+    fiscal_year_id: int,
+    status: str,
+    is_current: bool = False,
+    is_next: bool = False,
+) -> None:
     status = (normalize_text(status) or "").lower()
+
     if status not in VALID_STATUSES:
         raise ValueError("Invalid fiscal year status.")
+
     if is_current and is_next:
         raise ValueError("A fiscal year cannot be both current and next.")
+
     now = utc_now_iso()
+
     with get_connection() as conn:
-        fiscal_year = conn.execute("SELECT * FROM finance_fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
+        fiscal_year = conn.execute(
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            WHERE id = ?
+            """,
+            (fiscal_year_id,),
+        ).fetchone()
+
         if not fiscal_year:
             raise ValueError("Fiscal year not found.")
+
+        department_name = fiscal_year["department_name"]
+
+        if not department_name:
+            raise ValueError(
+                "Fiscal year is not assigned to a department."
+            )
+
         if status != "closed":
-            open_count = conn.execute("SELECT COUNT(*) AS count FROM finance_fiscal_years WHERE status IN ('planning','active','closing') AND id != ?", (fiscal_year_id,)).fetchone()["count"]
+            open_count = conn.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM finance_fiscal_years
+                WHERE department_name = ?
+                  AND status IN (
+                      'planning',
+                      'active',
+                      'closing'
+                  )
+                  AND id != ?
+                """,
+                (
+                    department_name,
+                    fiscal_year_id,
+                ),
+            ).fetchone()["count"]
+
             if open_count >= 3:
-                raise ValueError("Only three open fiscal years are allowed: previous, current, and next.")
+                raise ValueError(
+                    "Only three open fiscal years are allowed "
+                    "per department: Previous, Current, and Next."
+                )
+
         if is_current:
-            conn.execute("UPDATE finance_fiscal_years SET is_current = 0, updated_at = ? WHERE id != ?", (now, fiscal_year_id))
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET
+                    is_current = 0,
+                    updated_at = ?
+                WHERE department_name = ?
+                  AND id != ?
+                """,
+                (
+                    now,
+                    department_name,
+                    fiscal_year_id,
+                ),
+            )
+
         if is_next:
-            conn.execute("UPDATE finance_fiscal_years SET is_next = 0, updated_at = ? WHERE id != ?", (now, fiscal_year_id))
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET
+                    is_next = 0,
+                    updated_at = ?
+                WHERE department_name = ?
+                  AND id != ?
+                """,
+                (
+                    now,
+                    department_name,
+                    fiscal_year_id,
+                ),
+            )
+
         conn.execute(
-            "UPDATE finance_fiscal_years SET status = ?, is_current = ?, is_next = ?, updated_at = ? WHERE id = ?",
-            (status, 1 if is_current else 0, 1 if is_next else 0, now, fiscal_year_id),
+            """
+            UPDATE finance_fiscal_years
+            SET
+                status = ?,
+                is_current = ?,
+                is_next = ?,
+                updated_at = ?
+            WHERE id = ?
+              AND department_name = ?
+            """,
+            (
+                status,
+                1 if is_current else 0,
+                1 if is_next else 0,
+                now,
+                fiscal_year_id,
+                department_name,
+            ),
         )
+
         conn.commit()
 
 
@@ -445,7 +563,10 @@ def get_fiscal_year_workflow_context(department_name: str) -> dict:
     }
 
 
-def activate_fiscal_year_after_start_checklist(*, fiscal_year_id: int) -> None:
+def activate_fiscal_year_after_start_checklist(
+    *,
+    fiscal_year_id: int,
+) -> None:
     now = utc_now_iso()
 
     with get_connection() as conn:
@@ -461,42 +582,152 @@ def activate_fiscal_year_after_start_checklist(*, fiscal_year_id: int) -> None:
         if not fiscal_year:
             raise ValueError("Fiscal year not found.")
 
+        department_name = fiscal_year["department_name"]
+
+        if not department_name:
+            raise ValueError(
+                "Fiscal year is not assigned to a department."
+            )
+
         conn.execute(
             """
             UPDATE finance_fiscal_years
-            SET is_current = 0,
+            SET
+                is_current = 0,
                 updated_at = ?
+            WHERE department_name = ?
+              AND id != ?
             """,
-            (now,),
+            (
+                now,
+                department_name,
+                fiscal_year_id,
+            ),
         )
 
         conn.execute(
             """
             UPDATE finance_fiscal_years
-            SET status = 'active',
+            SET
+                status = 'active',
                 is_current = 1,
                 is_next = 0,
                 updated_at = ?
             WHERE id = ?
+              AND department_name = ?
             """,
-            (now, fiscal_year_id),
+            (
+                now,
+                fiscal_year_id,
+                department_name,
+            ),
         )
 
         conn.commit()
 
 
-def close_fiscal_year_after_close_checklist(*, fiscal_year_id: int) -> None:
-    if not checklist_ready_for_workflow_completion(fiscal_year_id, "close_year"):
-        raise ValueError("All required close checklist items must be completed, and all skippable items must be completed or skipped.")
+def close_fiscal_year_after_close_checklist(
+    *,
+    fiscal_year_id: int,
+) -> None:
+    if not checklist_ready_for_workflow_completion(
+        fiscal_year_id,
+        "close_year",
+    ):
+        raise ValueError(
+            "All required close checklist items must be completed, "
+            "and all skippable items must be completed or skipped."
+        )
+
     now = utc_now_iso()
+
     with get_connection() as conn:
-        fiscal_year = conn.execute("SELECT * FROM finance_fiscal_years WHERE id = ?", (fiscal_year_id,)).fetchone()
+        fiscal_year = conn.execute(
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            WHERE id = ?
+            """,
+            (fiscal_year_id,),
+        ).fetchone()
+
         if not fiscal_year:
             raise ValueError("Fiscal year not found.")
-        conn.execute("UPDATE finance_fiscal_years SET status = 'closed', is_current = 0, is_next = 0, updated_at = ? WHERE id = ?", (now, fiscal_year_id))
-        next_year = conn.execute("SELECT * FROM finance_fiscal_years WHERE status = 'planning' ORDER BY year_number ASC LIMIT 1").fetchone()
+
+        department_name = fiscal_year["department_name"]
+
+        if not department_name:
+            raise ValueError(
+                "Fiscal year is not assigned to a department."
+            )
+
+        conn.execute(
+            """
+            UPDATE finance_fiscal_years
+            SET
+                status = 'closed',
+                is_current = 0,
+                is_next = 0,
+                updated_at = ?
+            WHERE id = ?
+              AND department_name = ?
+            """,
+            (
+                now,
+                fiscal_year_id,
+                department_name,
+            ),
+        )
+
+        next_year = conn.execute(
+            """
+            SELECT *
+            FROM finance_fiscal_years
+            WHERE department_name = ?
+              AND status = 'planning'
+            ORDER BY
+                is_next DESC,
+                year_number ASC
+            LIMIT 1
+            """,
+            (department_name,),
+        ).fetchone()
+
         if next_year:
-            conn.execute("UPDATE finance_fiscal_years SET status = 'active', is_current = 1, is_next = 0, updated_at = ? WHERE id = ?", (now, next_year["id"]))
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET
+                    is_current = 0,
+                    updated_at = ?
+                WHERE department_name = ?
+                  AND id != ?
+                """,
+                (
+                    now,
+                    department_name,
+                    next_year["id"],
+                ),
+            )
+
+            conn.execute(
+                """
+                UPDATE finance_fiscal_years
+                SET
+                    status = 'active',
+                    is_current = 1,
+                    is_next = 0,
+                    updated_at = ?
+                WHERE id = ?
+                  AND department_name = ?
+                """,
+                (
+                    now,
+                    next_year["id"],
+                    department_name,
+                ),
+            )
+
         conn.commit()
 
 def update_fiscal_year(
@@ -517,28 +748,29 @@ def update_fiscal_year(
     if status not in VALID_STATUSES:
         raise ValueError("Invalid fiscal year status.")
 
-    role_count = sum([is_previous, is_current, is_next])
+    role_count = sum(
+        [
+            is_previous,
+            is_current,
+            is_next,
+        ]
+    )
+
     if role_count > 1:
-        raise ValueError("A fiscal year can only have one role: Previous, Current, or Next.")
+        raise ValueError(
+            "A fiscal year can only have one role: "
+            "Previous, Current, or Next."
+        )
 
     if not year_number:
         raise ValueError("Fiscal year is required.")
 
     if not start_date or not end_date:
-        raise ValueError("Start date and end date are required.")
-
-    if fiscal_year_dates_overlap(
-        start_date=start_date,
-        end_date=end_date,
-        exclude_fiscal_year_id=fiscal_year_id,
-    ):
-        raise ValueError("Fiscal year dates overlap with an existing fiscal year.")
+        raise ValueError(
+            "Start date and end date are required."
+        )
 
     now = utc_now_iso()
-    code = f"FY{year_number}"
-    short_code = f"FY{str(year_number)[-2:]}"
-    friendly_name = normalize_text(friendly_name) or f"Fiscal Year {year_number}"
-    adopted_budget = normalize_text(adopted_budget) or "0.00"
 
     with get_connection() as conn:
         fiscal_year = conn.execute(
@@ -553,56 +785,115 @@ def update_fiscal_year(
         if not fiscal_year:
             raise ValueError("Fiscal year not found.")
 
+        department_name = fiscal_year["department_name"]
+
+        if not department_name:
+            raise ValueError(
+                "Fiscal year is not assigned to a department."
+            )
+
+    if fiscal_year_dates_overlap(
+        department_name=department_name,
+        start_date=start_date,
+        end_date=end_date,
+        exclude_fiscal_year_id=fiscal_year_id,
+    ):
+        raise ValueError(
+            "Fiscal year dates overlap with an existing "
+            "fiscal year for this department."
+        )
+
+    code = f"FY{year_number}"
+    short_code = f"FY{str(year_number)[-2:]}"
+
+    friendly_name = (
+        normalize_text(friendly_name)
+        or f"Fiscal Year {year_number}"
+    )
+
+    adopted_budget = (
+        normalize_text(adopted_budget)
+        or "0.00"
+    )
+
+    with get_connection() as conn:
         duplicate = conn.execute(
             """
             SELECT id
             FROM finance_fiscal_years
-            WHERE code = ?
+            WHERE department_name = ?
+              AND code = ?
               AND id != ?
             """,
-            (code, fiscal_year_id),
+            (
+                department_name,
+                code,
+                fiscal_year_id,
+            ),
         ).fetchone()
 
         if duplicate:
-            raise ValueError(f"{code} already exists.")
+            raise ValueError(
+                f"{code} already exists for "
+                f"{department_name}."
+            )
 
         if is_previous:
             conn.execute(
                 """
                 UPDATE finance_fiscal_years
-                SET is_previous = 0,
+                SET
+                    is_previous = 0,
                     updated_at = ?
-                WHERE id != ?
+                WHERE department_name = ?
+                  AND id != ?
                 """,
-                (now, fiscal_year_id),
+                (
+                    now,
+                    department_name,
+                    fiscal_year_id,
+                ),
             )
 
         if is_current:
             conn.execute(
                 """
                 UPDATE finance_fiscal_years
-                SET is_current = 0,
+                SET
+                    is_current = 0,
                     updated_at = ?
-                WHERE id != ?
+                WHERE department_name = ?
+                  AND id != ?
                 """,
-                (now, fiscal_year_id),
+                (
+                    now,
+                    department_name,
+                    fiscal_year_id,
+                ),
             )
 
         if is_next:
             conn.execute(
                 """
                 UPDATE finance_fiscal_years
-                SET is_next = 0,
+                SET
+                    is_next = 0,
                     updated_at = ?
-                WHERE id != ?
+                WHERE department_name = ?
+                  AND id != ?
                 """,
-                (now, fiscal_year_id),
+                (
+                    now,
+                    department_name,
+                    fiscal_year_id,
+                ),
             )
 
         conn.execute(
             """
             UPDATE finance_fiscal_years
-            SET code = ?,
+            SET
+                code = ?,
                 short_code = ?,
                 year_number = ?,
                 friendly_name = ?,
@@ -615,6 +906,7 @@ def update_fiscal_year(
                 is_next = ?,
                 updated_at = ?
             WHERE id = ?
+              AND department_name = ?
             """,
             (
                 code,
@@ -630,6 +922,7 @@ def update_fiscal_year(
                 1 if is_next else 0,
                 now,
                 fiscal_year_id,
+                department_name,
             ),
         )
 
@@ -641,18 +934,27 @@ def update_fiscal_year(
             (fiscal_year_id,),
         )
 
-        for alias in fiscal_year_aliases_for(code, year_number):
+        for alias in fiscal_year_aliases_for(
+            code,
+            year_number,
+        ):
             conn.execute(
                 """
-                INSERT OR IGNORE INTO finance_fiscal_year_aliases (
-                    fiscal_year_id,
-                    alias,
-                    created_at,
-                    updated_at
-                )
+                INSERT OR IGNORE INTO
+                    finance_fiscal_year_aliases (
+                        fiscal_year_id,
+                        alias,
+                        created_at,
+                        updated_at
+                    )
                 VALUES (?, ?, ?, ?)
                 """,
-                (fiscal_year_id, alias, now, now),
+                (
+                    fiscal_year_id,
+                    alias,
+                    now,
+                    now,
+                ),
             )
 
         conn.commit()
