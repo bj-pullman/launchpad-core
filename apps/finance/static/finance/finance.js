@@ -794,19 +794,15 @@ function initFinanceSettingsModal() {
     const closeButton = event.target.closest("[data-finance-modal-close]");
 
     if (closeButton) {
-      const modal = closeButton.closest(".finance-modal-backdrop");
+      const modal =
+        closeButton.closest(".finance-modal") ||
+        closeButton.closest(".finance-modal-backdrop");
 
       if (modal) {
         modal.hidden = true;
         document.body.classList.remove("finance-modal-open");
       }
 
-      return;
-    }
-
-    if (event.target.classList.contains("finance-modal-backdrop")) {
-      event.target.hidden = true;
-      document.body.classList.remove("finance-modal-open");
       return;
     }
 

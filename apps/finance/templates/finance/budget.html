@@ -187,50 +187,118 @@
 </div>
 
 {% if can_manage %}
-<div id="finance-budget-settings-modal" class="finance-modal-backdrop" hidden>
-  <div class="finance-modal">
+<div
+  id="finance-budget-settings-modal"
+  class="finance-modal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="finance-budget-settings-title"
+  hidden
+>
+  <div
+    class="finance-modal-backdrop"
+    data-finance-modal-close
+  ></div>
+
+  <div class="finance-modal-dialog">
     <div class="finance-modal-header">
       <div>
-        <h2>Budget Settings</h2>
-        <p class="page-subtitle">Set the full budget for this department and fiscal year.</p>
+        <h2
+          id="finance-budget-settings-title"
+          class="finance-modal-title"
+        >
+          Budget Settings
+        </h2>
+
+        <p class="finance-modal-subtitle">
+          Set the full budget for this department and fiscal year.
+        </p>
       </div>
 
-      <button type="button" class="finance-modal-close" data-finance-modal-close aria-label="Close">
-        ×
+      <button
+        type="button"
+        class="finance-modal-close"
+        data-finance-modal-close
+        aria-label="Close Budget Settings"
+      >
+        &times;
       </button>
     </div>
 
-    <form method="post" class="finance-form finance-budget-settings-form">
-      <div class="finance-form-grid">
-        <div class="finance-field">
-          <label for="budget_fiscal_year">Fiscal Year</label>
-          <select id="budget_fiscal_year" name="fiscal_year" required>
-            {% for year in year_options %}
-            <option value="{{ year }}" {% if selected_year==year %}selected{% endif %}>
-              {{ year }}
-            </option>
-            {% endfor %}
-          </select>
+    <div class="finance-modal-body">
+      <form
+        method="post"
+        class="finance-modal-form finance-budget-settings-form"
+      >
+        <div class="finance-form-grid finance-budget-settings-grid">
+          <div class="finance-field">
+            <label for="budget_fiscal_year">
+              Fiscal Year
+            </label>
+
+            <select
+              id="budget_fiscal_year"
+              name="fiscal_year"
+              required
+            >
+              {% for year in year_options %}
+              <option
+                value="{{ year }}"
+                {% if selected_year == year %}selected{% endif %}
+              >
+                {{ year }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="finance-field">
+            <label for="total_budget">
+              Total Budget
+            </label>
+
+            <input
+              type="text"
+              id="total_budget"
+              name="total_budget"
+              value="{{ '{:.2f}'.format(budget_summary.total_budget) }}"
+              placeholder="0.00"
+              required
+            >
+          </div>
+
+          <div class="finance-field finance-field-span-2">
+            <label for="budget_notes">
+              Notes
+            </label>
+
+            <textarea
+              id="budget_notes"
+              name="notes"
+              rows="4"
+              placeholder="Optional budget notes..."
+            >{{ budget_summary.budget_target.notes or '' }}</textarea>
+          </div>
         </div>
 
-        <div class="finance-field">
-          <label for="total_budget">Total Budget</label>
-          <input type="text" id="total_budget" name="total_budget"
-            value="{{ '{:.2f}'.format(budget_summary.total_budget) }}" placeholder="0.00" required>
-        </div>
+        <div class="finance-modal-actions">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            data-finance-modal-close
+          >
+            Cancel
+          </button>
 
-        <div class="finance-field finance-field-span-2">
-          <label for="budget_notes">Notes</label>
-          <textarea id="budget_notes" name="notes" rows="3"
-            placeholder="Optional budget notes...">{{ budget_summary.budget_target.notes or '' }}</textarea>
+          <button
+            type="submit"
+            class="btn btn-primary"
+          >
+            Save Budget
+          </button>
         </div>
-      </div>
-
-      <div class="finance-form-actions">
-        <button type="button" class="btn btn-ghost" data-finance-modal-close>Cancel</button>
-        <button type="submit" class="btn btn-primary">Save Budget</button>
-      </div>
-    </form>
+      </form>
+    </div>
   </div>
 </div>
 {% endif %}
