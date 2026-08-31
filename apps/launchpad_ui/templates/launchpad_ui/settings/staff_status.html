@@ -3,28 +3,18 @@
 {% block title %}Staff Status Settings - Launchpad{% endblock %}
 
 {% block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
-/>
+<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}" />
 {% endblock %}
 
 {% block content %}
-<div class="settings-main-layout">
-  <div class="settings-back-row">
+{% set active_staff_status_tab = active_staff_status_tab or "departments" %}
+
+<div class="finance-settings-layout">
+  <div class="finance-settings-back-row">
     <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
       <span class="settings-back-link-icon" aria-hidden="true">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="3.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 18l-6-6 6-6" />
         </svg>
       </span>
@@ -32,246 +22,343 @@
     </a>
   </div>
 
-  <div class="settings-page-header">
+  <div class="finance-settings-header">
     <div>
       <h1>Staff Status Settings</h1>
       <p class="muted">
-        Configure enabled departments, kiosk URLs, daily reset behavior, and department operators.
+        Configure department availability, absence request intake, notifications, kiosks, and operators.
       </p>
     </div>
   </div>
 
-  <div class="settings-tabs">
-    <button type="button" class="settings-tab active" data-tab="general">
-      General
-    </button>
-    <button type="button" class="settings-tab" data-tab="departments">
+  <div class="finance-settings-tabs settings-tabs">
+    <button type="button" class="settings-tab {% if active_staff_status_tab == 'departments' %}active{% endif %}"
+      data-tab="departments">
       Departments
     </button>
-    <button type="button" class="settings-tab" data-tab="kiosks">
+    <button type="button" class="settings-tab {% if active_staff_status_tab == 'absence_form' %}active{% endif %}"
+      data-tab="absence_form">
+      Absence Form
+    </button>
+    <button type="button" class="settings-tab {% if active_staff_status_tab == 'notifications' %}active{% endif %}"
+      data-tab="notifications">
+      Notifications
+    </button>
+    <button type="button" class="settings-tab {% if active_staff_status_tab == 'general' %}active{% endif %}"
+      data-tab="general">
+      General
+    </button>
+    <button type="button" class="settings-tab {% if active_staff_status_tab == 'kiosks' %}active{% endif %}"
+      data-tab="kiosks">
       Kiosks
     </button>
-    <button type="button" class="settings-tab" data-tab="operators">
+    <button type="button" class="settings-tab {% if active_staff_status_tab == 'operators' %}active{% endif %}"
+      data-tab="operators">
       Operators
     </button>
   </div>
 
-  <form method="post" id="staff-status-settings-form" class="settings-form">
-    <input type="hidden" name="action" value="save_settings" />
+  <div class="finance-settings-stack">
+    <div class="settings-tab-panel {% if active_staff_status_tab == 'departments' %}active{% endif %}"
+      data-panel="departments">
+      <form method="post" class="finance-settings-form">
+        <input type="hidden" name="active_staff_status_tab" id="active_staff_status_tab" value="{{ active_staff_status_tab }}" />
+        <input type="hidden" name="action" value="save_departments" />
 
-    <div class="settings-section-stack">
-      <div class="settings-tab-panel active" data-panel="general">
-        <div class="settings-content-card">
+        <div class="finance-settings-card settings-provider-card">
+          <h2>Department Availability</h2>
+
+          <p class="muted">
+            Choose which departments should appear in Staff Status. Departments are automatically populated from active
+            users.
+            Turning a department off hides it from the Staff Status index page without deleting any Staff Status data.
+          </p>
+
+          {% if department_rows %}
+          <div class="finance-department-toggle-grid">
+            {% for department in department_rows %}
+            <div class="finance-department-toggle-card">
+              <div class="finance-department-toggle-copy">
+                <strong>{{ department.department_name }}</strong>
+                <small>Show this department in Staff Status</small>
+              </div>
+
+              <label class="finance-toggle-switch">
+                <input type="checkbox" name="staff_status_enabled_departments" value="{{ department.department_name }}"
+                  {% if department.is_enabled %}checked{% endif %} />
+                <span class="finance-toggle-slider"></span>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty-state">
+            <h3>No departments found</h3>
+            <p class="muted">Departments are pulled from active users in the users table.</p>
+          </div>
+          {% endif %}
+
+          <div class="finance-settings-actions">
+            <button type="submit" class="btn btn-primary">
+              Save Department Availability
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="settings-tab-panel {% if active_staff_status_tab == 'absence_form' %}active{% endif %}"
+      data-panel="absence_form">
+      <div class="finance-settings-card settings-provider-card">
+        <h2>Apps Script Absence Form</h2>
+        <p class="muted">
+          Manage the server-to-server endpoint used by the public Google Apps Script absence request form.
+        </p>
+
+        <form method="post" class="finance-settings-form" novalidate>
+          <input type="hidden" name="active_staff_status_tab" value="absence_form" />
+          <input type="hidden" name="action" value="save_absence_form" />
+
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-copy">
+              <strong>Enable Apps Script absence requests</strong>
+              <span>Accept authenticated pending absence requests from the configured Google Apps Script project.</span>
+            </div>
+
+            <label class="settings-switch">
+              <input type="checkbox" name="absence_form_enabled" value="1" {% if absence_form_settings.enabled %}checked{% endif %} />
+              <span class="settings-switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="finance-settings-grid">
+            <div class="form-field">
+              <label for="absence_endpoint_url">Launchpad Endpoint URL</label>
+              <input type="text" id="absence_endpoint_url" value="{{ absence_form_settings.endpoint_url }}" readonly />
+              <small>Use this as <code>LAUNCHPAD_API_URL</code> in Apps Script Script Properties.</small>
+            </div>
+
+            <div class="form-field">
+              <label for="apps_script_url">Apps Script Web App URL</label>
+              <input type="url" id="apps_script_url" name="apps_script_url"
+                value="{{ absence_form_settings.apps_script_url or '' }}"
+                placeholder="https://script.google.com/macros/s/.../exec" />
+            </div>
+          </div>
+
+          <div class="finance-settings-grid">
+            <div class="form-field">
+              <label for="approval_manager_email">Approval Manager</label>
+              <input type="email" id="approval_manager_email" name="approval_manager_email"
+                value="{{ absence_form_settings.approval_manager_email or '' }}"
+                placeholder="bjpullman@sheridanschools.org" />
+            </div>
+
+            <div class="form-field">
+              <label>Integration Secret</label>
+              <input type="text" readonly
+                value="{% if absence_form_settings.has_secret %}Configured: {{ absence_form_settings.secret_prefix }}...{% else %}No secret generated{% endif %}" />
+              <small>Full secrets are only shown immediately after generation.</small>
+            </div>
+          </div>
+
+          {% if generated_absence_secret %}
+          <div class="settings-test-result settings-test-result-success">
+            <strong>New integration secret</strong>
+            <input type="text" readonly value="{{ generated_absence_secret }}" style="margin-top:8px;" />
+          </div>
+          {% endif %}
+
+          <div class="finance-settings-actions">
+            <button type="submit" class="btn btn-primary">Save Absence Form Settings</button>
+          </div>
+        </form>
+
+        <form method="post" class="finance-settings-form staff-status-secret-action-form">
+          <input type="hidden" name="active_staff_status_tab" value="absence_form" />
+          <input type="hidden" name="action"
+            value="{% if absence_form_settings.has_secret %}rotate_absence_secret{% else %}generate_absence_secret{% endif %}" />
+
+          <div class="finance-settings-actions">
+            <button type="submit" class="btn btn-secondary">
+              {% if absence_form_settings.has_secret %}Rotate Secret{% else %}Generate Secret{% endif %}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="settings-tab-panel {% if active_staff_status_tab == 'notifications' %}active{% endif %}"
+      data-panel="notifications">
+      <form method="post" class="finance-settings-form" novalidate>
+        <input type="hidden" name="active_staff_status_tab" value="notifications" />
+        <input type="hidden" name="action" value="save_notifications" />
+
+        <div class="finance-settings-card settings-provider-card">
+          <h2>Notification Defaults</h2>
+          <p class="muted">
+            Set the sender used for Staff Status approval request notifications.
+          </p>
+
+          <div class="finance-settings-grid">
+            <div class="form-field">
+              <label for="notification_sender_email">Sender Email Address</label>
+              <input type="email" id="notification_sender_email" name="notification_sender_email"
+                value="{{ absence_form_settings.notification_sender_email or '' }}"
+                placeholder="noreply@myorganization.org" />
+              <small>Falls back to the SMTP username when left blank.</small>
+            </div>
+          </div>
+
+          <div class="finance-settings-actions">
+            <button type="submit" class="btn btn-primary">Save Notification Settings</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="settings-tab-panel {% if active_staff_status_tab == 'general' %}active{% endif %}"
+      data-panel="general">
+      <form method="post" class="finance-settings-form">
+        <input type="hidden" name="active_staff_status_tab" value="general" />
+        <input type="hidden" name="action" value="save_settings" />
+
+        <div class="finance-settings-card settings-provider-card">
           <h2>General</h2>
-          <p class="muted">Manage global Staff Status behavior.</p>
+          <p class="muted">Manage daily reset behavior and default home locations.</p>
 
           <label class="checkbox-card">
-            <input
-              type="checkbox"
-              name="daily_reset_enabled"
-              value="1"
-              {% if settings.daily_reset_enabled %}checked{% endif %}
-            />
+            <input type="checkbox" name="daily_reset_enabled" value="1" {% if settings.daily_reset_enabled %}checked{% endif %} />
             <span>Enable daily reset</span>
           </label>
 
-          <div class="form-grid" style="margin-top: 16px;">
+          <div class="finance-settings-grid" style="margin-top: 16px;">
             <div class="form-field">
               <label for="daily_reset_time">Daily Reset Time</label>
-              <input
-                type="time"
-                id="daily_reset_time"
-                name="daily_reset_time"
-                value="{{ settings.daily_reset_time }}"
-              />
+              <input type="time" id="daily_reset_time" name="daily_reset_time" value="{{ settings.daily_reset_time }}" />
+            </div>
+
+            <div class="form-field">
+              <label for="board_refresh_seconds">Board Refresh Seconds</label>
+              <input type="number" id="board_refresh_seconds" name="board_refresh_seconds" min="5" step="1"
+                value="{{ settings.board_refresh_seconds or '15' }}" />
             </div>
           </div>
-        </div>
-      </div>
-
-      <div class="settings-tab-panel" data-panel="departments">
-        <div class="settings-content-card">
-          <h2>Departments</h2>
-          <p class="muted">
-            Select which departments should be enabled for Staff Status and define each home location.
-          </p>
 
           {% if department_rows %}
-          <div class="staff-status-department-list">
-            {% for department in department_rows %}
-            <div class="staff-status-department-card">
-              <label class="checkbox-card">
-                <input
-                  type="checkbox"
-                  name="enabled_departments"
-                  value="{{ department.department_name }}"
-                  {% if department.is_enabled %}checked{% endif %}
-                />
-                <span>{{ department.department_name }}</span>
-              </label>
-
+          <div class="settings-form-section">
+            <h3>Home Locations</h3>
+            <div class="finance-settings-grid">
+              {% for department in department_rows %}
               <div class="form-field">
-                <label for="home_location_{{ loop.index }}">Home Location</label>
-                <input
-                  type="text"
-                  id="home_location_{{ loop.index }}"
-                  name="home_location_{{ department.department_name }}"
-                  value="{{ department.home_location }}"
-                  placeholder="Technology Office"
-                />
+                <label for="home_location_{{ loop.index }}">{{ department.department_name }}</label>
+                <input type="text" id="home_location_{{ loop.index }}" name="home_location_{{ department.department_name }}"
+                  value="{{ department.home_location }}" placeholder="Technology Office" />
               </div>
+              {% endfor %}
             </div>
-            {% endfor %}
-          </div>
-          {% else %}
-          <div class="empty-state">
-            <h3>No departments found</h3>
-            <p class="muted">Departments are pulled from active users in the users table.</p>
           </div>
           {% endif %}
+
+          <div class="finance-settings-actions">
+            <button type="submit" class="btn btn-primary">Save General Settings</button>
+          </div>
         </div>
-      </div>
+      </form>
+    </div>
 
-      <div class="settings-tab-panel" data-panel="kiosks">
-        <div class="settings-content-card">
-          <h2>Kiosks</h2>
-          <p class="muted">
-            Each kiosk URL and public board URL is generated server-side for a specific department.
-          </p>
+    <div class="settings-tab-panel {% if active_staff_status_tab == 'kiosks' %}active{% endif %}"
+      data-panel="kiosks">
+      <div class="finance-settings-card settings-provider-card">
+        <h2>Kiosks</h2>
+        <p class="muted">
+          Each kiosk URL and public board URL is generated server-side for a specific department.
+        </p>
 
-          {% if department_rows %}
-          <div class="staff-status-kiosk-list">
-            {% for department in department_rows %}
-            <div class="staff-status-kiosk-card">
-              <div class="staff-status-kiosk-card-header">
-                <div>
-                  <h3>{{ department.department_name }}</h3>
-                  <p class="muted">
-                    {% if department.kiosk_enabled and department.kiosk_token %}
-                    Kiosk URL is active for this department.
-                    {% else %}
-                    No kiosk URL has been generated yet.
-                    {% endif %}
-                  </p>
-                </div>
-
-                <div class="staff-status-kiosk-actions">
-                  <button
-                    type="button"
-                    class="test-connection-btn rotate-kiosk-token-btn"
-                    data-department="{{ department.department_name }}"
-                    data-rotate-url="{{ url_for('staff_status.rotate_department_kiosk_token_for_settings', department_name=department.department_name) }}"
-                  >
-                    {% if department.kiosk_enabled and department.kiosk_token %}
-                    Regenerate Kiosk URL
-                    {% else %}
-                    Generate Kiosk URL
-                    {% endif %}
-                  </button>
-
-                  <button
-                    type="button"
-                    class="test-connection-btn rotate-board-token-btn"
-                    data-department="{{ department.department_name }}"
-                    data-rotate-url="{{ url_for('staff_status.rotate_department_board_token_for_settings', department_name=department.department_name) }}"
-                  >
-                    {% if department.board_token %}
-                    Regenerate Board URL
-                    {% else %}
-                    Generate Board URL
-                    {% endif %}
-                  </button>
-                </div>
+        {% if department_rows %}
+        <div class="staff-status-kiosk-list">
+          {% for department in department_rows %}
+          <div class="staff-status-kiosk-card">
+            <div class="staff-status-kiosk-card-header">
+              <div>
+                <h3>{{ department.department_name }}</h3>
+                <p class="muted">
+                  {% if department.kiosk_enabled and department.kiosk_token %}
+                  Kiosk URL is active for this department.
+                  {% else %}
+                  No kiosk URL has been generated yet.
+                  {% endif %}
+                </p>
               </div>
 
-              <div class="form-field">
-                <label>Kiosk URL</label>
-                <input
-                  type="text"
-                  readonly
-                  value="{{ department.kiosk_url }}"
-                  data-kiosk-url-input="{{ department.department_name }}"
-                  placeholder="No kiosk URL generated yet"
-                />
+              <div class="staff-status-kiosk-actions">
+                <button type="button" class="test-connection-btn rotate-kiosk-token-btn"
+                  data-department="{{ department.department_name }}"
+                  data-rotate-url="{{ url_for('staff_status.rotate_department_kiosk_token_for_settings', department_name=department.department_name) }}">
+                  {% if department.kiosk_enabled and department.kiosk_token %}
+                  Regenerate Kiosk URL
+                  {% else %}
+                  Generate Kiosk URL
+                  {% endif %}
+                </button>
+
+                <button type="button" class="test-connection-btn rotate-board-token-btn"
+                  data-department="{{ department.department_name }}"
+                  data-rotate-url="{{ url_for('staff_status.rotate_department_board_token_for_settings', department_name=department.department_name) }}">
+                  {% if department.board_token %}
+                  Regenerate Board URL
+                  {% else %}
+                  Generate Board URL
+                  {% endif %}
+                </button>
               </div>
-
-              <div class="form-field">
-                <label>Status Board URL</label>
-                <input
-                  type="text"
-                  readonly
-                  value="{{ department.board_url }}"
-                  data-board-url-input="{{ department.department_name }}"
-                  placeholder="No board URL generated yet"
-                />
-              </div>
-
-              <div
-                class="settings-test-result"
-                data-kiosk-result="{{ department.department_name }}"
-                hidden
-              ></div>
-
-              <div
-                class="settings-test-result"
-                data-board-result="{{ department.department_name }}"
-                hidden
-              ></div>
             </div>
-            {% endfor %}
+
+            <div class="form-field">
+              <label>Kiosk URL</label>
+              <input type="text" readonly value="{{ department.kiosk_url }}"
+                data-kiosk-url-input="{{ department.department_name }}"
+                placeholder="No kiosk URL generated yet" />
+            </div>
+
+            <div class="form-field">
+              <label>Status Board URL</label>
+              <input type="text" readonly value="{{ department.board_url }}"
+                data-board-url-input="{{ department.department_name }}"
+                placeholder="No board URL generated yet" />
+            </div>
+
+            <div class="settings-test-result" data-kiosk-result="{{ department.department_name }}" hidden></div>
+            <div class="settings-test-result" data-board-result="{{ department.department_name }}" hidden></div>
           </div>
-          {% else %}
-          <div class="empty-state">
-            <h3>No departments found</h3>
-            <p class="muted">Departments are pulled from active users in the users table.</p>
-          </div>
-          {% endif %}
+          {% endfor %}
         </div>
-      </div>
-
-      <div class="settings-tab-save-row settings-tab-panel active" data-panel-save="general">
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Save Changes</button>
+        {% else %}
+        <div class="empty-state">
+          <h3>No departments found</h3>
+          <p class="muted">Departments are pulled from active users in the users table.</p>
         </div>
-      </div>
-
-      <div class="settings-tab-save-row settings-tab-panel" data-panel-save="departments">
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Save Changes</button>
-        </div>
-      </div>
-
-      <div class="settings-tab-save-row settings-tab-panel" data-panel-save="kiosks">
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Save Changes</button>
-        </div>
+        {% endif %}
       </div>
     </div>
-  </form>
 
-  <div class="settings-tab-panel" data-panel="operators">
-    <div class="settings-content-card">
-      <h2>Department Operators</h2>
-      <p class="muted">
-        Department Operators can manage operational Staff Status data only for assigned departments.
-        They do not have access to Staff Status settings or other departments.
-      </p>
-
-      <div class="settings-content-card" style="margin-top: 16px;">
-        <h3>Add Department Operator</h3>
+    <div class="settings-tab-panel {% if active_staff_status_tab == 'operators' %}active{% endif %}"
+      data-panel="operators">
+      <div class="finance-settings-card settings-provider-card">
+        <h2>Department Operators</h2>
+        <p class="muted">
+          Department Operators can manage operational Staff Status data only for assigned departments.
+        </p>
 
         <form method="post" class="settings-form">
+          <input type="hidden" name="active_staff_status_tab" value="operators" />
           <input type="hidden" name="action" value="add_department_operator" />
 
           <div class="form-grid">
             <div class="form-field">
               <label for="department_operator_user_id">User</label>
-              <select
-                id="department_operator_user_id"
-                name="department_operator_user_id"
-                class="staff-status-operator-select"
-                required
-              >
+              <select id="department_operator_user_id" name="department_operator_user_id"
+                class="staff-status-operator-select" required>
                 <option value="">Select a user</option>
                 {% for user in assignable_users %}
                 <option value="{{ user.id }}">
@@ -283,14 +370,8 @@
 
             <div class="form-field">
               <label for="department_operator_department_names">Departments</label>
-              <select
-                id="department_operator_department_names"
-                name="department_operator_department_names"
-                class="staff-status-operator-select staff-status-operator-multiselect"
-                multiple
-                size="6"
-                required
-              >
+              <select id="department_operator_department_names" name="department_operator_department_names"
+                class="staff-status-operator-select staff-status-operator-multiselect" multiple size="6" required>
                 {% for department in department_rows %}
                 <option value="{{ department.department_name }}">{{ department.department_name }}</option>
                 {% endfor %}
@@ -305,8 +386,8 @@
         </form>
       </div>
 
-      <div class="settings-content-card" style="margin-top: 16px;">
-        <h3>Current Staff Status Access</h3>
+      <div class="finance-settings-card settings-provider-card">
+        <h2>Current Staff Status Access</h2>
 
         {% if department_operator_assignments %}
         <div class="table-wrap">
@@ -328,6 +409,7 @@
                 <td class="table-actions-cell">
                   {% if row.can_remove %}
                   <form method="post" style="display:inline;">
+                    <input type="hidden" name="active_staff_status_tab" value="operators" />
                     <input type="hidden" name="action" value="remove_department_operator" />
                     <input type="hidden" name="department_operator_user_id" value="{{ row.user_id }}" />
                     <input type="hidden" name="department_operator_department_name" value="{{ row.department_name }}" />

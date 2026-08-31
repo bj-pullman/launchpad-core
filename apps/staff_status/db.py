@@ -87,6 +87,7 @@ def init_staff_status_db():
                 public_status_label TEXT NOT NULL,
                 start_date TEXT NOT NULL,
                 end_date TEXT NOT NULL,
+                start_time TEXT NULL,
                 duration_mode TEXT NULL,
                 days_value REAL NULL,
                 note TEXT NULL,
@@ -97,6 +98,35 @@ def init_staff_status_db():
                 updated_by_display_name TEXT NULL,
                 updated_at TEXT NULL,
                 is_active INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS staff_status_pending_absence_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                submission_uuid TEXT NOT NULL UNIQUE,
+                user_id INTEGER NOT NULL,
+                staff_email TEXT NOT NULL,
+                staff_display_name TEXT NOT NULL,
+                department_name TEXT NOT NULL,
+                absence_type TEXT NOT NULL,
+                public_status_label TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                start_time TEXT NULL,
+                duration_mode TEXT NULL,
+                days_value REAL NULL,
+                note TEXT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                approval_manager_email TEXT NOT NULL,
+                submitted_at TEXT NOT NULL,
+                reviewed_at TEXT NULL,
+                reviewed_by_user_id INTEGER NULL,
+                reviewed_by_display_name TEXT NULL,
+                decision_note TEXT NULL,
+                created_absence_id INTEGER NULL,
+                source_ip TEXT NULL,
+                source_user_agent TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );
             
             CREATE TABLE IF NOT EXISTS staff_status_department_access (
@@ -122,6 +152,12 @@ def init_staff_status_db():
 
             CREATE INDEX IF NOT EXISTS idx_staff_status_absences_lookup
             ON staff_status_absences(user_id, department_name, start_date, end_date, is_active);
+
+            CREATE INDEX IF NOT EXISTS idx_staff_status_pending_absence_requests_status
+            ON staff_status_pending_absence_requests(status, submitted_at);
+
+            CREATE INDEX IF NOT EXISTS idx_staff_status_pending_absence_requests_user
+            ON staff_status_pending_absence_requests(user_id, department_name, submitted_at);
             """
         )
         
@@ -157,6 +193,9 @@ def init_staff_status_db():
 
         if "days_value" not in absence_columns:
             conn.execute("ALTER TABLE staff_status_absences ADD COLUMN days_value REAL NULL")
+
+        if "start_time" not in absence_columns:
+            conn.execute("ALTER TABLE staff_status_absences ADD COLUMN start_time TEXT NULL")
 
         conn.execute(
             """

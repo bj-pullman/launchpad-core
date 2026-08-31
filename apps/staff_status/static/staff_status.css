@@ -865,20 +865,20 @@ ABSENCE FILTER PANEL
 }
 
 .staff-status-table-filters {
-  padding: 16px;
+  padding: 18px;
 }
 
 .staff-status-table-filters .form-grid-equal {
   display: grid;
   grid-template-columns: 220px minmax(0, 260px) minmax(0, 260px);
-  gap: 18px;
+  gap: 22px 18px;
   align-items: start;
 }
 
 .staff-status-table-filters .form-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .staff-status-table-filters .form-field label {
@@ -888,7 +888,11 @@ ABSENCE FILTER PANEL
 }
 
 .staff-status-table-filters select,
-.staff-status-table-filters input[type="text"] {
+.staff-status-table-filters input[type="date"],
+.staff-status-table-filters input[type="number"],
+.staff-status-table-filters input[type="text"],
+.staff-status-table-filters input[type="time"],
+.staff-status-table-filters input[type="url"] {
   width: 100%;
   border: 1px solid var(--ss-border);
   background: #ffffff;
@@ -901,7 +905,11 @@ ABSENCE FILTER PANEL
 }
 
 .staff-status-table-filters select:focus,
-.staff-status-table-filters input[type="text"]:focus {
+.staff-status-table-filters input[type="date"]:focus,
+.staff-status-table-filters input[type="number"]:focus,
+.staff-status-table-filters input[type="text"]:focus,
+.staff-status-table-filters input[type="time"]:focus,
+.staff-status-table-filters input[type="url"]:focus {
   outline: none;
   border-color: #93c5fd;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
@@ -910,12 +918,61 @@ ABSENCE FILTER PANEL
 
 .staff-status-table-filters .form-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-end;
-  margin-top: 14px;
+  margin-top: 2px;
 }
 
 .staff-status-table-filters .btn {
   min-width: 150px;
+}
+
+.staff-status-report-period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.staff-status-report-period span {
+  color: #334155;
+}
+
+.staff-status-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.staff-status-table-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.staff-status-table-header-row h2 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+}
+
+.staff-status-table-header-row p {
+  margin: 0;
+}
+
+.staff-status-table-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 /* ------------------------------
@@ -1013,7 +1070,17 @@ USER FILTER OPTIONS
   text-align: left;
 }
 
+#absence-table-user-filter-list,
+#absence-report-user-filter-list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
 #absence-user-filter-list[hidden],
+#absence-table-user-filter-list[hidden],
+#absence-report-user-filter-list[hidden],
 #absence-type-filter-list[hidden],
 .staff-status-user-filter-option[hidden] {
   display: none !important;
@@ -1035,6 +1102,10 @@ SORT LINKS
 .table-sort-link:hover {
   color: var(--ss-accent);
   text-decoration: none;
+}
+
+.table-sort-link.is-active {
+  color: var(--ss-accent);
 }
 
 .table-sort-indicator {
@@ -1229,6 +1300,10 @@ MODALS
   display: none !important;
 }
 
+.staff-status-modal-open {
+  overflow: hidden;
+}
+
 .modal-card {
   width: min(520px, 100%);
   background: #ffffff;
@@ -1262,6 +1337,125 @@ MODALS
   color: #0f172a;
 }
 
+.staff-status-modal-card {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.staff-status-report-modal-card {
+  width: min(880px, 100%);
+}
+
+.staff-status-modal-actions {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ------------------------------
+ABSENCE REQUEST REVIEW
+------------------------------ */
+
+.staff-status-review-card {
+  display: grid;
+  gap: 20px;
+}
+
+.staff-status-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.staff-status-review-header h2,
+.staff-status-review-note h3 {
+  margin: 0 0 6px 0;
+}
+
+.staff-status-request-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ss-border);
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.staff-status-request-status-pending {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.staff-status-request-status-approved {
+  background: #ecfdf5;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.staff-status-request-status-rejected {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.staff-status-review-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.staff-status-review-grid > div {
+  padding: 12px;
+  border: 1px solid var(--ss-border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.staff-status-review-grid dt {
+  margin: 0 0 4px 0;
+  color: var(--ss-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.staff-status-review-grid dd {
+  margin: 0;
+  color: var(--ss-text);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.staff-status-review-note {
+  padding: 14px;
+  border: 1px solid var(--ss-border);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.staff-status-review-note p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.staff-status-review-note p + p {
+  margin-top: 8px;
+}
+
+.staff-status-review-decision {
+  padding-top: 4px;
+}
+
 /* ------------------------------
 UTILITY
 ------------------------------ */
@@ -1275,10 +1469,15 @@ UTILITY
 
 #days-value-field[hidden],
 #end-date-field[hidden],
+#start-time-field[hidden],
+#absence-custom-range-fields[hidden],
+#absence-table-custom-range-fields[hidden],
+#absence-report-custom-range-fields[hidden],
 .staff-status-edit-row[hidden],
 .staff-status-location-edit-row[hidden],
 .staff-status-edit-days-value-field[hidden],
-.staff-status-edit-end-date-field[hidden] {
+.staff-status-edit-end-date-field[hidden],
+.staff-status-edit-start-time-field[hidden] {
   display: none !important;
 }
 
@@ -1428,12 +1627,29 @@ RESPONSIVE
     margin-left: 0;
   }
 
+  .staff-status-table-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .staff-status-table-header-actions {
+    justify-content: flex-start;
+  }
+
   .staff-status-table-filters .form-actions {
     justify-content: stretch;
   }
 
   .staff-status-table-filters .btn {
     width: 100%;
+  }
+
+  .staff-status-review-header {
+    flex-direction: column;
+  }
+
+  .staff-status-review-grid {
+    grid-template-columns: 1fr;
   }
 
   .staff-status-overview-toolbar {

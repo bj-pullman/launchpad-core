@@ -1,20 +1,44 @@
+import calendar
+import hashlib
+import hmac
 import json, zoneinfo, secrets, csv, io
+import sqlite3
 from collections import Counter
-from datetime import date, datetime, timezone, timedelta
+from datetime import date, datetime, time, timezone, timedelta
+from html import escape
 from flask import current_app, url_for
 
 from .db import get_connection
 from modules.core.identity.identity_db import get_connection as get_identity_connection
-from modules.core.settings.settings_service import get_setting
+from modules.core.identity.user_service import get_user_by_email, get_user_by_id
+from modules.core.mail.service import send_mail
+from modules.core.settings.settings_service import get_setting, set_setting, get_bool_setting
 
 from tasks.events import publish_department_update
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 
 DEFAULT_PUBLIC_ABSENCE_LABEL = "Out of Office"
+DEFAULT_ABSENCE_APPROVAL_MANAGER_EMAIL = "bjpullman@sheridanschools.org"
+ABSENCE_FORM_SETTING_PREFIX = "staff_status.absence_form"
+ABSENCE_NOTIFICATION_SETTING_PREFIX = "staff_status.notifications"
+VALID_PENDING_ABSENCE_STATUSES = {"pending", "approved", "rejected"}
+ABSENCE_TYPES = ["sick", "vacation", "personal", "other"]
+ABSENCE_TABLE_SORT_KEYS = {
+    "user",
+    "type",
+    "start",
+    "end",
+    "time",
+    "duration",
+    "days",
+    "hours",
+    "entered_by",
+    "created",
+}
 DEFAULT_LOCATIONS = [
     {"display_name": "East End Elementary", "short_name": "EEE"},
     {"display_name": "East End Middle", "short_name": "EEM"},
@@ -37,7 +61,7 @@ def get_app_timezone() -> str:
 
 def format_board_timestamp(iso_ts: str | None) -> str:
     if not iso_ts:
-        return "—"
+        return "N/A"
 
     try:
         tz = zoneinfo.ZoneInfo(get_app_timezone())
@@ -47,7 +71,7 @@ def format_board_timestamp(iso_ts: str | None) -> str:
         hour = dt.strftime("%I").lstrip("0") or "12"
         return f"{hour}:{dt.strftime('%M %p')}"
     except Exception:
-        return "—"
+        return "N/A"
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -62,6 +86,162 @@ def normalize_text(value: str | None) -> str | None:
 
 def normalize_department(value: str | None) -> str | None:
     return normalize_text(value)
+
+
+class StaffStatusValidationError(ValueError):
+    pass
+
+
+class PendingAbsenceRequestStateError(ValueError):
+    pass
+
+
+def get_app_zoneinfo() -> zoneinfo.ZoneInfo:
+    try:
+        return zoneinfo.ZoneInfo(get_app_timezone())
+    except Exception:
+        return zoneinfo.ZoneInfo("America/Chicago")
+
+
+def get_local_now() -> datetime:
+    return datetime.now(get_app_zoneinfo())
+
+
+def _normalize_local_datetime(value: datetime | None = None) -> datetime:
+    tz = get_app_zoneinfo()
+    if value is None:
+        return datetime.now(tz)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=tz)
+    return value.astimezone(tz)
+
+
+def parse_iso_date(value: str | None) -> date | None:
+    value = normalize_text(value)
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def normalize_start_time(value: str | None) -> str | None:
+    value = normalize_text(value)
+    if not value:
+        return None
+
+    for pattern in ("%H:%M", "%I:%M %p", "%I:%M%p"):
+        try:
+            parsed = datetime.strptime(value.upper(), pattern).time()
+            return parsed.strftime("%H:%M")
+        except ValueError:
+            continue
+
+    return None
+
+
+def format_start_time(start_time: str | None) -> str:
+    normalized = normalize_start_time(start_time)
+    if not normalized:
+        return "All day"
+
+    parsed = datetime.strptime(normalized, "%H:%M").time()
+    return parsed.strftime("%I:%M %p").lstrip("0")
+
+
+def absence_duration_hours(days_value) -> float | None:
+    if days_value is None:
+        return None
+    try:
+        return float(days_value) * 8
+    except (TypeError, ValueError):
+        return None
+
+
+def is_timed_absence_mode(duration_mode: str | None) -> bool:
+    return (duration_mode or "").strip() in {
+        "quarter_day",
+        "half_day",
+        "three_quarter_day",
+        "summer_2_hours",
+        "summer_4_hours",
+        "summer_6_hours",
+    }
+
+
+def validate_absence_payload(
+    *,
+    user_id: int,
+    department_name: str,
+    absence_type: str,
+    start_date: str,
+    end_date: str | None,
+    duration_mode: str,
+    days_value: float | None,
+    start_time: str | None,
+) -> dict:
+    try:
+        normalized_user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise StaffStatusValidationError("A valid staff member is required.")
+
+    normalized_department = normalize_department(department_name)
+    if not normalized_department:
+        raise StaffStatusValidationError("Department is required.")
+
+    normalized_type = (absence_type or "").strip().lower()
+    if normalized_type not in ABSENCE_TYPES:
+        raise StaffStatusValidationError("A valid absence type is required.")
+
+    normalized_duration = (duration_mode or "").strip()
+    allowed_duration_modes = {
+        option["value"]
+        for option in ABSENCE_DURATION_OPTIONS
+    }
+    if normalized_duration not in allowed_duration_modes:
+        raise StaffStatusValidationError("A valid duration is required.")
+
+    parsed_start = parse_iso_date(start_date)
+    if not parsed_start:
+        raise StaffStatusValidationError("A valid start date is required.")
+
+    parsed_end = parse_iso_date(end_date)
+    if not parsed_end:
+        parsed_end = parsed_start
+
+    if parsed_end < parsed_start:
+        raise StaffStatusValidationError("End date cannot be before start date.")
+
+    if normalized_duration == "multi_day":
+        try:
+            normalized_days = float(days_value)
+        except (TypeError, ValueError):
+            raise StaffStatusValidationError("Total days is required for multiple-day absences.")
+
+        if normalized_days <= 0:
+            raise StaffStatusValidationError("Total days must be greater than zero.")
+    else:
+        normalized_days = ABSENCE_DURATION_LOOKUP.get(normalized_duration)
+        parsed_end = parsed_start
+
+    normalized_start_time = normalize_start_time(start_time)
+    if start_time and not normalized_start_time:
+        raise StaffStatusValidationError("Start time must be a valid time.")
+
+    if is_timed_absence_mode(normalized_duration) and not normalized_start_time:
+        raise StaffStatusValidationError("Start time is required for partial-day absences.")
+
+    return {
+        "user_id": normalized_user_id,
+        "department_name": normalized_department,
+        "absence_type": normalized_type,
+        "start_date": parsed_start.isoformat(),
+        "end_date": parsed_end.isoformat(),
+        "duration_mode": normalized_duration,
+        "days_value": normalized_days,
+        "start_time": normalized_start_time,
+    }
 
 
 def build_display_name(user: dict) -> str:
@@ -180,6 +360,67 @@ def list_enabled_departments() -> list[dict]:
             """
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def list_staff_status_departments() -> list[dict]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_departments
+            ORDER BY department_name COLLATE NOCASE
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def set_department_staff_status_enabled(department_name: str, enabled: bool) -> None:
+    department_name = normalize_department(department_name)
+    if not department_name:
+        raise ValueError("department_name is required")
+
+    ensure_department_record(department_name)
+
+    now = utc_now_iso()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE staff_status_departments
+            SET is_enabled = ?,
+                updated_at = ?
+            WHERE department_name = ?
+            """,
+            (1 if enabled else 0, now, department_name),
+        )
+        conn.commit()
+
+
+def migrate_legacy_enabled_departments_setting() -> None:
+    if get_setting("staff_status.enabled_departments.migrated_at", None):
+        return
+
+    legacy_value = get_setting("staff_status.enabled_departments", None)
+    if not legacy_value:
+        return
+
+    enabled_names = {
+        item.strip()
+        for item in str(legacy_value).split(",")
+        if item.strip()
+    }
+    if not enabled_names:
+        return
+
+    sync_departments_from_users()
+
+    for department in list_staff_status_departments():
+        department_name = department["department_name"]
+        set_department_staff_status_enabled(
+            department_name,
+            department_name in enabled_names,
+        )
+
+    set_setting("staff_status.enabled_departments.migrated_at", utc_now_iso())
 
 
 def sync_departments_from_users() -> list[dict]:
@@ -318,12 +559,88 @@ def _json_load(raw_value: str | None) -> list[str]:
         return []
 
 
+def _format_time_value(value: time) -> str:
+    return value.strftime("%I:%M %p").lstrip("0")
+
+
+def _local_datetime_for_date_time(date_value: date, start_time: str) -> datetime:
+    parsed_time = datetime.strptime(start_time, "%H:%M").time()
+    return datetime.combine(date_value, parsed_time, tzinfo=get_app_zoneinfo())
+
+
+def get_absence_duration_hours(
+    duration_mode: str | None,
+    days_value,
+) -> float | None:
+    mode = (duration_mode or "").strip()
+    if mode != "multi_day" and mode in ABSENCE_DURATION_LOOKUP:
+        return ABSENCE_DURATION_LOOKUP[mode] * 8
+
+    return absence_duration_hours(days_value)
+
+
+def is_absence_effective_at(absence: dict, at_datetime: datetime | None = None) -> bool:
+    if not absence or int(absence.get("is_active", 1) or 0) != 1:
+        return False
+
+    local_dt = _normalize_local_datetime(at_datetime)
+    start_date_value = parse_iso_date(absence.get("start_date"))
+    end_date_value = parse_iso_date(absence.get("end_date"))
+    if not start_date_value or not end_date_value:
+        return False
+
+    start_time_value = normalize_start_time(absence.get("start_time"))
+    duration_mode = (absence.get("duration_mode") or "").strip()
+
+    if start_time_value and duration_mode != "multi_day":
+        duration_hours = get_absence_duration_hours(duration_mode, absence.get("days_value"))
+        if duration_hours is None:
+            return start_date_value <= local_dt.date() <= end_date_value
+
+        window_start = _local_datetime_for_date_time(start_date_value, start_time_value)
+        window_end = window_start + timedelta(hours=duration_hours)
+        return window_start <= local_dt < window_end
+
+    if start_time_value and duration_mode == "multi_day":
+        if not (start_date_value <= local_dt.date() <= end_date_value):
+            return False
+        if local_dt.date() == start_date_value:
+            window_start = _local_datetime_for_date_time(start_date_value, start_time_value)
+            return local_dt >= window_start
+        return True
+
+    return start_date_value <= local_dt.date() <= end_date_value
+
+
+def get_absence_time_window_label(absence: dict) -> str:
+    start_time_value = normalize_start_time(absence.get("start_time"))
+    if not start_time_value:
+        return "All day"
+
+    duration_mode = (absence.get("duration_mode") or "").strip()
+    start_date_value = parse_iso_date(absence.get("start_date"))
+    if duration_mode == "multi_day" or not start_date_value:
+        return f"Starts {_format_time_value(datetime.strptime(start_time_value, '%H:%M').time())}"
+
+    duration_hours = get_absence_duration_hours(duration_mode, absence.get("days_value"))
+    start_dt = _local_datetime_for_date_time(start_date_value, start_time_value)
+    if duration_hours is None:
+        return _format_time_value(start_dt.time())
+
+    end_dt = start_dt + timedelta(hours=duration_hours)
+    return f"{_format_time_value(start_dt.time())} - {_format_time_value(end_dt.time())}"
+
+
 def _get_active_absence_for_user(user_id: int, on_date: date | None = None) -> dict | None:
-    on_date = on_date or date.today()
-    target = on_date.isoformat()
+    local_dt = _normalize_local_datetime()
+    if on_date:
+        local_dt = datetime.combine(on_date, local_dt.time(), tzinfo=get_app_zoneinfo())
+
+    previous_day = (local_dt.date() - timedelta(days=1)).isoformat()
+    next_day = (local_dt.date() + timedelta(days=1)).isoformat()
 
     with get_connection() as conn:
-        row = conn.execute(
+        rows = conn.execute(
             """
             SELECT *
             FROM staff_status_absences
@@ -332,11 +649,16 @@ def _get_active_absence_for_user(user_id: int, on_date: date | None = None) -> d
               AND start_date <= ?
               AND end_date >= ?
             ORDER BY start_date DESC, id DESC
-            LIMIT 1
             """,
-            (user_id, target, target),
-        ).fetchone()
-    return dict(row) if row else None
+            (user_id, next_day, previous_day),
+        ).fetchall()
+
+    for row in rows:
+        absence = dict(row)
+        if is_absence_effective_at(absence, local_dt):
+            return absence
+
+    return None
 
 
 def get_board_rows_for_department(department_name: str) -> list[dict]:
@@ -584,6 +906,139 @@ def update_user_status(
         conn.commit()
 
 
+def get_active_user_for_department(user_id: int, department_name: str) -> dict | None:
+    department_name = normalize_department(department_name)
+    if not department_name:
+        return None
+
+    try:
+        normalized_user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
+
+    with get_identity_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM users
+            WHERE id = ?
+              AND is_active = 1
+              AND TRIM(COALESCE(department, '')) = ?
+            """,
+            (normalized_user_id, department_name),
+        ).fetchone()
+
+    if not row:
+        return None
+
+    user = dict(row)
+    user["resolved_display_name"] = build_display_name(user)
+    return user
+
+
+def _insert_absence(
+    conn,
+    *,
+    user_id: int,
+    department_name: str,
+    absence_type: str,
+    start_date: str,
+    end_date: str,
+    duration_mode: str,
+    days_value: float | None,
+    start_time: str | None,
+    note: str | None,
+    created_by_user_id: int,
+    created_by_display_name: str,
+    now: str,
+) -> int:
+    cursor = conn.execute(
+        """
+        INSERT INTO staff_status_absences (
+            user_id,
+            department_name,
+            absence_type,
+            public_status_label,
+            start_date,
+            end_date,
+            start_time,
+            duration_mode,
+            days_value,
+            note,
+            created_by_user_id,
+            created_by_display_name,
+            created_at,
+            updated_by_user_id,
+            updated_by_display_name,
+            updated_at,
+            is_active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)
+        """,
+        (
+            user_id,
+            department_name,
+            absence_type,
+            DEFAULT_PUBLIC_ABSENCE_LABEL,
+            start_date,
+            end_date,
+            start_time,
+            duration_mode,
+            days_value,
+            normalize_text(note),
+            created_by_user_id,
+            created_by_display_name,
+            now,
+        ),
+    )
+
+    absence_id = cursor.lastrowid
+
+    conn.execute(
+        """
+        INSERT INTO staff_status_history (
+            user_id,
+            department_name,
+            event_type,
+            location_labels_json,
+            private_status_type,
+            public_status_label,
+            committed_by_user_id,
+            committed_by_display_name,
+            committed_at,
+            source_ip,
+            source_device
+        )
+        VALUES (?, ?, 'absence_override', NULL, ?, ?, ?, ?, ?, NULL, NULL)
+        """,
+        (
+            user_id,
+            department_name,
+            absence_type,
+            DEFAULT_PUBLIC_ABSENCE_LABEL,
+            created_by_user_id,
+            created_by_display_name,
+            now,
+        ),
+    )
+
+    return absence_id
+
+
+def get_absence_by_id(absence_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_absences
+            WHERE id = ?
+            """,
+            (absence_id,),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
 def create_absence(
     *,
     user_id: int,
@@ -596,77 +1051,44 @@ def create_absence(
     note: str | None,
     created_by_user_id: int,
     created_by_display_name: str,
+    start_time: str | None = None,
 ):
     now = utc_now_iso()
+    normalized = validate_absence_payload(
+        user_id=user_id,
+        department_name=department_name,
+        absence_type=absence_type,
+        start_date=start_date,
+        end_date=end_date,
+        duration_mode=duration_mode,
+        days_value=days_value,
+        start_time=start_time,
+    )
+
+    if not get_active_user_for_department(
+        normalized["user_id"],
+        normalized["department_name"],
+    ):
+        raise StaffStatusValidationError("Selected staff member does not belong to this department.")
 
     with get_connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO staff_status_absences (
-                user_id,
-                department_name,
-                absence_type,
-                public_status_label,
-                start_date,
-                end_date,
-                duration_mode,
-                days_value,
-                note,
-                created_by_user_id,
-                created_by_display_name,
-                created_at,
-                updated_by_user_id,
-                updated_by_display_name,
-                updated_at,
-                is_active
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)
-            """,
-            (
-                user_id,
-                department_name,
-                absence_type,
-                DEFAULT_PUBLIC_ABSENCE_LABEL,
-                start_date,
-                end_date,
-                duration_mode,
-                days_value,
-                normalize_text(note),
-                created_by_user_id,
-                created_by_display_name,
-                now,
-            ),
+        absence_id = _insert_absence(
+            conn,
+            user_id=normalized["user_id"],
+            department_name=normalized["department_name"],
+            absence_type=normalized["absence_type"],
+            start_date=normalized["start_date"],
+            end_date=normalized["end_date"],
+            duration_mode=normalized["duration_mode"],
+            days_value=normalized["days_value"],
+            start_time=normalized["start_time"],
+            note=note,
+            created_by_user_id=created_by_user_id,
+            created_by_display_name=created_by_display_name,
+            now=now,
         )
-
-        conn.execute(
-            """
-            INSERT INTO staff_status_history (
-                user_id,
-                department_name,
-                event_type,
-                location_labels_json,
-                private_status_type,
-                public_status_label,
-                committed_by_user_id,
-                committed_by_display_name,
-                committed_at,
-                source_ip,
-                source_device
-            )
-            VALUES (?, ?, 'absence_override', NULL, ?, ?, ?, ?, ?, NULL, NULL)
-            """,
-            (
-                user_id,
-                department_name,
-                absence_type,
-                DEFAULT_PUBLIC_ABSENCE_LABEL,
-                created_by_user_id,
-                created_by_display_name,
-                now,
-            ),
-        )
-
         conn.commit()
+    return get_absence_by_id(absence_id)
         
 def update_absence(
     *,
@@ -679,17 +1101,48 @@ def update_absence(
     note: str | None,
     updated_by_user_id: int,
     updated_by_display_name: str,
+    department_name: str | None = None,
+    start_time: str | None = None,
 ):
     now = utc_now_iso()
 
     with get_connection() as conn:
-        conn.execute(
+        existing = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_absences
+            WHERE id = ?
+            """,
+            (absence_id,),
+        ).fetchone()
+
+        if not existing:
+            raise StaffStatusValidationError("Absence not found.")
+
+        existing = dict(existing)
+        target_department = normalize_department(department_name) or existing["department_name"]
+        if existing["department_name"] != target_department:
+            raise StaffStatusValidationError("Absence does not belong to this department.")
+
+        normalized = validate_absence_payload(
+            user_id=existing["user_id"],
+            department_name=target_department,
+            absence_type=absence_type,
+            start_date=start_date,
+            end_date=end_date,
+            duration_mode=duration_mode,
+            days_value=days_value,
+            start_time=start_time,
+        )
+
+        result = conn.execute(
             """
             UPDATE staff_status_absences
             SET
                 absence_type = ?,
                 start_date = ?,
                 end_date = ?,
+                start_time = ?,
                 duration_mode = ?,
                 days_value = ?,
                 note = ?,
@@ -699,11 +1152,12 @@ def update_absence(
             WHERE id = ?
             """,
             (
-                absence_type,
-                start_date,
-                end_date,
-                duration_mode,
-                days_value,
+                normalized["absence_type"],
+                normalized["start_date"],
+                normalized["end_date"],
+                normalized["start_time"],
+                normalized["duration_mode"],
+                normalized["days_value"],
                 normalize_text(note),
                 updated_by_user_id,
                 updated_by_display_name,
@@ -711,6 +1165,8 @@ def update_absence(
                 absence_id,
             ),
         )
+        if result.rowcount == 0:
+            raise StaffStatusValidationError("Absence could not be updated.")
         conn.commit()
         
 def delete_absence(
@@ -1185,6 +1641,10 @@ def list_recent_absences_for_department(
         row["user_display_name"] = (
             build_display_name(user) if user else f"User {row['user_id']}"
         )
+        row["duration_label"] = get_absence_duration_label(row.get("duration_mode"))
+        row["hours_value"] = absence_days_to_hours(row.get("days_value"))
+        row["start_time_label"] = format_start_time(row.get("start_time"))
+        row["time_window_label"] = get_absence_time_window_label(row)
 
     return absences
 
@@ -1508,17 +1968,17 @@ def get_absence_duration_label(duration_mode: str | None) -> str:
         item["value"]: item["label"]
         for item in ABSENCE_DURATION_OPTIONS
     }
-    return labels.get(duration_mode or "", (duration_mode or "").replace("_", " ").title() or "—")
+    return labels.get(duration_mode or "", (duration_mode or "").replace("_", " ").title() or "N/A")
 
 
 def absence_days_to_hours(days_value) -> str:
     if days_value is None:
-        return "—"
+        return "N/A"
 
     try:
         hours = float(days_value) * 8
     except (TypeError, ValueError):
-        return "—"
+        return "N/A"
 
     return str(int(hours)) if hours.is_integer() else str(hours)
 
@@ -1547,6 +2007,82 @@ def _get_absence_user_display_names(user_ids: list[int]) -> dict[int, str]:
     return names
 
 
+def normalize_absence_table_sort(
+    sort_key: str | None,
+    sort_direction: str | None,
+) -> tuple[str | None, str]:
+    cleaned_key = (sort_key or "").strip().lower()
+    if cleaned_key not in ABSENCE_TABLE_SORT_KEYS:
+        cleaned_key = None
+
+    cleaned_direction = (sort_direction or "").strip().lower()
+    if cleaned_direction not in {"asc", "desc"}:
+        cleaned_direction = "asc"
+
+    return cleaned_key, cleaned_direction
+
+
+def _absence_sort_number(value) -> float | None:
+    if value in (None, ""):
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _absence_sort_value(row: dict, sort_key: str):
+    if sort_key == "user":
+        return (row.get("user_display_name") or "").lower()
+    if sort_key == "type":
+        return (row.get("absence_type") or "").lower()
+    if sort_key == "start":
+        return row.get("start_date") or ""
+    if sort_key == "end":
+        return row.get("end_date") or ""
+    if sort_key == "time":
+        return row.get("start_time") or ""
+    if sort_key in {"duration", "days", "hours"}:
+        return _absence_sort_number(row.get("days_value"))
+    if sort_key == "entered_by":
+        return (row.get("created_by_display_name") or "").lower()
+    if sort_key == "created":
+        return row.get("created_at") or ""
+    return None
+
+
+def _sort_absence_rows(
+    rows: list[dict],
+    *,
+    sort_key: str | None,
+    sort_direction: str,
+) -> list[dict]:
+    if not sort_key:
+        return rows
+
+    reverse = sort_direction == "desc"
+
+    def has_value(row: dict) -> bool:
+        value = _absence_sort_value(row, sort_key)
+        return value not in (None, "")
+
+    populated_rows = [row for row in rows if has_value(row)]
+    empty_rows = [row for row in rows if not has_value(row)]
+
+    populated_rows.sort(
+        key=lambda row: (
+            _absence_sort_value(row, sort_key),
+            row.get("start_date") or "",
+            row.get("end_date") or "",
+            int(row.get("id") or 0),
+        ),
+        reverse=reverse,
+    )
+
+    return populated_rows + empty_rows
+
+
 def list_absences_for_department(
     *,
     department_name: str,
@@ -1555,11 +2091,18 @@ def list_absences_for_department(
     user_ids: list[str] | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    sort_key: str | None = None,
+    sort_direction: str | None = None,
     limit: int | None = None,
 ) -> list[dict]:
     department_name = normalize_department(department_name)
     if not department_name:
         return []
+
+    normalized_sort_key, normalized_sort_direction = normalize_absence_table_sort(
+        sort_key,
+        sort_direction,
+    )
 
     today = date.today().isoformat()
 
@@ -1618,7 +2161,7 @@ def list_absences_for_department(
         ORDER BY {order_sql}
     """
 
-    if limit:
+    if limit and not normalized_sort_key:
         sql += " LIMIT ?"
         params.append(int(limit))
 
@@ -1633,6 +2176,17 @@ def list_absences_for_department(
         row["user_display_name"] = user_names.get(int(row["user_id"]), f"User {row['user_id']}")
         row["duration_label"] = get_absence_duration_label(row.get("duration_mode"))
         row["hours_value"] = absence_days_to_hours(row.get("days_value"))
+        row["start_time_label"] = format_start_time(row.get("start_time"))
+        row["time_window_label"] = get_absence_time_window_label(row)
+
+    rows = _sort_absence_rows(
+        rows,
+        sort_key=normalized_sort_key,
+        sort_direction=normalized_sort_direction,
+    )
+
+    if limit and normalized_sort_key:
+        rows = rows[: int(limit)]
 
     return rows
 
@@ -1663,6 +2217,8 @@ def build_absence_csv_export(
         "Absence Type",
         "Start Date",
         "End Date",
+        "Start Time",
+        "Time Window",
         "Duration",
         "Days",
         "Hours",
@@ -1677,6 +2233,8 @@ def build_absence_csv_export(
             item.get("absence_type") or "",
             item.get("start_date") or "",
             item.get("end_date") or "",
+            item.get("start_time_label") or "",
+            item.get("time_window_label") or "",
             item.get("duration_label") or "",
             item.get("days_value") if item.get("days_value") is not None else "",
             item.get("hours_value") or "",
@@ -1699,9 +2257,29 @@ def build_absence_pdf_export(
     start_date: str | None,
     end_date: str | None,
 ) -> tuple[bytes, str]:
+    selected_user_ids = set()
+    for item in user_ids or []:
+        try:
+            selected_user_ids.add(int(item))
+        except (TypeError, ValueError):
+            continue
+
+    users = sorted(
+        [
+            user
+            for user in list_active_users_for_department(department_name)
+            if not selected_user_ids or int(user["id"]) in selected_user_ids
+        ],
+        key=lambda item: (
+            (item.get("last_name") or item.get("resolved_display_name") or "").lower(),
+            (item.get("first_name") or "").lower(),
+            (item.get("resolved_display_name") or "").lower(),
+        ),
+    )
+
     rows = list_absences_for_department(
         department_name=department_name,
-        timing=timing,
+        timing="all",
         absence_types=absence_types,
         user_ids=user_ids,
         start_date=start_date,
@@ -1717,119 +2295,121 @@ def build_absence_pdf_export(
         ),
     )
 
+    rows_by_user: dict[int, list[dict]] = {}
+    for row in rows:
+        try:
+            row_user_id = int(row["user_id"])
+        except (TypeError, ValueError):
+            continue
+        rows_by_user.setdefault(row_user_id, []).append(row)
+
     buffer = io.BytesIO()
 
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=landscape(letter),
-        rightMargin=24,
-        leftMargin=24,
-        topMargin=24,
-        bottomMargin=24,
+        pagesize=letter,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
     )
 
     styles = getSampleStyleSheet()
     story = []
 
-    story.append(Paragraph(f"{department_name} Absence Report", styles["Title"]))
-
-    report_parameters = []
-
     if start_date or end_date:
-        report_parameters.append(
-            f"Date Range: {start_date or 'Any'} to {end_date or 'Any'}"
-        )
+        period_label = f"{start_date or 'Any'} to {end_date or 'Any'}"
     else:
-        report_parameters.append("Date Range: Any")
+        period_label = "Any Date"
 
     if absence_types:
-        report_parameters.append(
-            "Absence Type: " + ", ".join([item.title() for item in absence_types])
-        )
+        absence_type_label = ", ".join([item.title() for item in absence_types])
     else:
-        report_parameters.append("Absence Type: All")
+        absence_type_label = "All"
 
-    cleaned_user_ids = []
-    for item in user_ids or []:
-        try:
-            cleaned_user_ids.append(int(item))
-        except (TypeError, ValueError):
-            continue
+    for index, user in enumerate(users):
+        user_rows = rows_by_user.get(int(user["id"]), [])
+        total_days = sum(float(row.get("days_value") or 0) for row in user_rows)
+        total_hours = total_days * 8
 
-    if cleaned_user_ids:
-        user_names = _get_absence_user_display_names(cleaned_user_ids)
-        selected_users = [
-            user_names.get(user_id, f"User {user_id}")
-            for user_id in cleaned_user_ids
-        ]
-        report_parameters.append("Users: " + ", ".join(selected_users))
-    else:
-        report_parameters.append("Users: All")
+        story.append(Paragraph(user["resolved_display_name"], styles["Title"]))
+        story.append(Paragraph(f"Department: {department_name}", styles["Normal"]))
+        story.append(Paragraph(f"Reporting Period: {period_label}", styles["Normal"]))
+        story.append(Paragraph(f"Absence Types: {absence_type_label}", styles["Normal"]))
+        story.append(Spacer(1, 10))
 
-    if timing == "upcoming":
-        report_parameters.append("Timing: Upcoming Absences")
-    elif timing == "past":
-        report_parameters.append("Timing: Past Absences")
-    else:
-        report_parameters.append("Timing: Upcoming and Past Absences")
+        if user_rows:
+            summary_text = (
+                f"Total: {len(user_rows)} absence record"
+                f"{'' if len(user_rows) == 1 else 's'}; "
+                f"{total_days:g} day{'' if total_days == 1 else 's'}; "
+                f"{total_hours:g} hour{'' if total_hours == 1 else 's'}"
+            )
+            story.append(Paragraph(summary_text, styles["Heading3"]))
+            story.append(Spacer(1, 8))
 
-    story.append(Paragraph("Report Parameters", styles["Heading2"]))
+            data = [[
+                "Date",
+                "Type",
+                "Duration",
+                "Time",
+                "Days",
+                "Hours",
+                "Note",
+            ]]
 
-    for parameter in report_parameters:
-        story.append(Paragraph(parameter, styles["Normal"]))
+            for item in user_rows:
+                date_label = item.get("start_date") or ""
+                if item.get("end_date") and item.get("end_date") != item.get("start_date"):
+                    date_label = f"{item.get('start_date') or ''} to {item.get('end_date') or ''}"
 
-    story.append(Spacer(1, 12))
+                data.append([
+                    date_label,
+                    (item.get("absence_type") or "").title(),
+                    item.get("duration_label") or "",
+                    item.get("time_window_label") or "All day",
+                    str(item.get("days_value") if item.get("days_value") is not None else ""),
+                    item.get("hours_value") or "",
+                    item.get("note") or "",
+                ])
 
-    data = [[
-        "User",
-        "Type",
-        "Start",
-        "End",
-        "Duration",
-        "Days",
-        "Hours",
-        "Entered By",
-    ]]
+            table = Table(
+                data,
+                repeatRows=1,
+                colWidths=[88, 68, 116, 96, 42, 44, 150],
+            )
 
-    for item in rows:
-        data.append([
-            item.get("user_display_name") or f"User {item.get('user_id')}",
-            (item.get("absence_type") or "").title(),
-            item.get("start_date") or "",
-            item.get("end_date") or "",
-            item.get("duration_label") or "",
-            str(item.get("days_value") or ""),
-            item.get("hours_value") or "",
-            item.get("created_by_display_name") or "",
-        ])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ]))
 
-    if len(data) == 1:
-        data.append(["No matching absences", "", "", "", "", "", "", ""])
+            story.append(table)
+        else:
+            story.append(Paragraph("No absences", styles["Heading2"]))
 
-    table = Table(
-        data,
-        repeatRows=1,
-        colWidths=[120, 70, 70, 70, 150, 45, 45, 120],
-    )
+        if index < len(users) - 1:
+            story.append(PageBreak())
 
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d1d5db")),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-    ]))
+    if not users:
+        story.append(Paragraph(f"{department_name} Absence Report", styles["Title"]))
+        story.append(Paragraph("No active staff members found for this department.", styles["Normal"]))
 
-    story.append(table)
     doc.build(story)
 
     safe_department = department_name.lower().replace(" ", "-")
-    filename = f"{safe_department}-absences.pdf"
+    if start_date and end_date:
+        filename = f"{safe_department}-absences-{start_date}-to-{end_date}.pdf"
+    else:
+        filename = f"{safe_department}-absences.pdf"
 
     return buffer.getvalue(), filename
 
@@ -1884,6 +2464,562 @@ def get_current_school_year_range(today: date | None = None) -> dict:
         "end_date_iso": end_date.isoformat(),
         "label": f"{start_date.year}-{end_date.year}",
     }
+
+
+ABSENCE_REPORT_DATE_RANGE_OPTIONS = [
+    {"key": "this_month", "label": "This Month"},
+    {"key": "last_month", "label": "Previous Month"},
+    {"key": "year_to_date", "label": "Year to Date"},
+    {"key": "current_school_year", "label": "Current School Year"},
+    {"key": "custom", "label": "Custom Range"},
+]
+
+
+def get_absence_report_date_range_options() -> list[dict]:
+    return list(ABSENCE_REPORT_DATE_RANGE_OPTIONS)
+
+
+def resolve_absence_report_date_range(
+    *,
+    range_key: str | None,
+    custom_start_date: str | None = None,
+    custom_end_date: str | None = None,
+    today: date | None = None,
+) -> dict:
+    today = today or get_local_now().date()
+    key = (range_key or "this_month").strip().lower()
+    valid_keys = {item["key"] for item in ABSENCE_REPORT_DATE_RANGE_OPTIONS}
+    if key not in valid_keys:
+        key = "this_month"
+
+    if key == "this_month":
+        start = today.replace(day=1)
+        end = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+        label = "This Month"
+    elif key == "last_month":
+        first_this_month = today.replace(day=1)
+        end = first_this_month - timedelta(days=1)
+        start = end.replace(day=1)
+        label = "Previous Month"
+    elif key == "year_to_date":
+        start = today.replace(month=1, day=1)
+        end = today
+        label = "Year to Date"
+    elif key == "current_school_year":
+        school_year = get_current_school_year_range(today)
+        start = school_year["start_date"]
+        end = school_year["end_date"]
+        label = f"Current School Year ({school_year['label']})"
+    else:
+        start = parse_iso_date(custom_start_date)
+        end = parse_iso_date(custom_end_date)
+        if not start or not end:
+            raise StaffStatusValidationError("Custom range requires a valid start and end date.")
+        if end < start:
+            raise StaffStatusValidationError("Custom range end date cannot be before the start date.")
+        label = "Custom Range"
+
+    return {
+        "key": key,
+        "label": label,
+        "start_date": start,
+        "end_date": end,
+        "start_date_iso": start.isoformat(),
+        "end_date_iso": end.isoformat(),
+    }
+
+
+def _hash_integration_secret(raw_secret: str) -> str:
+    return hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
+
+
+def generate_absence_form_integration_secret() -> dict:
+    raw_secret = f"lp_staff_absence_{secrets.token_urlsafe(48)}"
+    now = utc_now_iso()
+
+    set_setting(
+        f"{ABSENCE_FORM_SETTING_PREFIX}.secret_hash",
+        _hash_integration_secret(raw_secret),
+        is_sensitive=1,
+    )
+    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_prefix", raw_secret[:24])
+    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_rotated_at", now)
+
+    return {
+        "raw_secret": raw_secret,
+        "secret_prefix": raw_secret[:24],
+        "secret_rotated_at": now,
+    }
+
+
+def update_absence_form_integration_settings(
+    *,
+    enabled: bool,
+    apps_script_url: str | None,
+    approval_manager_email: str | None,
+    notification_sender_email: str | None,
+) -> None:
+    manager_email = (approval_manager_email or DEFAULT_ABSENCE_APPROVAL_MANAGER_EMAIL).strip().lower()
+    sender_email = (notification_sender_email or "").strip().lower()
+
+    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.enabled", 1 if enabled else 0)
+    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.apps_script_url", apps_script_url or "")
+    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.approval_manager_email", manager_email)
+    set_setting(f"{ABSENCE_NOTIFICATION_SETTING_PREFIX}.sender_email", sender_email)
+
+
+def get_absence_form_integration_settings() -> dict:
+    secret_hash = get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_hash", "") or ""
+    endpoint_url = ""
+    try:
+        endpoint_url = build_public_url("staff_status_integrations.submit_absence_request")
+    except Exception:
+        endpoint_url = "/api/integrations/staff-status/absence-requests"
+
+    sender_email = (
+        get_setting(f"{ABSENCE_NOTIFICATION_SETTING_PREFIX}.sender_email", "")
+        or get_setting("mail.smtp_username", "")
+        or ""
+    )
+
+    return {
+        "enabled": get_bool_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.enabled", False),
+        "endpoint_url": endpoint_url,
+        "apps_script_url": get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.apps_script_url", "") or "",
+        "approval_manager_email": (
+            get_setting(
+                f"{ABSENCE_FORM_SETTING_PREFIX}.approval_manager_email",
+                DEFAULT_ABSENCE_APPROVAL_MANAGER_EMAIL,
+            )
+            or DEFAULT_ABSENCE_APPROVAL_MANAGER_EMAIL
+        ),
+        "notification_sender_email": sender_email,
+        "secret_prefix": get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_prefix", "") or "",
+        "secret_rotated_at": get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_rotated_at", "") or "",
+        "has_secret": bool(secret_hash.strip()),
+    }
+
+
+def verify_absence_form_integration_secret(provided_secret: str | None) -> bool:
+    if not get_bool_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.enabled", False):
+        return False
+
+    secret_hash = (get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_hash", "") or "").strip()
+    provided_secret = (provided_secret or "").strip()
+
+    if not secret_hash or not provided_secret:
+        return False
+
+    provided_hash = _hash_integration_secret(provided_secret)
+    return hmac.compare_digest(provided_hash, secret_hash)
+
+
+def _pending_absence_request_from_row(row) -> dict | None:
+    if row is None:
+        return None
+
+    item = dict(row)
+    item["duration_label"] = get_absence_duration_label(item.get("duration_mode"))
+    item["hours_value"] = absence_days_to_hours(item.get("days_value"))
+    item["start_time_label"] = format_start_time(item.get("start_time"))
+    item["time_window_label"] = get_absence_time_window_label(item)
+    return item
+
+
+def get_pending_absence_request_by_id(request_id: int) -> dict | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_pending_absence_requests
+            WHERE id = ?
+            """,
+            (request_id,),
+        ).fetchone()
+
+    return _pending_absence_request_from_row(row)
+
+
+def get_pending_absence_request_by_submission_uuid(submission_uuid: str) -> dict | None:
+    submission_uuid = normalize_text(submission_uuid)
+    if not submission_uuid:
+        return None
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_pending_absence_requests
+            WHERE submission_uuid = ?
+            """,
+            (submission_uuid,),
+        ).fetchone()
+
+    return _pending_absence_request_from_row(row)
+
+
+def list_pending_absence_requests(status: str | None = "pending") -> list[dict]:
+    normalized_status = (status or "").strip().lower()
+    params = []
+    where_sql = ""
+
+    if normalized_status in VALID_PENDING_ABSENCE_STATUSES:
+        where_sql = "WHERE status = ?"
+        params.append(normalized_status)
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM staff_status_pending_absence_requests
+            {where_sql}
+            ORDER BY submitted_at DESC, id DESC
+            """,
+            params,
+        ).fetchall()
+
+    return [_pending_absence_request_from_row(row) for row in rows]
+
+
+def _validate_submission_uuid(value: str | None) -> str:
+    submission_uuid = normalize_text(value)
+    if not submission_uuid or len(submission_uuid) > 120:
+        raise StaffStatusValidationError("A valid submission id is required.")
+    return submission_uuid
+
+
+def _is_department_enabled(department_name: str) -> bool:
+    department = get_department_record(department_name)
+    if not department:
+        department = ensure_department_record(department_name)
+    return int(department.get("is_enabled", 0) or 0) == 1
+
+
+def create_pending_absence_request_from_public_submission(
+    *,
+    payload: dict,
+    source_ip: str | None = None,
+    source_user_agent: str | None = None,
+) -> tuple[dict, bool]:
+    submission_uuid = _validate_submission_uuid(
+        payload.get("submission_uuid") or payload.get("idempotency_key")
+    )
+
+    existing = get_pending_absence_request_by_submission_uuid(submission_uuid)
+    if existing:
+        return existing, False
+
+    staff_email = (payload.get("staff_email") or payload.get("email") or "").strip().lower()
+    if not staff_email or "@" not in staff_email:
+        raise StaffStatusValidationError("A valid district email is required.")
+
+    user = get_user_by_email(staff_email)
+    if not user or int(user.get("is_active") or 0) != 1:
+        raise StaffStatusValidationError("Staff member could not be found.")
+
+    department_name = normalize_department(user.get("department"))
+    if not department_name:
+        raise StaffStatusValidationError("Staff member does not have a department.")
+
+    if not _is_department_enabled(department_name):
+        raise StaffStatusValidationError("Staff Status is not available for this department.")
+
+    duration_mode = (payload.get("duration_mode") or "").strip()
+    days_value = payload.get("days_value")
+    if duration_mode != "multi_day":
+        days_value = ABSENCE_DURATION_LOOKUP.get(duration_mode)
+
+    normalized = validate_absence_payload(
+        user_id=user["id"],
+        department_name=department_name,
+        absence_type=payload.get("absence_type") or "",
+        start_date=payload.get("start_date") or "",
+        end_date=payload.get("end_date") or payload.get("start_date") or "",
+        duration_mode=duration_mode,
+        days_value=days_value,
+        start_time=payload.get("start_time") or "",
+    )
+
+    settings = get_absence_form_integration_settings()
+    now = utc_now_iso()
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO staff_status_pending_absence_requests (
+                    submission_uuid,
+                    user_id,
+                    staff_email,
+                    staff_display_name,
+                    department_name,
+                    absence_type,
+                    public_status_label,
+                    start_date,
+                    end_date,
+                    start_time,
+                    duration_mode,
+                    days_value,
+                    note,
+                    status,
+                    approval_manager_email,
+                    submitted_at,
+                    source_ip,
+                    source_user_agent,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    submission_uuid,
+                    normalized["user_id"],
+                    staff_email,
+                    build_display_name(user),
+                    normalized["department_name"],
+                    normalized["absence_type"],
+                    DEFAULT_PUBLIC_ABSENCE_LABEL,
+                    normalized["start_date"],
+                    normalized["end_date"],
+                    normalized["start_time"],
+                    normalized["duration_mode"],
+                    normalized["days_value"],
+                    normalize_text(payload.get("note")),
+                    settings["approval_manager_email"],
+                    now,
+                    source_ip,
+                    source_user_agent[:255] if source_user_agent else None,
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+    except sqlite3.IntegrityError:
+        existing = get_pending_absence_request_by_submission_uuid(submission_uuid)
+        if existing:
+            return existing, False
+        raise
+
+    return get_pending_absence_request_by_id(cursor.lastrowid), True
+
+
+def approve_pending_absence_request(
+    *,
+    request_id: int,
+    reviewed_by_user_id: int,
+    reviewed_by_display_name: str,
+    decision_note: str | None = None,
+) -> dict:
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_pending_absence_requests
+            WHERE id = ?
+            """,
+            (request_id,),
+        ).fetchone()
+
+        if not row:
+            conn.rollback()
+            raise StaffStatusValidationError("Absence request not found.")
+
+        request_record = dict(row)
+        if request_record.get("status") != "pending":
+            conn.rollback()
+            raise PendingAbsenceRequestStateError("This absence request has already been reviewed.")
+
+        if not get_active_user_for_department(
+            request_record["user_id"],
+            request_record["department_name"],
+        ):
+            conn.rollback()
+            raise StaffStatusValidationError("Staff member no longer belongs to this department.")
+
+        department_row = conn.execute(
+            """
+            SELECT is_enabled
+            FROM staff_status_departments
+            WHERE department_name = ?
+            """,
+            (request_record["department_name"],),
+        ).fetchone()
+
+        if not department_row or int(department_row["is_enabled"] or 0) != 1:
+            conn.rollback()
+            raise StaffStatusValidationError("Staff Status is not available for this department.")
+
+        absence_id = _insert_absence(
+            conn,
+            user_id=request_record["user_id"],
+            department_name=request_record["department_name"],
+            absence_type=request_record["absence_type"],
+            start_date=request_record["start_date"],
+            end_date=request_record["end_date"],
+            duration_mode=request_record["duration_mode"],
+            days_value=request_record["days_value"],
+            start_time=request_record["start_time"],
+            note=request_record.get("note"),
+            created_by_user_id=reviewed_by_user_id,
+            created_by_display_name=reviewed_by_display_name,
+            now=now,
+        )
+
+        conn.execute(
+            """
+            UPDATE staff_status_pending_absence_requests
+            SET status = 'approved',
+                reviewed_at = ?,
+                reviewed_by_user_id = ?,
+                reviewed_by_display_name = ?,
+                decision_note = ?,
+                created_absence_id = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                now,
+                reviewed_by_user_id,
+                reviewed_by_display_name,
+                normalize_text(decision_note),
+                absence_id,
+                now,
+                request_id,
+            ),
+        )
+        conn.commit()
+
+    return get_pending_absence_request_by_id(request_id)
+
+
+def reject_pending_absence_request(
+    *,
+    request_id: int,
+    reviewed_by_user_id: int,
+    reviewed_by_display_name: str,
+    decision_note: str | None = None,
+) -> dict:
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT *
+            FROM staff_status_pending_absence_requests
+            WHERE id = ?
+            """,
+            (request_id,),
+        ).fetchone()
+
+        if not row:
+            conn.rollback()
+            raise StaffStatusValidationError("Absence request not found.")
+
+        request_record = dict(row)
+        if request_record.get("status") != "pending":
+            conn.rollback()
+            raise PendingAbsenceRequestStateError("This absence request has already been reviewed.")
+
+        conn.execute(
+            """
+            UPDATE staff_status_pending_absence_requests
+            SET status = 'rejected',
+                reviewed_at = ?,
+                reviewed_by_user_id = ?,
+                reviewed_by_display_name = ?,
+                decision_note = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                now,
+                reviewed_by_user_id,
+                reviewed_by_display_name,
+                normalize_text(decision_note),
+                now,
+                request_id,
+            ),
+        )
+        conn.commit()
+
+    return get_pending_absence_request_by_id(request_id)
+
+
+def send_pending_absence_request_email(request_record: dict) -> None:
+    settings = get_absence_form_integration_settings()
+    sender_email = (settings.get("notification_sender_email") or "").strip()
+    recipient_email = (request_record.get("approval_manager_email") or "").strip()
+
+    if not sender_email:
+        raise ValueError("Staff Status notification sender email is not configured.")
+
+    review_url = build_public_url(
+        "staff_status.review_absence_request",
+        request_id=request_record["id"],
+    )
+
+    subject = f"Staff Status Absence Request: {request_record.get('staff_display_name')}"
+    html_staff_display_name = escape(str(request_record.get("staff_display_name") or ""))
+    html_department_name = escape(str(request_record.get("department_name") or ""))
+    html_start_date = escape(str(request_record.get("start_date") or ""))
+    html_end_date = escape(str(request_record.get("end_date") or ""))
+    html_absence_type = escape(str((request_record.get("absence_type") or "").title()))
+    html_duration_label = escape(str(request_record.get("duration_label") or ""))
+    html_time_window_label = escape(str(request_record.get("time_window_label") or ""))
+    html_note = escape(str(request_record.get("note") or "None"))
+    html_submitted_at = escape(str(request_record.get("submitted_at") or ""))
+    html_review_url = escape(review_url, quote=True)
+
+    text_body = "\n".join([
+        "A Staff Status absence request is waiting for review.",
+        "",
+        f"Staff Member: {request_record.get('staff_display_name')}",
+        f"Department: {request_record.get('department_name')}",
+        f"Date Range: {request_record.get('start_date')} to {request_record.get('end_date')}",
+        f"Absence Type: {(request_record.get('absence_type') or '').title()}",
+        f"Duration: {request_record.get('duration_label')}",
+        f"Time: {request_record.get('time_window_label')}",
+        f"Notes: {request_record.get('note') or 'None'}",
+        f"Submitted: {request_record.get('submitted_at')}",
+        "",
+        f"Review Absence Request: {review_url}",
+    ])
+
+    html_body = f"""
+    <html>
+      <body style="margin:0; padding:24px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif; color:#0f172a;">
+        <div style="max-width:680px; margin:0 auto; background:#ffffff; border:1px solid #dbe4ee; border-radius:14px; overflow:hidden;">
+          <div style="padding:26px;">
+            <h1 style="margin:0 0 12px; font-size:24px; line-height:1.25;">Staff Status Absence Request</h1>
+            <p style="margin:0 0 18px; color:#475569;">A public absence request is waiting for review.</p>
+            <table style="width:100%; border-collapse:collapse; margin-bottom:22px;">
+              <tr><td style="padding:8px 0; font-weight:bold;">Staff Member</td><td style="padding:8px 0;">{html_staff_display_name}</td></tr>
+              <tr><td style="padding:8px 0; font-weight:bold;">Department</td><td style="padding:8px 0;">{html_department_name}</td></tr>
+              <tr><td style="padding:8px 0; font-weight:bold;">Date Range</td><td style="padding:8px 0;">{html_start_date} to {html_end_date}</td></tr>
+              <tr><td style="padding:8px 0; font-weight:bold;">Absence Type</td><td style="padding:8px 0;">{html_absence_type}</td></tr>
+              <tr><td style="padding:8px 0; font-weight:bold;">Duration</td><td style="padding:8px 0;">{html_duration_label}</td></tr>
+              <tr><td style="padding:8px 0; font-weight:bold;">Time</td><td style="padding:8px 0;">{html_time_window_label}</td></tr>
+              <tr><td style="padding:8px 0; font-weight:bold;">Notes</td><td style="padding:8px 0;">{html_note}</td></tr>
+              <tr><td style="padding:8px 0; font-weight:bold;">Submitted</td><td style="padding:8px 0;">{html_submitted_at}</td></tr>
+            </table>
+            <a href="{html_review_url}" style="display:inline-block; background:#2563eb; color:#ffffff; text-decoration:none; font-weight:bold; padding:12px 16px; border-radius:10px;">Review Absence Request</a>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+
+    send_mail(
+        sender_email=sender_email,
+        recipient_email=recipient_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+    )
 
 
 def get_school_year_rollover_reminder(today: date | None = None) -> dict:

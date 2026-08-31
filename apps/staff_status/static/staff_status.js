@@ -7,8 +7,9 @@ function initStaffStatusScripts() {
   initInlineEditToggles();
   initEditAbsenceForms();
   initAbsenceUserFilterSearch();
+  initAbsenceDateRangeFields();
   initStaffStatusLocationSorting();
-  initAbsenceExportModal();
+  initStaffStatusModals();
 }
 
 function initStaffStatusKiosk() {
@@ -265,11 +266,41 @@ function initAbsenceDurationForm() {
   const durationSelect = document.getElementById("duration_mode");
   const daysValueField = document.getElementById("days-value-field");
   const endDateField = document.getElementById("end-date-field");
+  const startTimeField = document.getElementById("start-time-field");
+  const daysValueInput = daysValueField?.querySelector('input[name="days_value"]');
+  const endDateInput = endDateField?.querySelector('input[name="end_date"]');
+  const startDateInput = document.querySelector(
+    ".staff-status-add-absence-form input[name=\"start_date\"]"
+  );
+  const startTimeInput = startTimeField?.querySelector('input[name="start_time"]');
 
   if (!durationSelect) return;
 
+  const durationLookup = {
+    quarter_day: "0.25",
+    half_day: "0.5",
+    three_quarter_day: "0.75",
+    full_day: "1.0",
+    summer_2_hours: "0.25",
+    summer_4_hours: "0.5",
+    summer_6_hours: "0.75",
+    summer_8_hours: "1.0",
+    summer_full_day: "1.25"
+  };
+
+  const timedDurationModes = new Set([
+    "quarter_day",
+    "half_day",
+    "three_quarter_day",
+    "summer_2_hours",
+    "summer_4_hours",
+    "summer_6_hours"
+  ]);
+
   function updateDurationFields() {
-    const isMultiDay = durationSelect.value === "multi_day";
+    const mode = durationSelect.value;
+    const isMultiDay = mode === "multi_day";
+    const isTimed = timedDurationModes.has(mode);
 
     if (daysValueField) {
       daysValueField.hidden = !isMultiDay;
@@ -278,9 +309,46 @@ function initAbsenceDurationForm() {
     if (endDateField) {
       endDateField.hidden = !isMultiDay;
     }
+
+    if (startTimeField) {
+      startTimeField.hidden = !isTimed && !isMultiDay;
+    }
+
+    if (startTimeInput) {
+      startTimeInput.required = isTimed;
+
+      if (!isTimed && !isMultiDay) {
+        startTimeInput.value = "";
+      }
+    }
+
+    if (daysValueInput) {
+      daysValueInput.required = isMultiDay;
+
+      if (!isMultiDay && durationLookup[mode]) {
+        daysValueInput.value = durationLookup[mode];
+      }
+    }
+
+    if (endDateInput) {
+      endDateInput.required = isMultiDay;
+
+      if (!isMultiDay && startDateInput) {
+        endDateInput.value = startDateInput.value;
+      }
+    }
   }
 
   durationSelect.addEventListener("change", updateDurationFields);
+
+  if (startDateInput && endDateInput) {
+    startDateInput.addEventListener("change", function () {
+      if (durationSelect.value !== "multi_day") {
+        endDateInput.value = startDateInput.value;
+      }
+    });
+  }
+
   updateDurationFields();
 }
 
@@ -333,7 +401,12 @@ function initEditAbsenceForms() {
     quarter_day: "0.25",
     half_day: "0.5",
     three_quarter_day: "0.75",
-    full_day: "1.0"
+    full_day: "1.0",
+    summer_2_hours: "0.25",
+    summer_4_hours: "0.5",
+    summer_6_hours: "0.75",
+    summer_8_hours: "1.0",
+    summer_full_day: "1.25"
   };
 
   forms.forEach((form) => {
@@ -341,14 +414,26 @@ function initEditAbsenceForms() {
     const endDateField = form.querySelector(".staff-status-edit-end-date-field");
     const daysValueField = form.querySelector(".staff-status-edit-days-value-field");
     const daysValueInput = form.querySelector(".staff-status-edit-days-value-input");
+    const startTimeField = form.querySelector(".staff-status-edit-start-time-field");
+    const startTimeInput = form.querySelector('input[name="start_time"]');
     const startDateInput = form.querySelector('input[name="start_date"]');
     const endDateInput = form.querySelector('input[name="end_date"]');
 
     if (!durationSelect) return;
 
+    const timedDurationModes = new Set([
+      "quarter_day",
+      "half_day",
+      "three_quarter_day",
+      "summer_2_hours",
+      "summer_4_hours",
+      "summer_6_hours"
+    ]);
+
     function updateEditDurationFields() {
       const mode = durationSelect.value;
       const isMultiDay = mode === "multi_day";
+      const isTimed = timedDurationModes.has(mode);
 
       if (endDateField) {
         endDateField.hidden = !isMultiDay;
@@ -356,6 +441,26 @@ function initEditAbsenceForms() {
 
       if (daysValueField) {
         daysValueField.hidden = !isMultiDay;
+      }
+
+      if (startTimeField) {
+        startTimeField.hidden = !isTimed && !isMultiDay;
+      }
+
+      if (startTimeInput) {
+        startTimeInput.required = isTimed;
+
+        if (!isTimed && !isMultiDay) {
+          startTimeInput.value = "";
+        }
+      }
+
+      if (daysValueInput) {
+        daysValueInput.required = isMultiDay;
+      }
+
+      if (endDateInput) {
+        endDateInput.required = isMultiDay;
       }
 
       if (!isMultiDay) {
@@ -384,8 +489,13 @@ function initEditAbsenceForms() {
 }
 
 function initAbsenceUserFilterSearch() {
-  const searchInput = document.getElementById("absence-user-search");
-  const userList = document.getElementById("absence-user-filter-list");
+  initAbsenceUserSearch("absence-table-user-search", "absence-table-user-filter-list");
+  initAbsenceUserSearch("absence-report-user-search", "absence-report-user-filter-list");
+}
+
+function initAbsenceUserSearch(searchInputId, userListId) {
+  const searchInput = document.getElementById(searchInputId);
+  const userList = document.getElementById(userListId);
 
   if (!searchInput || !userList) return;
 
@@ -397,13 +507,18 @@ function initAbsenceUserFilterSearch() {
     const query = searchInput.value.trim().toLowerCase();
 
     if (!query) {
-      userList.hidden = true;
+      let anyChecked = false;
 
       options.forEach((option) => {
         const checked = !!option.querySelector('input[type="checkbox"]')?.checked;
         option.hidden = !checked;
+
+        if (checked) {
+          anyChecked = true;
+        }
       });
 
+      userList.hidden = !anyChecked;
       return;
     }
 
@@ -428,6 +543,97 @@ function initAbsenceUserFilterSearch() {
   userList.addEventListener("change", applyFilter);
 
   applyFilter();
+}
+
+function initAbsenceDateRangeFields() {
+  initAbsenceCustomRangeFields("absence-table-date-range", "absence-table-custom-range-fields");
+  initAbsenceCustomRangeFields("absence-report-date-range", "absence-report-custom-range-fields");
+  initAbsenceReportPeriodHelper();
+}
+
+function initAbsenceCustomRangeFields(dateRangeSelectId, customRangeFieldsId) {
+  const dateRangeSelect = document.getElementById(dateRangeSelectId);
+  const customRangeFields = document.getElementById(customRangeFieldsId);
+
+  if (!dateRangeSelect || !customRangeFields) return;
+
+  const customInputs = Array.from(
+    customRangeFields.querySelectorAll('input[type="date"]')
+  );
+
+  function updateCustomFields() {
+    const isCustom = dateRangeSelect.value === "custom";
+    customRangeFields.hidden = !isCustom;
+
+    customInputs.forEach((input) => {
+      input.required = isCustom;
+    });
+  }
+
+  dateRangeSelect.addEventListener("change", updateCustomFields);
+  updateCustomFields();
+}
+
+function initAbsenceReportPeriodHelper() {
+  const dateRangeSelect = document.getElementById("absence-report-date-range");
+  const helperText = document.getElementById("absence-report-period-helper");
+  const startDateInput = document.getElementById("absence-report-start-date");
+  const endDateInput = document.getElementById("absence-report-end-date");
+
+  if (!dateRangeSelect || !helperText) return;
+
+  function formatDate(isoDate) {
+    if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+      return "";
+    }
+
+    const [year, month, day] = isoDate.split("-");
+    return `${month}/${day}/${year}`;
+  }
+
+  function updateHelperText() {
+    const selectedOption = dateRangeSelect.options[dateRangeSelect.selectedIndex];
+    const selectedLabel = selectedOption?.dataset.label || selectedOption?.textContent.trim() || "Export period";
+
+    if (dateRangeSelect.value === "custom") {
+      const startDate = startDateInput?.value || "";
+      const endDate = endDateInput?.value || "";
+
+      if (startDate && endDate) {
+        helperText.textContent = `${selectedLabel}: ${formatDate(startDate)} to ${formatDate(endDate)}`;
+      } else if (startDate) {
+        helperText.textContent = `${selectedLabel}: ${formatDate(startDate)} to choose an end date.`;
+      } else if (endDate) {
+        helperText.textContent = `${selectedLabel}: choose a start date to ${formatDate(endDate)}.`;
+      } else {
+        helperText.textContent = `${selectedLabel}: choose a start and end date.`;
+      }
+
+      return;
+    }
+
+    const helper = selectedOption?.dataset.helperText;
+    const startDate = selectedOption?.dataset.startDate || "";
+    const endDate = selectedOption?.dataset.endDate || "";
+
+    if (helper) {
+      helperText.textContent = helper;
+    } else if (startDate && endDate) {
+      helperText.textContent = `${selectedLabel}: ${formatDate(startDate)} to ${formatDate(endDate)}`;
+    } else {
+      helperText.textContent = selectedLabel;
+    }
+  }
+
+  dateRangeSelect.addEventListener("change", updateHelperText);
+
+  [startDateInput, endDateInput].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("input", updateHelperText);
+    input.addEventListener("change", updateHelperText);
+  });
+
+  updateHelperText();
 }
 
 function initStaffStatusLocationSorting() {
@@ -507,24 +713,88 @@ function initStaffStatusLocationSorting() {
   });
 }
 
-function initAbsenceExportModal() {
-  const openButton = document.getElementById("absence-export-open");
-  const closeButton = document.getElementById("absence-export-close");
-  const modal = document.getElementById("absence-export-modal");
+function initStaffStatusModals() {
+  const openButtons = document.querySelectorAll("[data-modal-open]");
+  const closeButtons = document.querySelectorAll("[data-modal-close]");
+  const modals = document.querySelectorAll(".staff-status-modal-backdrop");
 
-  if (!openButton || !closeButton || !modal) return;
+  if (!openButtons.length && !modals.length) return;
 
-  openButton.addEventListener("click", function () {
-    modal.hidden = false;
-  });
+  let activeModal = null;
+  let lastFocusedElement = null;
 
-  closeButton.addEventListener("click", function () {
-    modal.hidden = true;
-  });
+  function focusFirstControl(modal) {
+    const focusable = modal.querySelector(
+      "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex=\"-1\"])"
+    );
 
-  modal.addEventListener("click", function (event) {
-    if (event.target === modal) {
-      modal.hidden = true;
+    if (focusable) {
+      focusable.focus();
     }
+  }
+
+  function openModal(modalId, trigger) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+
+    if (activeModal && activeModal !== modal) {
+      closeModal(activeModal, false);
+    }
+
+    lastFocusedElement = trigger || document.activeElement;
+    activeModal = modal;
+    modal.hidden = false;
+    document.body.classList.add("staff-status-modal-open");
+    focusFirstControl(modal);
+  }
+
+  function closeModal(modal, restoreFocus = true) {
+    if (!modal) return;
+
+    modal.hidden = true;
+
+    if (activeModal === modal) {
+      activeModal = null;
+      document.body.classList.remove("staff-status-modal-open");
+    }
+
+    if (restoreFocus && lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+      lastFocusedElement.focus();
+    }
+  }
+
+  openButtons.forEach((button) => {
+    button.addEventListener("click", function () {
+      openModal(button.dataset.modalOpen, button);
+    });
+  });
+
+  closeButtons.forEach((button) => {
+    button.addEventListener("click", function () {
+      closeModal(button.closest(".staff-status-modal-backdrop"));
+    });
+  });
+
+  modals.forEach((modal) => {
+    modal.addEventListener("click", function (event) {
+      if (event.target === modal) {
+        closeModal(modal);
+      }
+    });
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && activeModal) {
+      closeModal(activeModal);
+    }
+  });
+
+  document.querySelectorAll("[data-edit-close]").forEach((button) => {
+    button.addEventListener("click", function () {
+      const editRow = button.closest(".staff-status-edit-row");
+      if (editRow) {
+        editRow.hidden = true;
+      }
+    });
   });
 }

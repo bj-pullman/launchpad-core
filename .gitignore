@@ -112,3 +112,4 @@ desktop.ini
 *~
 AGENTS.md
 tests/*
+!tests/test_staff_status.py

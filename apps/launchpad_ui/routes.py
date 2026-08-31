@@ -33,9 +33,14 @@ from .service import (
 )
 
 from apps.staff_status.service import (
-    get_department_record,
-    list_active_departments_from_users,
+    generate_absence_form_integration_secret,
+    get_absence_form_integration_settings,
+    list_staff_status_departments,
+    migrate_legacy_enabled_departments_setting,
+    set_department_staff_status_enabled,
+    sync_departments_from_users as sync_staff_status_departments_from_users,
     upsert_department_settings,
+    update_absence_form_integration_settings,
     build_public_url as build_staff_status_public_url,
 )
 
@@ -1400,14 +1405,30 @@ def settings_users_entra_sync_run():
 @login_required
 @require_permission("launchpad.settings.staff_status.view")
 def settings_staff_status():
-    available_departments = list_active_departments_from_users()
+    migrate_legacy_enabled_departments_setting()
+    sync_staff_status_departments_from_users()
+
+    active_staff_status_tab = (
+        (request.form.get("active_staff_status_tab") if request.method == "POST" else request.args.get("tab"))
+        or "departments"
+    ).strip().lower()
+
+    if active_staff_status_tab not in {
+        "departments",
+        "absence_form",
+        "notifications",
+        "general",
+        "kiosks",
+        "operators",
+    }:
+        active_staff_status_tab = "departments"
 
     if request.method == "POST":
         if not _require_manage_permission(
             "launchpad.settings.staff_status.manage",
             "You do not have permission to update Staff Status settings.",
         ):
-            return redirect(url_for("launchpad_ui.settings_staff_status"))
+            return redirect(url_for("launchpad_ui.settings_staff_status", tab=active_staff_status_tab))
 
         action = (request.form.get("action") or "save_settings").strip().lower()
 
@@ -1421,11 +1442,11 @@ def settings_staff_status():
 
             if not user_id:
                 flash("A user must be selected.", "error")
-                return redirect(url_for("launchpad_ui.settings_staff_status"))
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="operators"))
 
             if not department_names:
                 flash("At least one department must be selected.", "error")
-                return redirect(url_for("launchpad_ui.settings_staff_status"))
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="operators"))
 
             try:
                 for department_name in department_names:
@@ -1434,7 +1455,7 @@ def settings_staff_status():
             except Exception as exc:
                 flash(f"Unable to add department operator assignment(s): {exc}", "error")
 
-            return redirect(url_for("launchpad_ui.settings_staff_status"))
+            return redirect(url_for("launchpad_ui.settings_staff_status", tab="operators"))
 
         if action == "remove_department_operator":
             user_id = request.form.get("department_operator_user_id", type=int)
@@ -1442,7 +1463,7 @@ def settings_staff_status():
 
             if not user_id or not department_name:
                 flash("A valid assignment is required.", "error")
-                return redirect(url_for("launchpad_ui.settings_staff_status"))
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="operators"))
 
             try:
                 revoke_department_access(user_id, department_name)
@@ -1450,45 +1471,109 @@ def settings_staff_status():
             except Exception as exc:
                 flash(f"Unable to remove department operator assignment: {exc}", "error")
 
-            return redirect(url_for("launchpad_ui.settings_staff_status"))
+            return redirect(url_for("launchpad_ui.settings_staff_status", tab="operators"))
 
-        enabled_departments = request.form.getlist("enabled_departments")
+        if action == "save_departments":
+            sync_staff_status_departments_from_users()
+
+            enabled_departments = {
+                item.strip()
+                for item in request.form.getlist("staff_status_enabled_departments")
+                if item.strip()
+            }
+
+            for department in list_staff_status_departments():
+                department_name = department["department_name"]
+                set_department_staff_status_enabled(
+                    department_name,
+                    department_name in enabled_departments,
+                )
+
+            flash("Staff Status department availability saved.", "success")
+            return redirect(url_for("launchpad_ui.settings_staff_status", tab="departments"))
+
+        if action in {"generate_absence_secret", "rotate_absence_secret"}:
+            generated_secret = generate_absence_form_integration_secret()
+            session["staff_status_generated_absence_secret"] = generated_secret["raw_secret"]
+            flash("Integration secret generated. Copy it now; it will not be shown again.", "success")
+            return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+
+        if action == "save_absence_form":
+            integration_enabled = 1 if request.form.get("absence_form_enabled") == "1" else 0
+            apps_script_url = (request.form.get("apps_script_url") or "").strip()
+            approval_manager_email = (request.form.get("approval_manager_email") or "").strip().lower()
+            current_integration = get_absence_form_integration_settings()
+            notification_sender_email = (
+                (request.form.get("notification_sender_email") or "").strip().lower()
+                if "notification_sender_email" in request.form
+                else current_integration["notification_sender_email"]
+            )
+
+            if integration_enabled and not approval_manager_email:
+                flash("Approval manager email is required when the absence form integration is enabled.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+
+            if approval_manager_email and "@" not in approval_manager_email:
+                flash("Approval manager email must be a valid email address.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+
+            if notification_sender_email and "@" not in notification_sender_email:
+                flash("Notification sender email must be a valid email address.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+
+            update_absence_form_integration_settings(
+                enabled=bool(integration_enabled),
+                apps_script_url=apps_script_url,
+                approval_manager_email=approval_manager_email,
+                notification_sender_email=notification_sender_email,
+            )
+
+            flash("Absence form integration settings saved.", "success")
+            return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+
+        if action == "save_notifications":
+            notification_sender_email = (request.form.get("notification_sender_email") or "").strip().lower()
+
+            if notification_sender_email and "@" not in notification_sender_email:
+                flash("Notification sender email must be a valid email address.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="notifications"))
+
+            current_integration = get_absence_form_integration_settings()
+            update_absence_form_integration_settings(
+                enabled=current_integration["enabled"],
+                apps_script_url=current_integration["apps_script_url"],
+                approval_manager_email=current_integration["approval_manager_email"],
+                notification_sender_email=notification_sender_email,
+            )
+
+            flash("Staff Status notification settings saved.", "success")
+            return redirect(url_for("launchpad_ui.settings_staff_status", tab="notifications"))
+
         daily_reset_enabled = 1 if request.form.get("daily_reset_enabled") == "1" else 0
         daily_reset_time = (request.form.get("daily_reset_time") or "01:00").strip()
         board_refresh_seconds = (request.form.get("board_refresh_seconds") or "15").strip()
 
-        set_setting("staff_status.enabled_departments", ",".join(enabled_departments))
         set_setting("staff_status.daily_reset_enabled", daily_reset_enabled)
         set_setting("staff_status.daily_reset_time", daily_reset_time)
         set_setting("staff_status.board_refresh_seconds", board_refresh_seconds)
 
-        for department_name in available_departments:
-            is_enabled = department_name in enabled_departments
+        for department in list_staff_status_departments():
+            department_name = department["department_name"]
             home_location = (request.form.get(f"home_location_{department_name}") or "").strip()
-
-            set_setting(
-                f"staff_status.department.{department_name}.home_location",
-                home_location,
-            )
 
             upsert_department_settings(
                 department_name=department_name,
-                is_enabled=is_enabled,
+                is_enabled=bool(department.get("is_enabled")),
                 home_location=home_location,
             )
 
         configure_jobs()
         flash("Staff Status settings saved.", "success")
-        return redirect(url_for("launchpad_ui.settings_staff_status"))
-
-    enabled_departments_raw = get_setting("staff_status.enabled_departments", "") or ""
-    enabled_departments = [
-        item.strip() for item in enabled_departments_raw.split(",") if item.strip()
-    ]
+        return redirect(url_for("launchpad_ui.settings_staff_status", tab="general"))
 
     department_rows = []
-    for department_name in available_departments:
-        department_record = get_department_record(department_name)
+    for department_record in list_staff_status_departments():
+        department_name = department_record["department_name"]
         kiosk_token = department_record.get("kiosk_token") if department_record else None
         board_token = department_record.get("board_token") if department_record else None
         kiosk_enabled = (
@@ -1503,7 +1588,7 @@ def settings_staff_status():
 
         department_rows.append({
             "department_name": department_name,
-            "is_enabled": department_name in enabled_departments,
+            "is_enabled": int(department_record.get("is_enabled", 0) or 0) == 1,
             "home_location": home_location or "",
             "kiosk_enabled": kiosk_enabled,
             "kiosk_token": kiosk_token,
@@ -1521,7 +1606,6 @@ def settings_staff_status():
         })
 
     settings = {
-        "enabled_departments": enabled_departments,
         "daily_reset_enabled": get_bool_setting("staff_status.daily_reset_enabled", True),
         "daily_reset_time": get_setting("staff_status.daily_reset_time", "01:00"),
         "board_refresh_seconds": get_setting("staff_status.board_refresh_seconds", "15"),
@@ -1530,7 +1614,10 @@ def settings_staff_status():
     return render_template(
         "launchpad_ui/settings/staff_status.html",
         active_section="staff_status",
+        active_staff_status_tab=active_staff_status_tab,
         settings=settings,
+        absence_form_settings=get_absence_form_integration_settings(),
+        generated_absence_secret=session.pop("staff_status_generated_absence_secret", None),
         department_rows=department_rows,
         department_operator_assignments=list_staff_status_access_with_users(),
         assignable_users=list_users(active_only=True),

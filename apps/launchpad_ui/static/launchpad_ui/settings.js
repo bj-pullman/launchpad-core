@@ -111,6 +111,7 @@ function initSettingsTabs() {
   const panels = document.querySelectorAll(".settings-tab-panel[data-panel]");
   const savePanels = document.querySelectorAll(".settings-tab-panel[data-panel-save]");
   const financeTabInput = document.getElementById("active_finance_tab");
+  const staffStatusTabInput = document.getElementById("active_staff_status_tab");
 
   if (!tabs.length) {
     return;
@@ -138,6 +139,10 @@ function initSettingsTabs() {
 
       if (financeTabInput) {
         financeTabInput.value = targetPanel;
+      }
+
+      if (staffStatusTabInput) {
+        staffStatusTabInput.value = targetPanel;
       }
     });
   });

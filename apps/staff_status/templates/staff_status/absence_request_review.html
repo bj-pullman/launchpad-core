@@ -1,0 +1,127 @@
+{% extends "launchpad_ui/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('staff_status.static', filename='staff_status.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h1>Absence Request Review</h1>
+      <p class="page-subtitle">
+        {{ request_record.staff_display_name }} - {{ request_record.department_name }}
+      </p>
+    </div>
+
+    <div class="page-header-actions">
+      <a href="{{ url_for('staff_status.absences', department_name=request_record.department_name) }}"
+        class="btn btn-secondary">
+        Department Absences
+      </a>
+    </div>
+  </div>
+
+  <div class="content-card staff-status-review-card">
+    <div class="staff-status-review-header">
+      <div>
+        <h2>Request Details</h2>
+        <p class="muted">Submitted {{ request_record.submitted_at|localtime }}</p>
+      </div>
+
+      <span class="staff-status-request-status staff-status-request-status-{{ request_record.status }}">
+        {{ request_record.status|title }}
+      </span>
+    </div>
+
+    <dl class="staff-status-review-grid">
+      <div>
+        <dt>Staff Member</dt>
+        <dd>{{ request_record.staff_display_name }}</dd>
+      </div>
+      <div>
+        <dt>Email</dt>
+        <dd>{{ request_record.staff_email }}</dd>
+      </div>
+      <div>
+        <dt>Department</dt>
+        <dd>{{ request_record.department_name }}</dd>
+      </div>
+      <div>
+        <dt>Absence Type</dt>
+        <dd>{{ request_record.absence_type|title }}</dd>
+      </div>
+      <div>
+        <dt>Start Date</dt>
+        <dd>{{ request_record.start_date|localdate }}</dd>
+      </div>
+      <div>
+        <dt>End Date</dt>
+        <dd>{{ request_record.end_date|localdate }}</dd>
+      </div>
+      <div>
+        <dt>Duration</dt>
+        <dd>{{ request_record.duration_label }}</dd>
+      </div>
+      <div>
+        <dt>Time</dt>
+        <dd>{{ request_record.time_window_label or "All day" }}</dd>
+      </div>
+      <div>
+        <dt>Days</dt>
+        <dd>{{ request_record.days_value if request_record.days_value is not none else "N/A" }}</dd>
+      </div>
+      <div>
+        <dt>Hours</dt>
+        <dd>{{ request_record.hours_value }}</dd>
+      </div>
+      <div>
+        <dt>Approval Manager</dt>
+        <dd>{{ request_record.approval_manager_email }}</dd>
+      </div>
+      <div>
+        <dt>Submission ID</dt>
+        <dd>{{ request_record.submission_uuid }}</dd>
+      </div>
+    </dl>
+
+    <div class="staff-status-review-note">
+      <h3>Staff Note</h3>
+      <p>{{ request_record.note or "No note provided." }}</p>
+    </div>
+
+    {% if request_record.status == "pending" %}
+      <div class="staff-status-review-decision">
+        <form method="post" class="settings-form">
+          <div class="form-field">
+            <label for="decision_note">Decision Note</label>
+            <textarea id="decision_note" name="decision_note" rows="4"
+              placeholder="Optional note for the request history"></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" name="action" value="approve" class="btn btn-success">
+              Approve Request
+            </button>
+            <button type="submit" name="action" value="reject" class="btn btn-danger">
+              Reject Request
+            </button>
+          </div>
+        </form>
+      </div>
+    {% else %}
+      <div class="staff-status-review-note">
+        <h3>Decision</h3>
+        <p>
+          Reviewed by {{ request_record.reviewed_by_display_name or "Unknown" }}
+          on {{ request_record.reviewed_at|localtime }}.
+        </p>
+        <p>{{ request_record.decision_note or "No decision note provided." }}</p>
+        {% if request_record.created_absence_id %}
+          <p class="muted">Created absence record #{{ request_record.created_absence_id }}.</p>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
