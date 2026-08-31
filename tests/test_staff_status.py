@@ -462,6 +462,18 @@ class StaffStatusServiceTests(unittest.TestCase):
             created_by_user_id=self.admin_user["id"],
             created_by_display_name="Manager User",
         )
+        staff_status_service.create_absence(
+            user_id=self.tech_user["id"],
+            department_name="Technology",
+            absence_type="sick",
+            start_date="2099-01-04",
+            end_date="2099-01-04",
+            duration_mode="full_day",
+            days_value=1.0,
+            note="",
+            created_by_user_id=self.admin_user["id"],
+            created_by_display_name="Manager User",
+        )
 
         captured = {}
 
@@ -508,7 +520,7 @@ class StaffStatusServiceTests(unittest.TestCase):
         self.assertEqual(kwargs["current_table_user_ids"], [str(self.admin_user["id"])])
         self.assertEqual(kwargs["current_table_sort_key"], "user")
         self.assertEqual(kwargs["current_table_sort_direction"], "desc")
-        self.assertNotIn("upcoming_absences", kwargs)
+        self.assertEqual([row["absence_type"] for row in kwargs["upcoming_absences"]], ["sick"])
         self.assertEqual([row["absence_type"] for row in kwargs["past_absences"]], ["vacation"])
         self.assertIn("Type: Vacation", kwargs["active_table_filters"])
 

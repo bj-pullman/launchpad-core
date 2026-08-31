@@ -21,29 +21,33 @@
   </th>
 {% endmacro %}
 
-{% macro absence_table(title, rows, default_sort_key, default_sort_direction, current_sort_key, current_sort_direction, sort_urls, table_period_summary, active_table_filters, clear_table_filters_url) %}
+{% macro absence_table(title, rows, default_sort_key, default_sort_direction, current_sort_key, current_sort_direction, sort_urls, subtitle="", active_table_filters=[], clear_table_filters_url="", show_table_filters=false) %}
   <div class="content-card" style="margin-bottom: 16px;">
     <div class="staff-status-table-header-row">
       <div>
         <h2>{{ title }}</h2>
-        <p class="muted">{{ table_period_summary }}</p>
-      </div>
-
-      <div class="staff-status-table-header-actions">
-        <button type="button" class="btn {% if active_table_filters %}btn-primary{% else %}btn-secondary{% endif %}"
-          data-modal-open="absence-filter-modal">
-          Filter{% if active_table_filters %} ({{ active_table_filters|length }}){% endif %}
-        </button>
-
-        {% if active_table_filters %}
-          <a href="{{ clear_table_filters_url }}" class="staff-status-clear-filters-link">
-            Reset
-          </a>
+        {% if subtitle %}
+          <p class="muted">{{ subtitle }}</p>
         {% endif %}
       </div>
+
+      {% if show_table_filters %}
+        <div class="staff-status-table-header-actions">
+          <button type="button" class="btn {% if active_table_filters %}btn-primary{% else %}btn-secondary{% endif %}"
+            data-modal-open="absence-filter-modal">
+            Filter{% if active_table_filters %} ({{ active_table_filters|length }}){% endif %}
+          </button>
+
+          {% if active_table_filters %}
+            <a href="{{ clear_table_filters_url }}" class="staff-status-clear-filters-link">
+              Reset
+            </a>
+          {% endif %}
+        </div>
+      {% endif %}
     </div>
 
-    {% if active_table_filters %}
+    {% if show_table_filters and active_table_filters %}
       <div class="staff-status-active-filters-bar">
         <div class="staff-status-active-filters">
           {% for label in active_table_filters %}
@@ -179,7 +183,11 @@
     {% else %}
       <div class="empty-state">
         <h3>No {{ title|lower }} found</h3>
-        <p class="muted">Adjust your filters or add a new absence.</p>
+        {% if show_table_filters %}
+          <p class="muted">Adjust your filters or add a new absence.</p>
+        {% else %}
+          <p class="muted">No upcoming absences scheduled.</p>
+        {% endif %}
       </div>
     {% endif %}
   </div>
@@ -213,7 +221,8 @@
     </div>
   {% endif %}
 
-  {{ absence_table("Absences", past_absences, "end", "desc", current_table_sort_key, current_table_sort_direction, table_sort_urls, table_period_summary, active_table_filters, clear_table_filters_url) }}
+  {{ absence_table("Upcoming Absences", upcoming_absences, "start", "asc", current_table_sort_key, current_table_sort_direction, table_sort_urls.upcoming, "Scheduled future absences") }}
+  {{ absence_table("Past Absences", past_absences, "end", "desc", current_table_sort_key, current_table_sort_direction, table_sort_urls.past, table_period_summary, active_table_filters, clear_table_filters_url, true) }}
 </div>
 
 {% if can_operate %}

@@ -783,6 +783,13 @@ def absences(department_name: str):
     current_start_date = table_range["start_date_iso"]
     current_end_date = table_range["end_date_iso"]
 
+    upcoming_absences = list_absences_for_department(
+        department_name=department_name,
+        timing="upcoming",
+        sort_key=current_table_sort_key,
+        sort_direction=current_table_sort_direction,
+    )
+
     past_absences = list_absences_for_department(
         department_name=department_name,
         timing="past",
@@ -801,14 +808,24 @@ def absences(department_name: str):
         absence_type_filter=table_absence_type_filter,
         user_ids=current_table_user_ids,
     )
-    table_sort_urls = _build_absence_table_sort_urls(
-        department_name=department_name,
-        filter_params=table_filter_params,
-        current_sort_key=current_table_sort_key,
-        current_sort_direction=current_table_sort_direction,
-        default_sort_key="end",
-        default_sort_direction="desc",
-    )
+    table_sort_urls = {
+        "upcoming": _build_absence_table_sort_urls(
+            department_name=department_name,
+            filter_params=table_filter_params,
+            current_sort_key=current_table_sort_key,
+            current_sort_direction=current_table_sort_direction,
+            default_sort_key="start",
+            default_sort_direction="asc",
+        ),
+        "past": _build_absence_table_sort_urls(
+            department_name=department_name,
+            filter_params=table_filter_params,
+            current_sort_key=current_table_sort_key,
+            current_sort_direction=current_table_sort_direction,
+            default_sort_key="end",
+            default_sort_direction="desc",
+        ),
+    }
     clear_table_params = {}
     if current_table_sort_key:
         clear_table_params["table_sort"] = current_table_sort_key
@@ -822,6 +839,7 @@ def absences(department_name: str):
         users=users,
         absence_types=absence_types,
         duration_options=ABSENCE_DURATION_OPTIONS,
+        upcoming_absences=upcoming_absences,
         past_absences=past_absences,
         active_tab="absences",
         current_table_absence_types=current_table_absence_types,
