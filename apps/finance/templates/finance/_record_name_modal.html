@@ -1,0 +1,22 @@
+{% if can_manage and record.status != 'deleted' %}
+<div class="finance-modal" id="record-name-modal" hidden>
+  <div class="finance-modal-backdrop" data-modal-close></div>
+  <div class="finance-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="record-name-title">
+    <div class="finance-modal-header"><h2 id="record-name-title">Friendly Record Name</h2></div>
+    <div class="finance-modal-body">
+      <form class="finance-modal-form" method="post" action="{{ url_for('finance.record_friendly_name_save', record_id=record.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="finance-field">
+          <label for="inline-friendly-name">Friendly Record Name (optional)</label>
+          <input id="inline-friendly-name" name="friendly_name" value="{{ record.friendly_name or '' }}" aria-describedby="inline-name-help">
+          <div class="finance-mapping-help" id="inline-name-help">When blank, Launchpad displays the Imported/System Title.</div>
+        </div>
+        <div class="finance-modal-actions">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}

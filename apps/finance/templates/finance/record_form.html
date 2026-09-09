@@ -10,13 +10,13 @@
 {% block content %}
 <div class="page-shell finance-shell">
     <div class="finance-back-row">
-        <a href="{{ url_for('finance.records', department_name=department_name) }}" class="finance-back-link">
+        <a href="{{ url_for('finance.record_detail', record_id=record.id) if form_mode == 'edit' else url_for('finance.records', department_name=department_name) }}" class="finance-back-link">
             <span class="finance-back-link-icon" aria-hidden="true">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M15 18l-6-6 6-6"/>
             </svg>
             </span>
-            <span>Records</span>
+            <span>{{ "Record Details" if form_mode == "edit" else "Records" }}</span>
         </a>
     </div>
 
@@ -49,13 +49,23 @@
       </div>
     </div>
 
-    <form method="post" enctype="multipart/form-data" class="finance-form" id="finance-record-form">
+    <form method="post" enctype="multipart/form-data" class="finance-form" id="finance-record-form" data-dirty-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
       <div class="finance-form-section">
         <h4 class="finance-form-section-title">Basic Information</h4>
       </div>
 
       <div class="finance-form-grid">
+        <div class="finance-field finance-field-span-3">
+          <label for="title">Imported/System Title</label>
+          <input type="text" id="title" name="title" required value="{{ record.title if form_mode == 'edit' else '' }}">
+        </div>
+        <div class="finance-field finance-field-span-3">
+          <label for="friendly_name">Friendly Record Name (optional)</label>
+          <input type="text" id="friendly_name" name="friendly_name" aria-describedby="friendly-name-help" value="{{ record.friendly_name or '' if form_mode == 'edit' else '' }}">
+          <div class="finance-mapping-help" id="friendly-name-help">When blank, Launchpad displays the Imported/System Title.</div>
+        </div>
         <div class="finance-field">
           <label for="record_type">Record Type</label>
               <select id="record_type" name="record_type">
@@ -121,15 +131,6 @@
                   Other
                 </option>
               </select>
-        </div>
-
-        <div class="finance-field finance-field-span-2">
-          <label for="title">Imported/System Title</label>
-          <input type="text" id="title" name="title" required value="{{ record.title if form_mode == 'edit' else '' }}">
-          <p class="muted">Imported/System Title. Enter a title for manually created Records.</p>
-          <label for="friendly_name">Friendly Name (optional)</label>
-          <input type="text" id="friendly_name" name="friendly_name" value="{{ record.friendly_name or '' if form_mode == 'edit' else '' }}">
-          <p class="muted">When Friendly Name is blank, Launchpad uses the Record title.</p>
         </div>
 
         <div class="finance-field">
@@ -288,11 +289,11 @@
 
       <div data-po-preview="{{ url_for('finance.record_po_preview', department_name=department_name) }}" data-record-id="{{ record.id if form_mode == 'edit' else '' }}" role="status"></div>
       {% if not renewal_link %}{% include "finance/_record_renewal_form.html" %}{% else %}
-      <p>Renewal: <a href="{{ url_for('finance.renewal_detail', renewal_id=renewal_link.renewal_id) }}">{{ renewal_link.renewal_name }} — {{ renewal_link.fiscal_year_label }}</a></p>
+      <p>Renewal: <a href="{{ url_for('finance.renewal_detail', renewal_id=renewal_link.renewal_id) }}">{{ renewal_link.renewal_name }}{% if renewal_link.fiscal_year_label %} · {{ renewal_link.fiscal_year_label }}{% endif %}</a></p>
       {% endif %}
       <div class="finance-form-actions">
         <a class="btn btn-secondary finance-action-link"
-           href="{{ url_for('finance.records', department_name=department_name) }}">
+           href="{{ url_for('finance.record_detail', record_id=record.id) if form_mode == 'edit' else url_for('finance.records', department_name=department_name) }}">
           Cancel
         </a>
 
@@ -307,6 +308,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "finance/_record_exit_modal.html" %}
 <script defer src="{{ url_for('finance.static', filename='finance/record_workflow.js') }}"></script>
 <script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
 {% endblock %}

@@ -1,5 +1,37 @@
 /* finance.css */
 
+/* Compact Record workflows use the standard Finance controls and spacing. */
+#finance-record-form .finance-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+@media (max-width: 950px) {
+  #finance-record-form .finance-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.finance-renewal-compact {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.finance-renewal-compact .finance-section-header {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+[data-renewal-workflow] .finance-form-actions {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+[data-renewal-workflow] [hidden],
+[data-renewal-detail][hidden] {
+  display: none;
+}
+
 .finance-shell {
   display: flex;
   flex-direction: column;

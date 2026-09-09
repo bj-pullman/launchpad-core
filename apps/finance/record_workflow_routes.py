@@ -63,15 +63,62 @@ def record_renewal_save(department_name, record_id):
     user_id = require_department(department_name, True)
     require_csrf()
     if request.form.get("is_renewal") != "on":
-        flash("Select This Record is a Renewal and choose how to link it.", "error")
+        flash("Choose Link Existing Renewal or Create Renewal.", "error")
         return redirect(url_for("finance.record_detail", record_id=record_id))
     try:
         renewal_from_record(record_id, department_name, user_id,
             mode=request.form.get("renewal_mode"), cycle_id=request.form.get("renewal_cycle_id", type=int),
-            renewal_id=request.form.get("renewal_id", type=int), fiscal_year_id=request.form.get("fiscal_year_id", type=int))
+            renewal_id=request.form.get("renewal_id", type=int), fiscal_year_id=request.form.get("fiscal_year_id", type=int),
+            replace=request.form.get("replace_link") == "1")
         flash("Renewal linked to this Record.", "success")
     except ValueError as exc:
         flash(str(exc), "error")
+    return redirect(url_for("finance.record_detail", record_id=record_id))
+
+
+@bp.post("/records/<int:record_id>/friendly-name")
+@login_required
+def record_friendly_name_save(record_id):
+    from . import service
+    from .db import finance_transaction
+    record = service.get_record_by_id(record_id)
+    if not record:
+        abort(404)
+    user_id = require_department(record["department_name"], True)
+    require_csrf()
+    with finance_transaction() as conn:
+        current = conn.execute("SELECT status FROM finance_records WHERE id=?", (record_id,)).fetchone()
+        if current["status"] == "deleted":
+            abort(409)
+        name = service.normalize_text(request.form.get("friendly_name"))
+        now = service.utc_now_iso()
+        conn.execute("UPDATE finance_records SET friendly_name=?, updated_at=? WHERE id=?", (name, now, record_id))
+        conn.execute("""INSERT INTO finance_record_history
+            (finance_record_id, event_type, summary, changed_by_user_id, changed_at)
+            VALUES (?, 'updated', 'Friendly Record Name updated.', ?, ?)""", (record_id, user_id, now))
+    flash("Friendly Record Name saved.", "success")
+    return redirect(url_for("finance.record_detail", record_id=record_id))
+
+
+@bp.post("/records/<int:record_id>/renewal/unlink")
+@login_required
+def record_renewal_unlink(record_id):
+    from . import service, renewal_service
+    from .db import finance_transaction
+    record = service.get_record_by_id(record_id)
+    if not record:
+        abort(404)
+    user_id = require_department(record["department_name"], True)
+    require_csrf()
+    with finance_transaction() as conn:
+        current = conn.execute("SELECT status FROM finance_records WHERE id=?", (record_id,)).fetchone()
+        if current["status"] in ("deleted", "archived"):
+            abort(409)
+        link = renewal_service.get_record_renewal_link(record_id)
+        if link:
+            renewal_service.unlink_record_from_renewal_cycle(renewal_cycle_id=link["renewal_cycle_id"],
+                finance_record_id=record_id, changed_by_user_id=user_id)
+    flash("Renewal unlinked.", "success")
     return redirect(url_for("finance.record_detail", record_id=record_id))
 
 

@@ -28,15 +28,20 @@ def renewal_options(department, query=""):
     return [dict(row) for row in rows]
 
 
-def renewal_from_record(record_id, department, user_id, *, mode, cycle_id=None, renewal_id=None, fiscal_year_id=None):
+def renewal_from_record(record_id, department, user_id, *, mode, cycle_id=None, renewal_id=None, fiscal_year_id=None, replace=False):
     with finance_transaction() as conn:
         row = conn.execute("SELECT * FROM finance_records WHERE id=? AND department_name=? AND status NOT IN ('deleted','archived')",
                            (record_id, department)).fetchone()
         if not row:
             raise ValueError("Active Record not found.")
         record = dict(row)
-        if renewals.get_record_renewal_link(record_id):
-            raise ValueError("This Record already has a Renewal. Use the existing Renewal to manage its link.")
+        existing = renewals.get_record_renewal_link(record_id)
+        if existing:
+            if not replace:
+                raise ValueError("This Record already has a Renewal. Use Change Link to update it.")
+            renewals.unlink_record_from_renewal_cycle(
+                renewal_cycle_id=existing["renewal_cycle_id"], finance_record_id=record_id,
+                changed_by_user_id=user_id)
         year = None
         if fiscal_year_id:
             year = conn.execute("SELECT * FROM finance_fiscal_years WHERE id=? AND department_name=?",

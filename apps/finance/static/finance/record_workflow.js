@@ -21,30 +21,136 @@
   });
   document.querySelectorAll('[data-renewal-workflow]').forEach(section => {
     const fields = section.querySelector('[data-renewal-fields]');
-    section.querySelector('[data-renewal-toggle]').addEventListener('change', e => { fields.hidden = !e.target.checked; });
     const picker = section.querySelector('[data-renewal-picker]');
     const query = section.querySelector('[data-renewal-query]');
     const select = section.querySelector('[data-renewal-results]');
-    let controller;
-    const load = delay(async () => {
-      controller?.abort(); controller = new AbortController();
+    const mode = section.querySelector('[name=renewal_mode]');
+    const year = section.querySelector('[data-renewal-year]');
+    const yearSelect = year.querySelector('select');
+    const submit = section.querySelector('[data-renewal-submit]');
+    const message = section.querySelector('[data-renewal-message]');
+    let controller, generation = 0;
+    function clearSelection() {
       select.replaceChildren(new Option('Choose a Renewal', ''));
       section.querySelector('[name=renewal_cycle_id]').value = '';
       section.querySelector('[name=renewal_id]').value = '';
+      if (submit) submit.disabled = mode.value === 'link';
+    }
+    function showYear(show) {
+      year.hidden = !show;
+      yearSelect.disabled = !show;
+      if (!show) yearSelect.value = '';
+    }
+    const load = delay(async (version) => {
+      if (version !== generation || mode.value !== 'link') return;
+      controller = new AbortController();
       try {
         const rows = await search(section.dataset.searchUrl, query.value, controller.signal);
-        rows.forEach(r => select.add(new Option(`${r.renewal_name} · ${r.vendor_name} · ${r.department_name} · ${r.fiscal_year_label || 'Create initial cycle'} · $${r.expected_cost || '0.00'}`, `${r.renewal_id}:${r.cycle_id || ''}`)));
-        section.querySelector('[data-renewal-message]').textContent = rows.length ? '' : 'No matching Renewals.';
-      } catch (error) { if (error.name !== 'AbortError') section.querySelector('[data-renewal-message]').textContent = error.message; }
+        if (version !== generation) return;
+        rows.forEach(r => select.add(new Option(
+          [r.renewal_name, r.vendor_name, r.fiscal_year_label || 'Create initial cycle'].filter(Boolean).join(' · '),
+          `${r.renewal_id}:${r.cycle_id || ''}`)));
+        message.textContent = rows.length ? '' : 'No matching Renewals.';
+      } catch (error) {
+        if (error.name !== 'AbortError' && version === generation) message.textContent = error.message;
+      }
     });
-    section.querySelector('[data-renewal-mode]').addEventListener('change', e => { picker.hidden = e.target.value !== 'link'; if (!picker.hidden) load(); });
-    query.addEventListener('input', load);
+    function refresh() {
+      controller?.abort();
+      clearSelection();
+      showYear(false);
+      message.textContent = 'Searching…';
+      load(++generation);
+    }
+    function setMode(value) {
+      controller?.abort(); ++generation;
+      mode.value = value;
+      section.querySelector('[name=is_renewal]').value = value ? 'on' : '';
+      fields.hidden = !value;
+      picker.hidden = value !== 'link';
+      select.required = value === 'link';
+      select.disabled = value !== 'link';
+      section.querySelector('[data-renewal-create]').hidden = value !== 'create';
+      section.querySelectorAll('[data-renewal-action]').forEach(button =>
+        button.setAttribute('aria-expanded', String(button.dataset.renewalAction === value)));
+      clearSelection();
+      showYear(value === 'create');
+      message.textContent = '';
+      if (submit) {
+        submit.textContent = value === 'create' ? 'Create Renewal' : 'Link Renewal';
+        submit.disabled = value === 'link';
+      }
+      if (value === 'link') { refresh(); query.focus(); }
+    }
+    section.querySelectorAll('[data-renewal-action]').forEach(button =>
+      button.addEventListener('click', () => setMode(button.dataset.renewalAction)));
+    section.querySelector('[data-renewal-cancel]').addEventListener('click', () => {
+      setMode('');
+      if (section.querySelector('[name=replace_link]')) section.closest('form').hidden = true;
+      (document.querySelector('[data-renewal-change]') || section.querySelector('[data-renewal-action]')).focus();
+    });
+    document.querySelector('[data-renewal-change]')?.addEventListener('click', () => {
+      section.closest('form').hidden = false;
+      setMode('link');
+    });
+    query.addEventListener('input', refresh);
     select.addEventListener('change', () => {
       const [renewal, cycle] = select.value.split(':');
       section.querySelector('[name=renewal_id]').value = renewal || '';
       section.querySelector('[name=renewal_cycle_id]').value = cycle || '';
+      showYear(Boolean(renewal && !cycle));
+      if (submit) submit.disabled = !renewal;
     });
+    setMode('');
   });
+  const form = document.querySelector('[data-dirty-form]');
+  if (form) {
+    const snapshot = () => JSON.stringify(Array.from(new FormData(form), ([key, value]) =>
+      [key, value instanceof File ? (value.name ? [value.name, value.size, value.lastModified] : null) : value])
+      .filter(([key]) => key !== 'csrf_token'));
+    let initial = snapshot(), submitting = false, destination = null, leaveTrigger = null;
+    const dirty = () => !submitting && snapshot() !== initial;
+    // Finance initializes derived dates/status on DOMContentLoaded; baseline afterward.
+    document.addEventListener('DOMContentLoaded', () => { initial = snapshot(); }, {once: true});
+    form.addEventListener('submit', event => {
+      if (!event.defaultPrevented) submitting = true;
+    });
+    window.addEventListener('pageshow', () => { submitting = false; });
+    window.addEventListener('beforeunload', event => {
+      if (!dirty()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    });
+    document.addEventListener('click', event => {
+      const link = event.target.closest('a[href]');
+      if (!link || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey ||
+          event.shiftKey || event.altKey || link.target === '_blank' || link.hasAttribute('download')) return;
+      const url = new URL(link.href, location.href);
+      if (!['http:', 'https:'].includes(url.protocol) ||
+          (url.pathname === location.pathname && url.search === location.search && url.hash)) return;
+      if (!dirty()) return;
+      event.preventDefault();
+      destination = link.href;
+      leaveTrigger = link;
+      document.getElementById('record-exit-trigger').click();
+    });
+    document.getElementById('record-exit-confirm').addEventListener('click', () => {
+      if (!destination) return;
+      submitting = true;
+      location.assign(destination);
+    });
+    document.getElementById('record-exit-modal').addEventListener('click', event => {
+      if (event.target.closest('[data-modal-close]')) {
+        window.requestAnimationFrame(() => leaveTrigger?.focus());
+      }
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && leaveTrigger &&
+          !document.getElementById('record-exit-modal').hidden) {
+        window.requestAnimationFrame(() => leaveTrigger.focus());
+      }
+    });
+  }
   const preview = document.querySelector('[data-po-preview]');
   const po = document.querySelector('[name=po_number]');
   if (preview && po) {

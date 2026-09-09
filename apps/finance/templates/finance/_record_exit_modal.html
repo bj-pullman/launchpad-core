@@ -1,0 +1,14 @@
+<button type="button" hidden class="finance-modal-trigger" data-modal-target="record-exit-modal" id="record-exit-trigger"></button>
+<div class="finance-modal" id="record-exit-modal" hidden>
+  <div class="finance-modal-backdrop" data-modal-close></div>
+  <div class="finance-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="record-exit-title">
+    <div class="finance-modal-header"><h2 id="record-exit-title">Unsaved changes</h2></div>
+    <div class="finance-modal-body">
+      <p>Your changes have not been saved.</p>
+      <div class="finance-modal-actions">
+        <button type="button" class="btn btn-primary" data-modal-close>Continue Editing</button>
+        <button type="button" class="btn btn-danger" id="record-exit-confirm">Exit without Saving</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,22 +1,39 @@
-<section class="content-card" data-renewal-workflow data-search-url="{{ url_for('finance.record_renewal_search', department_name=department_name) }}">
-  <h2>Renewal</h2>
+<section class="finance-form" data-renewal-workflow data-search-url="{{ url_for('finance.record_renewal_search', department_name=department_name) }}">
+  {% if not renewal_detail|default(false) %}<h4 class="finance-form-section-title">Renewal</h4>{% endif %}
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <p><label><input type="checkbox" name="is_renewal" data-renewal-toggle> This Record is a Renewal</label></p>
-  <div data-renewal-fields hidden>
-    <p><label>Action <select name="renewal_mode" data-renewal-mode>
-      <option value="create">Create Renewal from this Record</option>
-      <option value="link">Link to Existing Renewal</option>
-    </select></label></p>
-    <p class="muted">Creation uses the Record name, vendor, category, cost and dates. The purchase date determines the fiscal year when possible; otherwise the department's current year is used.</p>
-    <p><label>Fiscal Year for a New Cycle
-      <select name="fiscal_year_id"><option value="">Infer from Record / current year</option>
-      {% for year in renewal_fiscal_years|default([]) %}<option value="{{ year.id }}">{{ year.friendly_name or year.code }}</option>{% endfor %}
-      </select></label></p>
-    <div data-renewal-picker hidden>
-      <label>Find a Renewal <input type="search" data-renewal-query placeholder="Name, vendor, PO, category, department…" autocomplete="off"></label>
-      <select data-renewal-results aria-label="Matching Renewal and fiscal year"><option value="">Choose a Renewal</option></select>
+  <input type="hidden" name="is_renewal" value="">
+  <input type="hidden" name="renewal_mode" value="">
+  {% if renewal_link %}<input type="hidden" name="replace_link" value="1">{% endif %}
+  <div class="page-header-actions">
+    <button class="btn btn-secondary" type="button" data-renewal-action="link" aria-expanded="false">Link Existing Renewal</button>
+    <button class="btn btn-secondary" type="button" data-renewal-action="create" aria-expanded="false">Create Renewal</button>
+  </div>
+  <div class="finance-form" data-renewal-fields hidden>
+    <div class="finance-form" data-renewal-picker hidden>
+      <div class="finance-field">
+        <label for="renewal-query">Search Renewals</label>
+        <input id="renewal-query" type="search" data-renewal-query placeholder="Name, vendor, PO or category" autocomplete="off">
+      </div>
+      <div class="finance-field">
+        <label for="renewal-results">Select Renewal</label>
+        <select id="renewal-results" data-renewal-results><option value="">Choose a Renewal</option></select>
+      </div>
       <input type="hidden" name="renewal_cycle_id"><input type="hidden" name="renewal_id">
     </div>
-    <p data-renewal-message class="muted" role="status"></p>
+    <div class="finance-mapping-help" data-renewal-create hidden>Uses this Record's name, vendor, category, cost and dates. The fiscal year is inferred from its date or the department's current year.</div>
+    <details data-renewal-year hidden>
+      <summary>Choose a different fiscal year</summary>
+      <div class="finance-field">
+        <label for="renewal-year">Fiscal Year for New Cycle</label>
+        <select id="renewal-year" name="fiscal_year_id" disabled><option value="">Infer from Record / current year</option>
+          {% for year in renewal_fiscal_years|default([]) %}<option value="{{ year.id }}">{{ year.friendly_name or year.code }}</option>{% endfor %}
+        </select>
+      </div>
+    </details>
+    <div data-renewal-message class="finance-mapping-help" role="status"></div>
+    <div class="finance-form-actions">
+      <button class="btn btn-secondary" type="button" data-renewal-cancel>Cancel</button>
+      {% if renewal_detail|default(false) %}<button class="btn btn-primary" type="submit" data-renewal-submit>Link Renewal</button>{% else %}<span class="finance-mapping-help">Applied when you save the Record.</span>{% endif %}
+    </div>
   </div>
 </section>

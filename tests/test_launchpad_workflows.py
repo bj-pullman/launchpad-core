@@ -416,6 +416,81 @@ class RouteTests(IsolatedDatabases):
                 self.assertEqual(response.status_code,200, response.headers.get("Location"))
                 self.assertIn(b"launchpad-shell.js",response.data)
 
+    def test_inline_record_name_only_updates_name_and_history(self):
+        record_id = self.record(friendly_name="Old", notes="Keep notes", cost="25")
+        before = service.get_record_by_id(record_id)
+        path = f"/finance/records/{record_id}/friendly-name"
+        response = self.client.post(path, data={"csrf_token":"test-csrf", "friendly_name":"  New name  ", "title":"Ignore"})
+        self.assertEqual(response.status_code, 302)
+        after = service.get_record_by_id(record_id)
+        self.assertEqual(after["friendly_name"], "New name")
+        for key in before.keys() - {"friendly_name", "updated_at"}:
+            self.assertEqual(after[key], before[key], key)
+        self.assertEqual(service.list_history_for_record(record_id)[0]["summary"], "Friendly Record Name updated.")
+        self.client.post(path, data={"csrf_token":"test-csrf", "friendly_name":" "})
+        self.assertEqual(record_display_name(service.get_record_by_id(record_id)), before["title"])
+
+    def test_inline_name_permission_csrf_and_deleted_record(self):
+        from apps.finance import record_workflow_routes
+        record_id = self.record(friendly_name="Keep")
+        path = f"/finance/records/{record_id}/friendly-name"
+        self.assertEqual(self.client.post(path, data={"friendly_name":"Denied"}).status_code, 400)
+        with patch.object(record_workflow_routes, "can_manage_department", return_value=False):
+            self.assertEqual(self.client.post(path, data={"csrf_token":"test-csrf", "friendly_name":"Denied"}).status_code, 403)
+        with patch.object(record_workflow_routes, "can_access_department", return_value=False):
+            self.assertEqual(self.client.post(path, data={"csrf_token":"test-csrf"}).status_code, 403)
+        with db.get_connection() as conn:
+            conn.execute("UPDATE finance_records SET status='deleted' WHERE id=?", (record_id,))
+        self.assertEqual(self.client.post(path, data={"csrf_token":"test-csrf"}).status_code, 409)
+        self.assertEqual(service.get_record_by_id(record_id)["friendly_name"], "Keep")
+
+    def test_record_detail_names_relationships_and_edit_navigation(self):
+        from apps.finance import record_workflow_service
+        record_id = self.record(friendly_name="Creative Cloud")
+        relationships = {"activity":[{"count":3, "fiscal_year_code":None}],
+                         "orders":[{"id":1, "normalized_po_number":"250045", "fiscal_year_code":None}]}
+        with patch.object(record_workflow_service, "record_relationships", return_value=relationships):
+            html = self.client.get(f"/finance/records/{record_id}").get_data(as_text=True)
+        for text in ("<th>Friendly Record Name</th>", "<th>Imported/System Title</th>", "Creative Cloud", "IMPORTED ADOBE SYSTEMS", "Not linked", "Link Existing Renewal", "PO 250045"):
+            self.assertIn(text, html)
+        self.assertNotIn("Unassigned year", html)
+        self.assertNotIn(" · None", html)
+        self.assertNotIn("Save Renewal Link", html)
+        html = self.client.get(f"/finance/records/{record_id}/edit").get_data(as_text=True)
+        self.assertIn(f'href="/finance/records/{record_id}" class="finance-back-link"', html)
+        self.assertIn("Exit without Saving", html)
+        self.assertIn("Continue Editing", html)
+        self.assertIn("Friendly Record Name (optional)", html)
+
+    def test_full_edit_updates_friendly_record_name(self):
+        from apps.finance import routes
+        record_id = self.record(friendly_name="Old")
+        with patch.object(routes, "maybe_send_renewal_notification_for_record", return_value=(False,"")):
+            response = self.client.post(f"/finance/records/{record_id}/edit", data={"title":"SOURCE", "friendly_name":"Edited",
+                "record_type":"software_license", "status":"active", "csrf_token":"test-csrf"})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(service.get_record_by_id(record_id)["friendly_name"], "Edited")
+
+    def test_detail_renewal_create_change_rollback_and_unlink(self):
+        record_id = self.record(friendly_name="Creative Cloud")
+        path = f"/finance/Technology/records/{record_id}/renewal"
+        data = {"csrf_token":"test-csrf", "is_renewal":"on", "renewal_mode":"create"}
+        self.assertEqual(self.client.post(path, data=data).status_code, 302)
+        original = renewal_service.get_record_renewal_link(record_id)
+        html = self.client.get(f"/finance/records/{record_id}").get_data(as_text=True)
+        for text in ("finance-renewal-compact", "Creative Cloud", "View Renewal", "Change Link", "Unlink", original["fiscal_year_label"]):
+            self.assertIn(text, html)
+        self.client.post(path, data={**data, "renewal_mode":"link", "renewal_cycle_id":999999, "replace_link":"1"})
+        self.assertEqual(renewal_service.get_record_renewal_link(record_id)["renewal_cycle_id"], original["renewal_cycle_id"])
+        other = self.record(title="Other")
+        _, cycle = renewal_workflow.renewal_from_record(other, "Technology", self.user["id"], mode="create")
+        self.client.post(path, data={**data, "renewal_mode":"link", "renewal_cycle_id":cycle, "replace_link":"1"})
+        self.assertEqual(renewal_service.get_record_renewal_link(record_id)["renewal_cycle_id"], cycle)
+        unlink = f"/finance/records/{record_id}/renewal/unlink"
+        self.assertEqual(self.client.post(unlink, data={"csrf_token":"test-csrf"}).status_code, 302)
+        self.assertIsNone(renewal_service.get_record_renewal_link(record_id))
+        self.assertIn(b"Not linked", self.client.get(f"/finance/records/{record_id}").data)
+
     def test_security_save_permissions_and_validation(self):
         response=self.client.post("/settings/security",data={"csrf_token":"test-csrf","session_idle_timeout_minutes":"0",
             "session_absolute_timeout_hours":"0","session_remember_me_days":"7","session_keep_active":"on"})

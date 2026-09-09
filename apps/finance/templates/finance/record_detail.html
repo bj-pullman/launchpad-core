@@ -59,28 +59,45 @@
     </div>
   </div>
 
-  <section class="content-card">
-    <h2>Relationships</h2>
-    <p>Ledger Activity:
-    {% for activity in relationships.activity %}
-      <a href="{{ url_for('finance.ledger', department_name=department_name, record_id=record.id, fiscal_year_code=activity.fiscal_year_code) }}">{{ activity.count }} transactions · {{ activity.fiscal_year_code or 'Unassigned year' }}</a>
-    {% else %}No linked transactions{% endfor %}</p>
-    <p>Purchase Orders:
-    {% for po in relationships.orders %}<a href="{{ url_for('finance.purchase_order_detail', purchase_order_id=po.id) }}">PO {{ po.normalized_po_number }} · {{ po.fiscal_year_code }}</a>
-    {% else %}{{ record.po_number or 'None' }}{% endfor %}</p>
-    <p>Renewal: {% if renewal_link %}<a href="{{ url_for('finance.renewal_detail', renewal_id=renewal_link.renewal_id) }}">{{ renewal_link.renewal_name }} — {{ renewal_link.fiscal_year_label }}</a>{% else %}Not linked{% endif %}</p>
+  <section class="finance-renewal-compact" aria-label="Renewal">
+    <div class="finance-section-header">
+      <div>
+        <h3 class="finance-section-title">Renewal</h3>
+        <div class="finance-meta">{% if renewal_link %}{{ renewal_link.renewal_name }}{% if renewal_link.fiscal_year_label %} · {{ renewal_link.fiscal_year_label }}{% endif %}{% else %}Not linked{% endif %}</div>
+      </div>
+      {% if renewal_link %}
+      <div class="page-header-actions">
+        <a class="btn btn-secondary" href="{{ url_for('finance.renewal_detail', renewal_id=renewal_link.renewal_id) }}">View Renewal</a>
+        {% if can_manage and record.status not in ('deleted', 'archived') %}
+        <button type="button" class="btn btn-secondary" data-renewal-change>Change Link</button>
+        <form method="post" class="finance-inline-form" action="{{ url_for('finance.record_renewal_unlink', record_id=record.id) }}" data-confirm="Unlink this Record from its Renewal?" data-confirm-action="delete">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-danger" type="submit">Unlink</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% if can_manage and record.status not in ('deleted', 'archived') %}
+    <form class="finance-form" method="post" action="{{ url_for('finance.record_renewal_save', department_name=department_name, record_id=record.id) }}" data-renewal-detail {% if renewal_link %}hidden{% endif %}>
+      {% set renewal_detail = true %}
+      {% include "finance/_record_renewal_form.html" %}
+    </form>
+    {% endif %}
   </section>
-  {% if can_manage and not renewal_link and record.status not in ('deleted','archived') %}
-  <form method="post" action="{{ url_for('finance.record_renewal_save', department_name=department_name, record_id=record.id) }}">
-    {% include "finance/_record_renewal_form.html" %}
-    <button class="btn btn-primary" type="submit">Save Renewal Link</button>
-  </form>
-  {% endif %}
-  <script defer src="{{ url_for('finance.static', filename='finance/record_workflow.js') }}"></script>
   <div class="content-card">
     <div class="table-wrap">
       <table class="data-table">
         <tbody>
+          <tr>
+            <th>Friendly Record Name</th>
+            <td>{{ record.friendly_name or 'Not set' }}
+              {% if can_manage and record.status != 'deleted' %}
+              <button type="button" class="table-link finance-inline-button finance-modal-trigger" data-modal-target="record-name-modal">Edit</button>
+              {% endif %}
+            </td>
+          </tr>
+          <tr><th>Imported/System Title</th><td>{{ record.title }}</td></tr>
           <tr>
             <th>Type</th>
             <td>{{ record.record_type|title }}</td>
@@ -142,48 +159,20 @@
             <th>Notes</th>
             <td>{{ record.notes or "—" }}</td>
           </tr>
+          <tr><th colspan="2">Relationships</th></tr>
+          <tr><th>Ledger Activity</th><td>
+            {% for activity in relationships.activity %}
+            <div><a class="table-link" href="{{ url_for('finance.ledger', department_name=department_name, record_id=record.id, fiscal_year_code=activity.fiscal_year_code) }}">{{ activity.count }} transactions{% if activity.fiscal_year_code %} · {{ activity.fiscal_year_code }}{% endif %}</a></div>
+            {% else %}No linked transactions{% endfor %}
+          </td></tr>
+          <tr><th>Purchase Order</th><td>
+            {% for po in relationships.orders %}
+            <div><a class="table-link" href="{{ url_for('finance.purchase_order_detail', purchase_order_id=po.id) }}">PO {{ po.normalized_po_number }}{% if po.fiscal_year_code %} · {{ po.fiscal_year_code }}{% endif %}</a></div>
+            {% else %}{{ record.po_number or 'Not linked' }}{% endfor %}
+          </td></tr>
         </tbody>
       </table>
     </div>
-  </div>
-
-  <div class="content-card">
-    <div class="finance-section-header">
-      <div>
-        <h3 class="finance-section-title">Renewal</h3>
-        <p class="finance-section-subtitle">
-          Renewal association for this financial Record.
-        </p>
-      </div>
-    </div>
-
-    {% if renewal_link %}
-    <div class="finance-renewal-link-summary">
-      <div>
-        <strong>
-          <a class="table-link" href="{{ url_for('finance.renewal_detail', renewal_id=renewal_link.renewal_id) }}">
-            {{ renewal_link.renewal_name }}
-          </a>
-        </strong>
-
-        <div class="finance-meta">
-          {{ renewal_link.fiscal_year_label }}
-          ·
-          {{ renewal_link.relationship_type|replace("_", " ")|title }}
-          ·
-          {{ renewal_link.link_source|replace("_", " ")|title }}
-        </div>
-      </div>
-    </div>
-    {% else %}
-    <div class="finance-empty">
-      <h3>Not linked to a Renewal</h3>
-      <p>
-        This Record can be linked from a Renewal's
-        Find Financial Activity page.
-      </p>
-    </div>
-    {% endif %}
   </div>
 
   <div class="content-card">
@@ -324,5 +313,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "finance/_record_name_modal.html" %}
+<script defer src="{{ url_for('finance.static', filename='finance/record_workflow.js') }}"></script>
 <script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
 {% endblock %}
