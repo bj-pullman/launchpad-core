@@ -1497,6 +1497,7 @@ def get_linked_activity_for_cycle(
                 l.linked_at,
                 r.id,
                 r.title,
+                r.friendly_name,
                 r.department_name,
                 r.po_number,
                 r.purchase_date,
@@ -1679,6 +1680,9 @@ def score_candidate(
         renewal.get("renewal_name"),
         candidate_description,
     )
+    if candidate_type == "record":
+        description_similarity = max(description_similarity, text_similarity(
+            renewal.get("renewal_name"), candidate.get("friendly_name")))
 
     if description_similarity >= 0.85:
         score += 30
@@ -1862,7 +1866,7 @@ def find_renewal_candidates(
                     r.vendor_id = ?
                     OR LOWER(COALESCE(v.vendor_name, ''))
                        LIKE LOWER(?)
-                    OR LOWER(COALESCE(r.title, ''))
+                    OR LOWER(COALESCE(r.title, '') || char(10) || COALESCE(r.friendly_name, ''))
                        LIKE LOWER(?)
               )
             ORDER BY r.purchase_date DESC, r.id DESC

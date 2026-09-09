@@ -1,0 +1,14 @@
+<script>
+  (() => {
+    const preference = {{ (current_user_theme|default('light', true))|tojson }};
+    const dark = preference === 'dark' || (preference === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    document.documentElement.dataset.themePreference = preference;
+  })();
+</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='launchpad-theme.css') }}">
+<meta name="launchpad-csrf" content="{{ csrf_token() }}">
+<meta name="launchpad-keep-active" content="{{ 'true' if session_keep_active and session.get('is_authenticated') else 'false' }}">
+<meta name="launchpad-theme-url" content="{{ url_for('launchpad_ui.update_account_theme') }}">
+<meta name="launchpad-activity-url" content="{{ url_for('session_activity') }}">
+<script defer src="{{ url_for('static', filename='launchpad-shell.js') }}"></script>

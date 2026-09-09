@@ -3,6 +3,8 @@ from apps.finance.notification_service import send_finance_test_email
 from modules.core.settings.settings_service import get_setting, get_bool_setting
 from modules.core.identity.identity_db import get_connection as get_identity_connection
 from .db import get_connection
+from .record_names import record_display_name
+_UNSET = object()
 import os
 import secrets
 import json
@@ -526,6 +528,7 @@ def create_record(
     *,
     record_type: str,
     title: str,
+    friendly_name: str | None = None,
     department_name: str,
     vendor_id: int | None = None,
     category_id: int | None = None,
@@ -612,6 +615,10 @@ def create_record(
             ),
         )
         record_id = cursor.lastrowid
+        conn.execute("UPDATE finance_records SET friendly_name = ? WHERE id = ?",
+                     (normalize_text(friendly_name), record_id))
+        from .record_workflow_service import reconcile_record
+        reconcile_record(conn, record_id, created_by_user_id)
 
         conn.execute(
             """
@@ -647,6 +654,7 @@ def list_records_for_department(department_name: str) -> list[dict]:
             SELECT
                 r.*,
                 v.vendor_name,
+                v.friendly_name AS vendor_friendly_name,
                 c.category_name
             FROM finance_records r
             LEFT JOIN finance_vendors v ON v.id = r.vendor_id
@@ -670,6 +678,7 @@ def get_record_by_id(record_id: int) -> dict | None:
             SELECT
                 r.*,
                 v.vendor_name,
+                v.friendly_name AS vendor_friendly_name,
                 c.category_name
             FROM finance_records r
             LEFT JOIN finance_vendors v ON v.id = r.vendor_id
@@ -777,7 +786,7 @@ def build_finance_notification_context(record: dict) -> dict:
         record_url = f"{public_base_url}/finance/records/{record_id}"
 
     context = {
-        "title": record.get("title") or "",
+        "title": record_display_name(record),
         "department_name": record.get("department_name") or "",
         "vendor_name": vendor_name,
         "category_name": category_name,
@@ -1145,6 +1154,7 @@ def update_record(
     record_id: int,
     record_type: str,
     title: str,
+    friendly_name=_UNSET,
     department_name: str,
     vendor_id: int | None = None,
     category_id: int | None = None,
@@ -1247,6 +1257,11 @@ def update_record(
             ),
         )
 
+        if friendly_name is not _UNSET:
+            conn.execute("UPDATE finance_records SET friendly_name = ? WHERE id = ?",
+                         (normalize_text(friendly_name), record_id))
+        from .record_workflow_service import reconcile_record
+        reconcile_record(conn, record_id, changed_by_user_id)
         conn.commit()
 
 def ensure_finance_uploads_dir():
@@ -1573,7 +1588,7 @@ def list_records_for_department_page(
     if q:
         where.append("""
             (
-                LOWER(COALESCE(r.title, '')) LIKE LOWER(?)
+                LOWER(COALESCE(r.title, '') || char(10) || COALESCE(r.friendly_name, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(v.vendor_name, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(c.category_name, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(r.account_code, '')) LIKE LOWER(?)
@@ -1628,6 +1643,7 @@ def list_records_for_department_page(
             SELECT
                 r.*,
                 v.vendor_name,
+                v.friendly_name AS vendor_friendly_name,
                 c.category_name
             FROM finance_records r
             LEFT JOIN finance_vendors v ON v.id = r.vendor_id
@@ -3076,58 +3092,26 @@ def build_import_duplicate_key(mapped: dict) -> str:
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
 
-def find_existing_record_for_import(
-    *,
-    department_name: str | None,
-    po_number: str | None,
-    vendor_id: int | None,
-    title: str | None,
-) -> dict | None:
+def find_existing_record_for_import(*, department_name, po_number=None, vendor_id=None, title=None):
+    from .record_workflow_service import records_for_po
     department_name = normalize_text(department_name)
-    po_number = normalize_text(po_number)
-    title = normalize_text(title)
-
     if not department_name:
         return None
-
     with get_connection() as conn:
-        if po_number:
-            row = conn.execute(
-                """
-                SELECT *
-                FROM finance_records
-                WHERE department_name = ?
-                  AND LOWER(TRIM(COALESCE(po_number, ''))) = LOWER(TRIM(?))
-                  AND status NOT IN ('archived', 'deleted')
-                ORDER BY updated_at DESC, id DESC
-                LIMIT 1
-                """,
-                (department_name, po_number),
-            ).fetchone()
-
-            if row:
-                return dict(row)
-
+        matches = records_for_po(conn, department_name, po_number)
+        if len(matches) > 1:
+            raise ValueError("Multiple active Records share this base PO. Resolve the ambiguity before importing.")
+        if matches:
+            return matches[0]
         if vendor_id and title:
-            row = conn.execute(
-                """
-                SELECT *
-                FROM finance_records
-                WHERE department_name = ?
-                  AND vendor_id = ?
-                  AND LOWER(TRIM(title)) = LOWER(TRIM(?))
-                  AND status NOT IN ('archived', 'deleted')
-                ORDER BY updated_at DESC, id DESC
-                LIMIT 1
-                """,
-                (department_name, vendor_id, title),
-            ).fetchone()
-
-            if row:
-                return dict(row)
-
+            rows = conn.execute("""SELECT * FROM finance_records WHERE department_name=?
+                AND vendor_id=? AND LOWER(TRIM(title))=LOWER(TRIM(?))
+                AND status NOT IN ('archived','deleted')""", (department_name,vendor_id,title)).fetchall()
+            if len(rows) > 1:
+                raise ValueError("Multiple active Records match this vendor and source title.")
+            if rows:
+                return dict(rows[0])
     return None
-
 
 def append_import_note(existing_notes: str | None, new_note: str | None) -> str | None:
     existing_notes = normalize_text(existing_notes)
@@ -3161,30 +3145,15 @@ def upsert_record_from_import(
         imported_cost = parse_cost_to_decimal(mapped.get("cost"))
         new_cost = existing_cost + imported_cost
 
-        update_record(
-            record_id=existing["id"],
-            record_type=mapped.get("record_type") or existing.get("record_type") or "renewal",
-            title=existing.get("title") or title,
-            department_name=existing.get("department_name"),
-            vendor_id=vendor_id or existing.get("vendor_id"),
-            category_id=category_id or existing.get("category_id"),
-            account_code=mapped.get("account_code") or existing.get("account_code"),
-            po_number=mapped.get("po_number") or existing.get("po_number"),
-            purchase_date=mapped.get("purchase_date") or existing.get("purchase_date"),
-            service_start_date=mapped.get("service_start_date") or existing.get("service_start_date"),
-            use_purchase_date_as_start=not bool(mapped.get("service_start_date")),
-            term_length=term_length or existing.get("term_length"),
-            term_unit=mapped.get("term_unit") or existing.get("term_unit"),
-            expiration_date=mapped.get("expiration_date") or existing.get("expiration_date"),
-            renewal_date=mapped.get("renewal_date") or existing.get("renewal_date"),
-            notify_days_before=notify_days_before or existing.get("notify_days_before") or 30,
-            notification_recipients=mapped.get("notification_recipients") or existing.get("notification_recipients"),
-            status=mapped.get("status") or existing.get("status") or "active",
-            cost=str(new_cost.quantize(Decimal("0.01"))),
-            notes=append_import_note(existing.get("notes"), mapped.get("notes")),
-            changed_by_user_id=created_by_user_id,
-        )
-
+        # Imports own accounting amounts. Existing organizational metadata stays
+        # with the user; even empty curated fields are not inferred on reimport.
+        with get_connection() as conn:
+            conn.execute("UPDATE finance_records SET cost=?, updated_at=? WHERE id=?",
+                         (str(new_cost.quantize(Decimal("0.01"))), utc_now_iso(), existing["id"]))
+            conn.execute("""INSERT INTO finance_record_history
+                (finance_record_id,event_type,summary,changed_by_user_id,changed_at)
+                VALUES (?, 'imported', 'Accounting cost updated by Record import.', ?, ?)""",
+                (existing["id"], created_by_user_id, utc_now_iso()))
         return existing["id"], "updated"
 
     record_id = create_record(
@@ -4195,6 +4164,7 @@ def list_active_budget_record_rows_for_department(department_name: str) -> list[
             SELECT
                 r.*,
                 v.vendor_name,
+                v.friendly_name AS vendor_friendly_name,
                 c.category_name
             FROM finance_records r
             LEFT JOIN finance_vendors v ON v.id = r.vendor_id

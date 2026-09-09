@@ -5,6 +5,7 @@
 {% endblock %}
 
 {% block content %}
+<p><a class="btn btn-primary" href="{{ url_for('finance.ledger_review', department_name=department_name) }}">Review Unlinked Transactions</a></p>
 <div class="page-shell finance-shell">
   {% include "finance/_finance_tabs.html" %}
 
@@ -25,6 +26,16 @@
 
   <div class="content-card finance-filter-card">
     <form method="get" class="finance-record-filters">
+      {% if record_id %}<input type="hidden" name="record_id" value="{{ record_id }}">{% endif %}
+      <div class="form-field">
+        <label>Review Status</label>
+        <select name="review_status">
+          <option value="">All</option>
+          {% for value in ['unlinked', 'linked', 'ignored', 'reviewed'] %}
+          <option value="{{ value }}" {% if selected_review_status == value %}selected{% endif %}>{{ value|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="form-field">
         <label>Fiscal Year</label>
         <select name="fiscal_year_code">

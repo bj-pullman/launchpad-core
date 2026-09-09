@@ -1,6 +1,52 @@
 from pathlib import Path
 import sqlite3
 from datetime import datetime, timezone
+from contextlib import contextmanager
+from contextvars import ContextVar
+
+_transaction_connection = ContextVar("finance_transaction_connection", default=None)
+
+
+class _BorrowedConnection:
+    """Existing services may commit; the composing workflow owns this commit."""
+    def __init__(self, conn):
+        self.conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self.conn, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+
+@contextmanager
+def finance_transaction():
+    """Compose existing service operations atomically on one SQLite connection."""
+    existing = _transaction_connection.get()
+    if existing is not None:
+        yield existing
+        return
+    conn = get_connection()
+    token = _transaction_connection.set(_BorrowedConnection(conn))
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _transaction_connection.reset(token)
+        conn.close()
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -10,6 +56,8 @@ DB_PATH = DATA_DIR / "finance.db"
 
 
 def get_connection():
+    if _transaction_connection.get() is not None:
+        return _transaction_connection.get()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -658,6 +706,8 @@ def init_finance_db():
             for row in conn.execute("PRAGMA table_info(finance_records)").fetchall()
         ]
 
+        _ensure_column(conn, "finance_records", "friendly_name", "TEXT NULL")
+
         if "use_purchase_date_as_start" not in finance_record_columns:
             conn.execute(
                 "ALTER TABLE finance_records ADD COLUMN use_purchase_date_as_start INTEGER NOT NULL DEFAULT 1"
@@ -753,4 +803,6 @@ def init_finance_db():
             "TEXT NULL",
         )
 
+        from .ledger_service import ensure_finance_ledger_schema
+        ensure_finance_ledger_schema(conn)
         conn.commit()

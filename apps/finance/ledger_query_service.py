@@ -63,6 +63,7 @@ def list_ledger_transactions(
     vendor_q: str | None = None,
     po_number: str | None = None,
     q: str | None = None,
+    record_id: int | None = None,
     page: int = 1,
     per_page: int = 100,
 ) -> dict:
@@ -74,6 +75,9 @@ def list_ledger_transactions(
     page, per_page, offset = _page_args(page, per_page)
     where = ["l.department_name = ?"]
     params: list[Any] = [department_name]
+    if record_id:
+        where.append("l.linked_record_id = ?")
+        params.append(record_id)
 
     archive_status = normalize_text(archive_status) or "active"
     if archive_status != "all":
@@ -123,7 +127,7 @@ def list_ledger_transactions(
                 OR LOWER(COALESCE(l.budget_unit, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(l.account_code, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(l.po_number, '')) LIKE LOWER(?)
-                OR LOWER(COALESCE(r.title, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(r.title, '') || char(10) || COALESCE(r.friendly_name, '')) LIKE LOWER(?)
             )
             """
         )
@@ -151,7 +155,7 @@ def list_ledger_transactions(
                 l.*,
                 v.friendly_name AS vendor_friendly_name,
                 v.vendor_name AS matched_vendor_name,
-                r.title AS linked_record_title,
+                COALESCE(NULLIF(TRIM(r.friendly_name), ''), r.title) AS linked_record_title,
                 po.status AS purchase_order_status,
                 po.remaining_encumbrance AS po_remaining_encumbrance,
                 ba.current_budget AS budget_current_budget,
@@ -194,7 +198,7 @@ def get_ledger_transaction_detail(transaction_id: int) -> dict | None:
                 l.*,
                 v.friendly_name AS vendor_friendly_name,
                 v.vendor_name AS matched_vendor_name,
-                r.title AS linked_record_title,
+                COALESCE(NULLIF(TRIM(r.friendly_name), ''), r.title) AS linked_record_title,
                 po.po_number AS purchase_order_number,
                 ba.account_title AS budget_account_title,
                 ba.current_budget AS budget_current_budget,
@@ -256,7 +260,7 @@ def list_purchase_orders(
                 LOWER(COALESCE(po.po_number, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(po.vendor_name, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(po.account_code, '')) LIKE LOWER(?)
-                OR LOWER(COALESCE(r.title, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(r.title, '') || char(10) || COALESCE(r.friendly_name, '')) LIKE LOWER(?)
             )
             """
         )
@@ -298,7 +302,7 @@ def list_purchase_orders(
             f"""
             SELECT
                 po.*,
-                r.title AS linked_record_title,
+                COALESCE(NULLIF(TRIM(r.friendly_name), ''), r.title) AS linked_record_title,
                 ba.account_title AS budget_account_title
             FROM finance_purchase_orders po
             LEFT JOIN finance_records r ON r.id = po.linked_record_id
@@ -379,7 +383,7 @@ def get_purchase_order_detail(purchase_order_id: int) -> dict | None:
             """
             SELECT
                 po.*,
-                r.title AS linked_record_title,
+                COALESCE(NULLIF(TRIM(r.friendly_name), ''), r.title) AS linked_record_title,
                 ba.account_title AS budget_account_title,
                 ba.fund AS budget_fund,
                 ba.budget_unit AS budget_unit_full,

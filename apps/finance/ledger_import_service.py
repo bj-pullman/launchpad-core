@@ -11,6 +11,7 @@ from .ledger_accounting_service import (
     parse_ledger_date_for_sql,
     recalculate_budget_account,
     recalculate_purchase_order,
+    refresh_record_fiscal_year_summary,
     resolve_fiscal_year,
     upsert_budget_account,
     upsert_purchase_order,
@@ -277,7 +278,7 @@ def execute_ledger_import(
 
                 purchase_date_raw = normalize_text(mapped.get("purchase_date"))
                 purchase_date = parse_ledger_date_for_sql(purchase_date_raw) or purchase_date_raw
-                fiscal_year = resolve_fiscal_year(conn, purchase_date_raw)
+                fiscal_year = resolve_fiscal_year(conn, purchase_date_raw, department_name)
 
                 vendor_id = None
                 vendor_was_created = False
@@ -355,8 +356,16 @@ def execute_ledger_import(
                     if purchase_order_id:
                         recalculate_purchase_order(conn, purchase_order_id)
 
+                    saved = conn.execute("SELECT linked_record_id, review_status FROM finance_ledger_transactions WHERE id=?", (ledger_id,)).fetchone()
+                    if saved["linked_record_id"]:
+                        refresh_record_fiscal_year_summary(conn, saved["linked_record_id"], ledger["fiscal_year_code"])
+                        touched_record_ids.add(saved["linked_record_id"])
+                        linked_rows += 1
+                        continue
+                    if saved["review_status"] in ("ignored", "reviewed"):
+                        continue
                     record_id, confidence, reason = find_record_match(conn, ledger=ledger)
-                    if not record_id:
+                    if not record_id and confidence == 0:
                         should_create, create_reason = should_create_record_from_ledger(
                             ledger=ledger,
                             match_confidence=confidence,

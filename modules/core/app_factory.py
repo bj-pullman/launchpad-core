@@ -1,11 +1,11 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, request, session, url_for
+from flask import Flask, redirect, request, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from apps.launchpad_ui import launchpad_ui_bp
@@ -43,7 +43,7 @@ from modules.core.identity.rbac_db import init_rbac_db
 from modules.core.auth.setup_service import is_initial_setup_required
 from modules.core.setup.blueprint import bp as setup_bp
 from modules.core.auth.bootstrap_admin import ensure_default_local_admin
-from modules.core.utils.time import format_system_time, utc_now
+from modules.core.utils.time import format_system_time
 from modules.core.settings.settings_service import get_setting, get_bool_setting
 from modules.core.api_keys.service import init_api_keys_db
 from modules.core.bootstrap.finance_seed import ensure_efinance_daily_import_profile
@@ -265,16 +265,6 @@ def create_app() -> Flask:
     app.config["AUTH_REQUIRE_LOGIN_FOR_LAUNCHPAD"] = get_bool_setting(
         "security.require_login_for_launchpad", False
     )
-    app.config["SESSION_IDLE_TIMEOUT_MINUTES"] = int(
-        get_setting("security.session_idle_timeout_minutes", "30") or 30
-    )
-    app.config["SESSION_ABSOLUTE_TIMEOUT_HOURS"] = int(
-        get_setting("security.session_absolute_timeout_hours", "8") or 8
-    )
-    app.config["SESSION_REMEMBER_ME_DAYS"] = int(
-        get_setting("security.session_remember_me_days", "0") or 0
-    )
-
     # Cookie settings
     app.config["SESSION_COOKIE_NAME"] = get_setting(
         "security.cookie_name", "launchpad_session"
@@ -287,9 +277,6 @@ def create_app() -> Flask:
     )
     app.config["SESSION_COOKIE_SAMESITE"] = get_setting(
         "security.cookie_samesite", "Lax"
-    )
-    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
-        hours=app.config["SESSION_ABSOLUTE_TIMEOUT_HOURS"]
     )
 
     app.config["AUTH_EXEMPT_PATH_PREFIXES"] = [
@@ -365,48 +352,8 @@ def create_app() -> Flask:
 
             return redirect(url_for("setup.initial_setup"))
 
-    @app.before_request
-    def enforce_session_rules():
-        path = request.path or "/"
-
-        for prefix in app.config.get("AUTH_EXEMPT_PATH_PREFIXES", []):
-            if path.startswith(prefix):
-                return None
-
-        if session.get("is_authenticated"):
-            now = utc_now()
-
-            authenticated_at = session.get("authenticated_at")
-            last_activity = session.get("last_activity")
-
-            try:
-                if authenticated_at:
-                    auth_dt = datetime.fromisoformat(authenticated_at)
-                    max_hours = app.config.get("SESSION_ABSOLUTE_TIMEOUT_HOURS", 8)
-                    if now - auth_dt > timedelta(hours=max_hours):
-                        session.clear()
-                        flash("Your session expired. Please sign in again.", "error")
-                        return redirect(url_for("auth.login", next=path))
-
-                if last_activity:
-                    last_dt = datetime.fromisoformat(last_activity)
-                    idle_minutes = app.config.get("SESSION_IDLE_TIMEOUT_MINUTES", 30)
-                    if now - last_dt > timedelta(minutes=idle_minutes):
-                        session.clear()
-                        flash("You were signed out due to inactivity.", "error")
-                        return redirect(url_for("auth.login", next=path))
-            except Exception:
-                session.clear()
-                flash("Your session was reset. Please sign in again.", "error")
-                return redirect(url_for("auth.login", next=path))
-
-            session["last_activity"] = now.isoformat()
-
-        if app.config.get("AUTH_REQUIRE_LOGIN_FOR_LAUNCHPAD", False):
-            if not session.get("is_authenticated"):
-                return redirect(url_for("auth.login", next=path))
-
-        return None
+    from modules.core.auth.session_policy import register_session_policy
+    register_session_policy(app)
 
     @app.template_filter("localtime")
     def localtime_filter(value):
@@ -470,7 +417,7 @@ def create_app() -> Flask:
                 current_user_theme = user.get("theme_preference") or "light"
                 session["theme_preference"] = current_user_theme
 
-        if current_user_theme not in ("light", "dark"):
+        if current_user_theme not in ("system", "light", "dark"):
             current_user_theme = "light"
 
         return {

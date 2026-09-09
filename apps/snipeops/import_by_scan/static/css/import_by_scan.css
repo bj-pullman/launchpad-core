@@ -39,7 +39,7 @@
 
 body[data-theme="light"] .sync-btn {
   background: #1d4ed8;
-  color: #ffffff;
+  color:var(--on-accent);
   border-color: #1d4ed8;
 }
 
@@ -256,12 +256,12 @@ body[data-theme="light"] .sync-btn:hover {
 /* Fix dropdown option readability */
 .select select option {
   background: #0f1a2e;   /* dark navy background */
-  color: #ffffff;        /* white text */
+  color:var(--on-accent);        /* white text */
 }
 
 .select select option:checked {
   background: #1e2d4f;
-  color: #ffffff;
+  color:var(--on-accent);
 }
 
 /* caret */
@@ -330,4 +330,3 @@ body[data-theme="light"] .sync-btn:hover {
 }
 tr.ok td{ background: rgba(44, 255, 152, .04); }
 tr.bad td{ background: rgba(255, 83, 83, .05); }
-

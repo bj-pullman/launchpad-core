@@ -16,6 +16,7 @@ from .access_service import (
     can_access_budget_department,
 )
 from .blueprint import bp
+from .fiscal_year_service import list_fiscal_years
 from .service import (
     FINANCE_UPLOADS_DIR,
     archive_record,
@@ -1282,6 +1283,9 @@ def record_create(department_name: str):
         abort(403)
 
     if request.method == "POST":
+        if request.form.get("is_renewal") == "on":
+            from modules.core.auth.session_policy import require_csrf
+            require_csrf()
         vendor_id = request.form.get("vendor_id", type=int)
         category_id = request.form.get("category_id", type=int)
         notify_days_before = request.form.get("notify_days_before", type=int) or 30
@@ -1295,6 +1299,7 @@ def record_create(department_name: str):
         record_id = create_record(
             record_type=(request.form.get("record_type") or "").strip(),
             title=(request.form.get("title") or "").strip(),
+            friendly_name=(request.form.get("friendly_name") or "").strip(),
             department_name=department_name,
             vendor_id=vendor_id,
             category_id=category_id,
@@ -1314,6 +1319,9 @@ def record_create(department_name: str):
             notes=(request.form.get("notes") or "").strip(),
             created_by_user_id=user_id,
         )
+
+        from .record_workflow_routes import save_form_renewal
+        save_form_renewal(record_id, department_name, user_id)
 
         uploads = request.files.getlist("attachment_files")
 
@@ -1355,12 +1363,14 @@ def record_create(department_name: str):
         vendors=list_vendors_all(),
         categories=list_categories(),
         form_mode="create",
+        renewal_fiscal_years=list_fiscal_years(department_name=department_name, include_closed=True),
     )
 
 
 @bp.route("/records/<int:record_id>")
 @login_required
 def record_detail(record_id: int):
+    from .record_workflow_service import record_relationships
     user_id = session.get("user_id")
     if not user_id:
         abort(403)
@@ -1384,6 +1394,8 @@ def record_detail(record_id: int):
         attachments=list_attachments_for_record(record_id),
         history=list_history_for_record(record_id),
         renewal_link=get_record_renewal_link(record_id),
+        relationships=record_relationships(record_id),
+        renewal_fiscal_years=list_fiscal_years(department_name=record["department_name"], include_closed=True),
         can_manage=can_manage_department(
             user_id,
             record["department_name"],
@@ -1411,6 +1423,9 @@ def record_edit(record_id: int):
         abort(403)
 
     if request.method == "POST":
+        if request.form.get("is_renewal") == "on":
+            from modules.core.auth.session_policy import require_csrf
+            require_csrf()
         vendor_id = request.form.get("vendor_id", type=int)
         category_id = request.form.get("category_id", type=int)
         notify_days_before = request.form.get("notify_days_before", type=int) or 30
@@ -1425,6 +1440,7 @@ def record_edit(record_id: int):
             record_id=record_id,
             record_type=(request.form.get("record_type") or "").strip(),
             title=(request.form.get("title") or "").strip(),
+            friendly_name=(request.form.get("friendly_name") or "").strip(),
             department_name=department_name,
             vendor_id=vendor_id,
             category_id=category_id,
@@ -1445,6 +1461,9 @@ def record_edit(record_id: int):
             changed_by_user_id=user_id,
         )
 
+        from .record_workflow_routes import save_form_renewal
+        save_form_renewal(record_id, department_name, user_id)
+
         sent_now, send_message = maybe_send_renewal_notification_for_record(
             record_id,
             changed_by_user_id=user_id,
@@ -1464,7 +1483,9 @@ def record_edit(record_id: int):
         vendors=list_vendors_all(),
         categories=list_categories(),
         form_mode="edit",
+        renewal_link=get_record_renewal_link(record_id),
         record=record,
+        renewal_fiscal_years=list_fiscal_years(department_name=department_name, include_closed=True),
     )
 
 

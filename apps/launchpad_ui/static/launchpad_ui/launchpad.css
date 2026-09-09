@@ -44,7 +44,7 @@ TOP NAV
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(255,255,255,.78);
+  background:var(--panel);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(20,32,51,.06);
 }
@@ -89,7 +89,7 @@ TOP NAV
   gap: 6px;
   background: transparent;
   border: none;
-  color: #334155;
+  color: var(--text);
   padding: 10px 13px;
   border-radius: 8px;
   font-weight: 600;
@@ -128,7 +128,7 @@ TOP NAV
   min-width: 180px;
   display: none;
   padding: 4px;
-  background: #ffffff;
+  background: var(--panel);
   border: 1px solid rgba(20,32,51,.08);
   border-radius: 8px;
   box-shadow: 0 6px 16px rgba(0,0,0,.06);
@@ -145,7 +145,7 @@ TOP NAV
   padding: 8px 10px;
   border-radius: 6px;
   text-decoration: none;
-  color: #334155;
+  color: var(--text);
   font-weight: 500;
 }
 
@@ -308,7 +308,7 @@ BUTTONS
 .btn-primary,
 .button{
   background: linear-gradient(180deg, var(--accent), #2563eb);
-  color: #ffffff;
+  color:var(--on-accent);
   box-shadow: 0 8px 20px rgba(37,99,235,.18);
 }
 
@@ -319,7 +319,7 @@ BUTTONS
 }
 
 .btn-secondary{
-  background: #ffffff;
+  background: var(--panel);
   color: var(--text);
   border-color: var(--border);
 }
@@ -330,7 +330,7 @@ BUTTONS
 
 .btn-danger {
   background: #dc2626;
-  color: #fff;
+  color:var(--on-accent);
   border: 1px solid #dc2626;
 }
 
@@ -347,7 +347,7 @@ BUTTONS
 .btn-success {
   background: #16a34a;
   border-color: #16a34a;
-  color: #fff;
+  color:var(--on-accent);
 }
 
 .btn-success:hover {
@@ -501,7 +501,7 @@ SETTINGS CONTENT / TABLES / FORMS
 
 .badge-success{
   background: rgba(34,197,94,.12);
-  color: #166534;
+  color: var(--success-text);
   border: 1px solid rgba(34,197,94,.16);
 }
 
@@ -572,7 +572,7 @@ SETTINGS CONTENT / TABLES / FORMS
 .form-field textarea{
   width: 100%;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--panel);
   color: var(--text);
   border-radius: 12px;
   padding: 12px 14px;
@@ -666,10 +666,10 @@ MODAL
   position: relative;
   width: min(560px, calc(100vw - 32px));
   margin: 10vh auto 0;
-  background: #fff;
+  background: var(--panel);
   border-radius: 16px;
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -712,7 +712,7 @@ body.confirm-modal-open {
   border: 1px solid rgba(37, 99, 235, 0.2);
   background:
     linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.98)),
-    #ffffff;
+    var(--panel);
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
 }
 
@@ -731,7 +731,7 @@ body.confirm-modal-open {
   flex-shrink: 0;
   border-radius: 16px;
   background: #2563eb;
-  color: #ffffff;
+  color:var(--on-accent);
   font-size: 24px;
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.22);
 }
@@ -747,14 +747,14 @@ body.confirm-modal-open {
 
 .dashboard-setup-card h2 {
   margin: 0 0 6px;
-  color: #0f172a;
+  color: var(--text);
   font-size: 22px;
 }
 
 .dashboard-setup-card p {
   margin: 0;
   max-width: 760px;
-  color: #475569;
+  color: var(--muted);
   line-height: 1.55;
 }
 
@@ -771,9 +771,9 @@ body.confirm-modal-open {
   min-height: 28px;
   padding: 5px 10px;
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--panel);
   border: 1px solid rgba(37, 99, 235, 0.16);
-  color: #334155;
+  color: var(--text);
   font-size: 13px;
   font-weight: 700;
 }
@@ -868,7 +868,7 @@ RESPONSIVE
   border-radius: 14px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--panel);
   box-shadow: var(--shadow);
   font-weight: 600;
   transition: opacity 0.3s ease;
@@ -876,19 +876,19 @@ RESPONSIVE
 
 .flash-success{
   background: rgba(34,197,94,.10);
-  color: #166534;
+  color: var(--success-text);
   border-color: rgba(34,197,94,.18);
 }
 
 .flash-error{
   background: rgba(239,68,68,.10);
-  color: #991b1b;
+  color: var(--error-text);
   border-color: rgba(239,68,68,.18);
 }
 
 .flash-warning{
   background: rgba(245,158,11,.10);
-  color: #92400e;
+  color: var(--warning-text);
   border-color: rgba(245,158,11,.18);
 }
 
@@ -902,7 +902,7 @@ RESPONSIVE
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 12px 14px;
-  background: rgba(255,255,255,.7);
+  background:var(--panel);
 }
 
 .optional-details summary {

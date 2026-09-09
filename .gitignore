@@ -113,3 +113,7 @@ desktop.ini
 AGENTS.md
 tests/*
 !tests/test_staff_status.py
+!tests/test_launchpad_workflows.py
+!tests/test_launchpad_shell.cjs
+!tests/test_media_catalog_student_checkouts.py
+!tests/launchpad_visual_preview.py

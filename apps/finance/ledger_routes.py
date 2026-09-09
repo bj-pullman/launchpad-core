@@ -208,7 +208,7 @@ def intercept_ledger_import_validation_and_execution():
             f"skipped {result['skipped_rows']}, errors {result['error_rows']}.",
             "success",
         )
-        return redirect(url_for("finance.ledger", department_name=department_name))
+        return redirect(url_for("finance.ledger_review", department_name=department_name, run_id=run_id))
     except Exception as exc:
         flash(f"Ledger import execution failed: {exc}", "error")
         return redirect(url_for("finance.imports_validate", department_name=department_name, run_id=run_id))
@@ -224,6 +224,7 @@ def ledger(department_name: str):
     selected_fiscal_year_code = _selected_fiscal_year_code()
     ledger_page = list_ledger_transactions(
         department_name=department_name,
+        record_id=request.args.get("record_id", type=int),
         fiscal_year_code=selected_fiscal_year_code or None,
         archive_status=(request.args.get("archive_status") or "active").strip(),
         ledger_kind=(request.args.get("ledger_kind") or "").strip() or None,
@@ -239,6 +240,7 @@ def ledger(department_name: str):
     return render_template(
         "finance/ledger.html",
         department_name=department_name,
+        record_id=request.args.get("record_id", type=int),
         active_tab="ledger",
         ledger_page=ledger_page,
         ledgers=ledger_page["rows"],

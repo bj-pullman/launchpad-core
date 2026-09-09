@@ -1,0 +1,39 @@
+{% extends "launchpad_ui/base.html" %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">{% endblock %}
+{% block content %}
+<div class="page-shell finance-shell">
+  <a href="{{ url_for('finance.ledger', department_name=department_name) }}">Ledger</a>
+  <h1>{{ 'Ledger Import Complete' if summary else 'Review Unlinked Transactions' }}</h1>
+  {% if summary %}<div class="content-card">
+    <p>{{ summary.transactions }} transactions in this import · {{ summary.linked }} linked · {{ summary.possible }} possible matches · {{ summary.needs_review }} need review · {{ summary.reviewed }} reviewed/ignored</p>
+    <a class="btn btn-primary" href="#review">Review Unlinked Transactions</a>
+  </div>{% endif %}
+  <h2 id="review">{{ review.total }} unresolved transactions</h2>
+  {% for item in review.rows %}
+  <section class="content-card">
+    <h3><a href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">{{ item.description or item.title or 'Ledger transaction' }}</a></h3>
+    <p>{{ item.vendor_name or 'No vendor' }} · PO {{ item.po_number or '—' }} · {{ item.fiscal_year_code or 'Unassigned year' }} · Account {{ item.account_code or '—' }}</p>
+    <p>Paid {{ item.expenditure_amount|currency }} · Encumbrance {{ item.encumbrance_amount|currency }}</p>
+    <p>{{ item.match_reason }}{% if item.confidence %} · Confidence {{ item.confidence }}%{% endif %}</p>
+    {% if can_manage %}
+    <form method="post" data-record-picker data-search-url="{{ url_for('finance.record_search', department_name=department_name) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="ledger_id" value="{{ item.id }}">
+      <label>Choose Record <input type="search" data-record-query placeholder="Friendly name, title, vendor or PO" autocomplete="off"></label>
+      <select name="record_id" aria-label="Matching Records">
+        {% if item.suggested_record_id %}<option value="{{ item.suggested_record_id }}">{{ item.suggested_name }}</option>{% else %}<option value="">Choose a Record</option>{% endif %}
+      </select>
+      <p data-picker-message role="status"></p>
+      <button name="action" value="link" class="btn btn-primary">Link</button>
+      <button name="action" value="create" class="btn btn-secondary">Create Record</button>
+      <button name="action" value="ignore" class="btn btn-secondary">Ignore</button>
+      <button name="action" value="reviewed" class="btn btn-secondary">Mark Reviewed</button>
+    </form>
+    {% endif %}
+  </section>
+  {% else %}<p class="empty-state">No unresolved transactions remain in this view.</p>{% endfor %}
+  {% if review.page > 1 %}<a href="{{ url_for('finance.ledger_review', department_name=department_name, run_id=run_id, page=review.page-1) }}">Previous</a>{% endif %}
+  {% if review.has_next %}<a href="{{ url_for('finance.ledger_review', department_name=department_name, run_id=run_id, page=review.page+1) }}">Next</a>{% endif %}
+</div>
+<script defer src="{{ url_for('finance.static', filename='finance/record_workflow.js') }}"></script>
+{% endblock %}

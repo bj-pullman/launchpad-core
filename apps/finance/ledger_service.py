@@ -53,10 +53,8 @@ def normalize_tc(value: Any) -> str | None:
 
 
 def normalize_po(value: Any) -> str | None:
-    value = normalize_text(value)
-    if not value:
-        return None
-    return value.upper().replace(" ", "")
+    from .ledger_accounting_service import normalize_po as accounting_normalize_po
+    return accounting_normalize_po(value)
 
 
 def parse_money(value: Any) -> Decimal:
@@ -240,22 +238,9 @@ def ensure_finance_ledger_schema(conn=None) -> None:
             conn.close()
 
 
-def resolve_fiscal_year(conn, purchase_date: str | None) -> dict | None:
-    purchase_date = normalize_text(purchase_date)
-    if not purchase_date:
-        return None
-
-    row = conn.execute(
-        """
-        SELECT *
-        FROM finance_fiscal_years
-        WHERE date(?) BETWEEN date(start_date) AND date(end_date)
-        ORDER BY year_number DESC
-        LIMIT 1
-        """,
-        (purchase_date,),
-    ).fetchone()
-    return dict(row) if row else None
+def resolve_fiscal_year(conn, purchase_date: str | None, department_name: str | None = None) -> dict | None:
+    from .ledger_accounting_service import resolve_fiscal_year as accounting_resolve_fiscal_year
+    return accounting_resolve_fiscal_year(conn, purchase_date, department_name)
 
 
 def classify_ledger_kind(transaction_code: str | None) -> str:

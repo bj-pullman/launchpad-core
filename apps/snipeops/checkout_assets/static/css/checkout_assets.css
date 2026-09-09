@@ -23,7 +23,7 @@
 }
 
 body[data-theme="light"] .panel {
-  background: #ffffff;
+  background: var(--panel);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
@@ -76,9 +76,9 @@ body[data-theme="light"] .panel {
 }
 
 body[data-theme="light"] .input {
-  background: #ffffff;
-  color: #0f172a;
-  border-color: #cbd5e1;
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 .input:focus {
@@ -122,12 +122,12 @@ body[data-theme="light"] .btn:hover {
 
 body[data-theme="light"] .btn-ghost {
   background: #eef2f7;
-  color: #0f172a;
+  color: var(--text);
   border-color: #dbe3ef;
 }
 
 body[data-theme="light"] .btn-ghost:hover {
-  background: #e2e8f0;
+  background: var(--border);
 }
 
 .selected-parent {
@@ -153,7 +153,7 @@ body[data-theme="light"] .selected-parent {
 }
 
 body[data-theme="light"] .selected-parent.empty {
-  background: #f8fafc;
+  background: var(--panel2);
 }
 
 .selected-title {
@@ -203,9 +203,9 @@ body[data-theme="light"] .selected-parent-badge {
 }
 
 body[data-theme="light"] .asset-result {
-  background: #f8fafc;
+  background: var(--panel2);
   border-color: #dbe3ef;
-  color: #0f172a;
+  color: var(--text);
 }
 
 .asset-result:hover {
@@ -299,19 +299,19 @@ body[data-theme="light"] .status.bad {
 }
 
 body[data-theme="light"] .delay-label select {
-  background: #ffffff;
-  color: #0f172a;
-  border-color: #cbd5e1;
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 .delay-label select option {
   background: #0f1a2e;
-  color: #ffffff;
+  color:var(--on-accent);
 }
 
 .delay-label select option:checked {
   background: #1e2d4f;
-  color: #ffffff;
+  color:var(--on-accent);
 }
 
 .recent-wrap {
@@ -322,7 +322,7 @@ body[data-theme="light"] .delay-label select {
 }
 
 body[data-theme="light"] .recent-wrap {
-  background: #ffffff;
+  background: var(--panel);
   border-color: #dbe3ef;
 }
 
@@ -358,8 +358,8 @@ body[data-theme="light"] .table td {
 }
 
 body[data-theme="light"] .table thead th {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--panel2);
+  color: var(--muted);
 }
 
 .table tbody td {
@@ -375,11 +375,11 @@ body[data-theme="light"] .table thead th {
 }
 
 body[data-theme="light"] .table tbody td {
-  background: #ffffff;
+  background: var(--panel);
 }
 
 body[data-theme="light"] .table tbody tr:nth-child(even) td {
-  background: #f8fafc;
+  background: var(--panel2);
 }
 
 body[data-theme="light"] .table tbody tr:hover td {
@@ -435,13 +435,13 @@ body[data-theme="light"] .table tr.bad td {
 }
 
 body[data-theme="light"] .btn-mini {
-  background: #ffffff;
-  color: #0f172a;
-  border-color: #cbd5e1;
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 body[data-theme="light"] .btn-mini:hover {
-  background: #f1f5f9;
+  background: var(--panel2);
 }
 
 .snipe-link {
@@ -484,7 +484,7 @@ body[data-theme="light"] .btn-mini:hover {
 .btn-danger {
   background: rgba(185, 28, 28, 0.92);
   border-color: rgba(248, 113, 113, 0.45);
-  color: #ffffff;
+  color:var(--on-accent);
 }
 
 .btn-danger:hover {
@@ -494,7 +494,7 @@ body[data-theme="light"] .btn-mini:hover {
 body[data-theme="light"] .btn-danger {
   background: #b91c1c;
   border-color: #b91c1c;
-  color: #ffffff;
+  color:var(--on-accent);
 }
 
 body[data-theme="light"] .btn-danger:hover {
@@ -531,9 +531,9 @@ body[data-theme="light"] .btn-danger:hover {
 }
 
 body[data-theme="light"] .checkout-modal-card {
-  background: #ffffff;
-  color: #0f172a;
-  border-color: #e2e8f0;
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
 }
 
@@ -563,7 +563,7 @@ body[data-theme="light"] .checkout-modal-card {
 }
 
 body[data-theme="light"] .confirm-detail-card {
-  background: #f8fafc;
+  background: var(--panel2);
   border-color: #dbe3ef;
 }
 
@@ -609,7 +609,7 @@ body[data-theme="light"] .confirm-detail-heading {
 }
 
 body[data-theme="light"] .confirm-detail-value {
-  color: #0f172a;
+  color: var(--text);
 }
 
 .checkout-modal-actions {
@@ -849,7 +849,7 @@ body[data-theme="light"] .pending-checkin-row td {
 .btn-primary {
   background: rgba(37, 99, 235, 0.92);
   border-color: rgba(96, 165, 250, 0.55);
-  color: #ffffff;
+  color:var(--on-accent);
 }
 
 .btn-primary:hover {
@@ -859,7 +859,7 @@ body[data-theme="light"] .pending-checkin-row td {
 body[data-theme="light"] .btn-primary {
   background: #1d4ed8;
   border-color: #1d4ed8;
-  color: #ffffff;
+  color:var(--on-accent);
 }
 
 body[data-theme="light"] .btn-primary:hover {

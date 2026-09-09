@@ -1,0 +1,22 @@
+<section class="content-card" data-renewal-workflow data-search-url="{{ url_for('finance.record_renewal_search', department_name=department_name) }}">
+  <h2>Renewal</h2>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <p><label><input type="checkbox" name="is_renewal" data-renewal-toggle> This Record is a Renewal</label></p>
+  <div data-renewal-fields hidden>
+    <p><label>Action <select name="renewal_mode" data-renewal-mode>
+      <option value="create">Create Renewal from this Record</option>
+      <option value="link">Link to Existing Renewal</option>
+    </select></label></p>
+    <p class="muted">Creation uses the Record name, vendor, category, cost and dates. The purchase date determines the fiscal year when possible; otherwise the department's current year is used.</p>
+    <p><label>Fiscal Year for a New Cycle
+      <select name="fiscal_year_id"><option value="">Infer from Record / current year</option>
+      {% for year in renewal_fiscal_years|default([]) %}<option value="{{ year.id }}">{{ year.friendly_name or year.code }}</option>{% endfor %}
+      </select></label></p>
+    <div data-renewal-picker hidden>
+      <label>Find a Renewal <input type="search" data-renewal-query placeholder="Name, vendor, PO, category, department…" autocomplete="off"></label>
+      <select data-renewal-results aria-label="Matching Renewal and fiscal year"><option value="">Choose a Renewal</option></select>
+      <input type="hidden" name="renewal_cycle_id"><input type="hidden" name="renewal_id">
+    </div>
+    <p data-renewal-message class="muted" role="status"></p>
+  </div>
+</section>

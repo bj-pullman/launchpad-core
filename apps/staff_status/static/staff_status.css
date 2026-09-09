@@ -78,7 +78,7 @@ SUBNAV
   font-weight: 700;
   font-size: 14px;
   color: var(--ss-text);
-  background: #ffffff;
+  background: var(--panel);
   border: 1px solid var(--ss-border);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
@@ -175,7 +175,7 @@ KIOSK HEADER
   padding: 0 16px;
   border: 1px solid rgba(37, 99, 235, 0.22);
   border-radius: 999px;
-  background: #eff6ff;
+  background: var(--info-bg);
   color: #1d4ed8;
   font: inherit;
   font-size: 15px;
@@ -187,7 +187,7 @@ KIOSK HEADER
 
 .kiosk-refresh-btn:hover,
 .kiosk-refresh-btn:focus-visible {
-  background: #dbeafe;
+  background: var(--info-bg);
   border-color: rgba(37, 99, 235, 0.35);
   outline: none;
   color: #1e40af;
@@ -213,7 +213,7 @@ KIOSK SUCCESS OVERLAY
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.82);
+  background:var(--panel);
   border-radius: var(--ss-radius);
   z-index: 20;
 }
@@ -228,7 +228,7 @@ KIOSK SUCCESS OVERLAY
   padding: 28px 24px;
   border: 1px solid var(--ss-border);
   border-radius: 18px;
-  background: #ffffff;
+  background: var(--panel);
   box-shadow: var(--ss-shadow);
   text-align: center;
 }
@@ -295,7 +295,7 @@ KIOSK FORM
 .staff-status-kiosk-form select {
   width: 100%;
   border: 1px solid var(--ss-border);
-  background: #ffffff;
+  background: var(--panel);
   color: var(--ss-text);
   border-radius: 12px;
   padding: 14px 16px;
@@ -323,14 +323,14 @@ KIOSK FORM
   padding: 14px 16px;
   border: 1px solid var(--ss-border);
   border-radius: 14px;
-  background: #ffffff;
+  background: var(--panel);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .staff-status-kiosk-location-card:hover {
   border-color: #93c5fd;
-  background: #f8fbff;
+  background: var(--panel2);
 }
 
 .staff-status-kiosk-location-card input {
@@ -358,9 +358,9 @@ KIOSK USER PICKER
   min-height: 44px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: #f8fafc;
+  background: var(--panel2);
   border: 1px solid rgba(15, 23, 42, 0.08);
-  color: #475569;
+  color: var(--muted);
   font-size: 15px;
   font-weight: 700;
 }
@@ -374,7 +374,7 @@ KIOSK USER PICKER
   padding: 0 10px;
   border-radius: 999px;
   background: #2563eb;
-  color: #ffffff;
+  color:var(--on-accent);
   font-size: 14px;
   font-weight: 800;
 }
@@ -383,7 +383,7 @@ KIOSK USER PICKER
   margin-top: 10px;
   border-radius: 16px;
   border: 1px solid rgba(15, 23, 42, 0.1);
-  background: #ffffff;
+  background: var(--panel);
   overflow: hidden;
 }
 
@@ -397,8 +397,8 @@ KIOSK USER PICKER
   cursor: pointer;
   list-style: none;
   font-weight: 800;
-  color: #0f172a;
-  background: linear-gradient(to bottom, #ffffff, #f8fafc);
+  color: var(--text);
+  background: linear-gradient(to bottom, var(--panel), var(--panel2));
 }
 
 .staff-status-kiosk-user-picker summary::-webkit-details-marker {
@@ -407,7 +407,7 @@ KIOSK USER PICKER
 
 .staff-status-kiosk-user-picker summary::after {
   content: "▾";
-  color: #64748b;
+  color: var(--muted);
   transition: transform 0.16s ease;
 }
 
@@ -418,14 +418,14 @@ KIOSK USER PICKER
 .staff-status-kiosk-picker-hint {
   font-size: 13px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--muted);
   margin-left: auto;
 }
 
 .staff-status-kiosk-user-picker-body {
   padding: 12px;
   border-top: 1px solid rgba(15, 23, 42, 0.08);
-  background: #f8fafc;
+  background: var(--panel2);
 }
 
 .staff-status-kiosk-user-tools {
@@ -439,8 +439,8 @@ KIOSK USER PICKER
   width: 100%;
   border: 1px solid rgba(15, 23, 42, 0.14);
   border-radius: 12px;
-  background: #ffffff;
-  color: #0f172a;
+  background: var(--panel);
+  color: var(--text);
   padding: 12px 14px;
   font: inherit;
 }
@@ -448,8 +448,8 @@ KIOSK USER PICKER
 .staff-status-kiosk-clear-users-btn {
   appearance: none;
   border: 1px solid rgba(15, 23, 42, 0.14);
-  background: #ffffff;
-  color: #334155;
+  background: var(--panel);
+  color: var(--text);
   border-radius: 12px;
   padding: 12px 14px;
   font: inherit;
@@ -458,7 +458,7 @@ KIOSK USER PICKER
 }
 
 .staff-status-kiosk-clear-users-btn:hover {
-  background: #f8fafc;
+  background: var(--panel2);
 }
 
 .staff-status-kiosk-user-list {
@@ -470,7 +470,7 @@ KIOSK USER PICKER
   padding: 6px;
   margin-top: 10px;
   border-radius: 16px;
-  background: #ffffff;
+  background: var(--panel);
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
@@ -482,8 +482,8 @@ KIOSK USER PICKER
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.1);
-  background: #ffffff;
-  color: #0f172a;
+  background: var(--panel);
+  color: var(--text);
   font-weight: 700;
   cursor: pointer;
   line-height: 1.25;
@@ -496,7 +496,7 @@ KIOSK USER PICKER
 }
 
 .staff-status-kiosk-user-option:has(input[type="checkbox"]:checked) {
-  background: #eff6ff;
+  background: var(--info-bg);
   border-color: rgba(37, 99, 235, 0.35);
   color: #1d4ed8;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
@@ -512,7 +512,7 @@ BUTTONS / RESULTS
   border: 1px solid transparent;
   border-radius: 14px;
   background: #2563eb;
-  color: #ffffff;
+  color:var(--on-accent);
   font: inherit;
   font-size: 15px;
   font-weight: 700;
@@ -549,24 +549,24 @@ BUTTONS / RESULTS
 }
 
 .btn-success {
-  background: #ecfdf3;
-  color: #166534;
+  background: var(--success-bg);
+  color: var(--success-text);
   border: 1px solid #bbf7d0;
 }
 
 .btn-success:hover {
-  background: #dcfce7;
+  background: var(--success-bg);
   color: #14532d;
 }
 
 .btn-danger {
-  background: #fef2f2;
-  color: #991b1b;
+  background: var(--error-bg);
+  color: var(--error-text);
   border: 1px solid #fecaca;
 }
 
 .btn-danger:hover {
-  background: #fee2e2;
+  background: var(--error-bg);
   color: #7f1d1d;
 }
 
@@ -705,7 +705,7 @@ URL CARDS
   padding: 12px 14px;
   font-size: 15px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  background: #f8fafc;
+  background: var(--panel2);
   color: var(--ss-text);
 }
 
@@ -717,7 +717,7 @@ URL CARDS
   padding: 0 18px;
   border-radius: 12px;
   background: var(--ss-accent);
-  color: #ffffff;
+  color:var(--on-accent);
   text-decoration: none;
   font-weight: 700;
   white-space: nowrap;
@@ -726,7 +726,7 @@ URL CARDS
 
 .staff-status-url-btn:hover {
   background: #1d4ed8;
-  color: #ffffff;
+  color:var(--on-accent);
   text-decoration: none;
 }
 
@@ -770,7 +770,7 @@ LOCATIONS ADMIN
   padding: 10px 14px;
   border-radius: 12px;
   background: linear-gradient(180deg, var(--ss-accent), #2563eb);
-  color: #ffffff;
+  color:var(--on-accent);
   font-weight: 700;
   box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
 }
@@ -844,7 +844,7 @@ ABSENCE FILTER PANEL
   margin: 0;
   padding: 10px 16px;
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--panel);
   border: 1px solid var(--ss-border);
   color: var(--ss-text);
   font-weight: 700;
@@ -856,7 +856,7 @@ ABSENCE FILTER PANEL
 }
 
 .staff-status-filter-details summary:hover {
-  background: #f8fbff;
+  background: var(--panel2);
   border-color: rgba(59, 130, 246, 0.18);
 }
 
@@ -895,7 +895,7 @@ ABSENCE FILTER PANEL
 .staff-status-table-filters input[type="url"] {
   width: 100%;
   border: 1px solid var(--ss-border);
-  background: #ffffff;
+  background: var(--panel);
   color: var(--ss-text);
   border-radius: 12px;
   padding: 12px 14px;
@@ -913,7 +913,7 @@ ABSENCE FILTER PANEL
   outline: none;
   border-color: #93c5fd;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .staff-status-table-filters .form-actions {
@@ -936,12 +936,12 @@ ABSENCE FILTER PANEL
   padding: 12px 14px;
   border: 1px solid rgba(37, 99, 235, 0.16);
   border-radius: 12px;
-  background: #eff6ff;
+  background: var(--info-bg);
   color: #1e3a8a;
 }
 
 .staff-status-report-period span {
-  color: #334155;
+  color: var(--text);
 }
 
 .staff-status-modal-form {
@@ -1022,7 +1022,7 @@ ACTIVE FILTERS
   padding: 6px 12px;
   border-radius: 10px;
   border: 1px solid var(--ss-border);
-  background: #ffffff;
+  background: var(--panel);
   color: var(--ss-text);
   text-decoration: none;
   font-weight: 700;
@@ -1030,7 +1030,7 @@ ACTIVE FILTERS
 }
 
 .staff-status-clear-filters-link:hover {
-  background: #f8fbff;
+  background: var(--panel2);
   border-color: rgba(59, 130, 246, 0.18);
 }
 
@@ -1047,7 +1047,7 @@ USER FILTER OPTIONS
   padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--panel2);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
@@ -1134,7 +1134,7 @@ TABLE ACTIONS
   padding: 8px 12px;
   border: 1px solid rgba(20, 32, 51, 0.1);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--panel);
   font-weight: 700;
 }
 
@@ -1150,7 +1150,7 @@ TABLE ACTIONS
   padding: 8px;
   border: 1px solid rgba(20, 32, 51, 0.1);
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--panel);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
   z-index: 20;
 }
@@ -1160,7 +1160,7 @@ TABLE ACTIONS
   padding: 8px 10px;
   border-radius: 8px;
   text-decoration: none;
-  color: #142033;
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -1191,7 +1191,7 @@ OVERVIEW / CHARTS
   font-weight: 700;
   font-size: 14px;
   color: var(--ss-text);
-  background: #ffffff;
+  background: var(--panel);
   border: 1px solid var(--ss-border);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
@@ -1306,7 +1306,7 @@ MODALS
 
 .modal-card {
   width: min(520px, 100%);
-  background: #ffffff;
+  background: var(--panel);
   border-radius: 16px;
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.35);
   padding: 24px;
@@ -1330,11 +1330,11 @@ MODALS
   font-size: 28px;
   line-height: 1;
   cursor: pointer;
-  color: #475569;
+  color: var(--muted);
 }
 
 .modal-close:hover {
-  color: #0f172a;
+  color: var(--text);
 }
 
 .staff-status-modal-card {
@@ -1381,28 +1381,28 @@ ABSENCE REQUEST REVIEW
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--ss-border);
-  background: #f8fafc;
-  color: #334155;
+  background: var(--panel2);
+  color: var(--text);
   font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .staff-status-request-status-pending {
-  background: #fffbeb;
-  color: #92400e;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   border-color: #fde68a;
 }
 
 .staff-status-request-status-approved {
   background: #ecfdf5;
-  color: #166534;
+  color: var(--success-text);
   border-color: #bbf7d0;
 }
 
 .staff-status-request-status-rejected {
-  background: #fef2f2;
-  color: #991b1b;
+  background: var(--error-bg);
+  color: var(--error-text);
   border-color: #fecaca;
 }
 
@@ -1417,7 +1417,7 @@ ABSENCE REQUEST REVIEW
   padding: 12px;
   border: 1px solid var(--ss-border);
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--panel2);
 }
 
 .staff-status-review-grid dt {
@@ -1439,12 +1439,12 @@ ABSENCE REQUEST REVIEW
   padding: 14px;
   border: 1px solid var(--ss-border);
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .staff-status-review-note p {
   margin: 0;
-  color: #334155;
+  color: var(--text);
   line-height: 1.5;
 }
 

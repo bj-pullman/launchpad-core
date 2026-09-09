@@ -21,7 +21,8 @@
       rel="stylesheet"
     />
     {% block extra_css %}{% endblock %}
-  </head>
+    {% include "layouts/_theme_head.html" %}
+</head>
   <body>
     <header class="topbar">
       <div class="container topbar-inner">
@@ -65,6 +66,7 @@
             </button>
 
             <div class="nav-dropdown-menu nav-dropdown-menu-sm">
+              {% include "layouts/_theme_picker.html" %}
               <a href="{{ url_for('auth.logout') }}" class="nav-dropdown-item"
                 >Logout</a
               >

@@ -21,7 +21,7 @@
   --dropdown-shadow: 0 6px 16px rgba(0,0,0,.06);
 }
 
-body[data-theme="dark"]{
+:root[data-theme="dark"]{
   --bg:#0b1220;
   --bg2:#0b1220;
   --panel:#0f1a2e;
@@ -48,7 +48,7 @@ body[data-theme="dark"]{
 }
 
 .snipeops-shell .page-header h1 {
-    color: #0f172a;
+    color: var(--text);
 } */
 
 *{ box-sizing:border-box; }
@@ -62,7 +62,7 @@ body{
   color: var(--text);
 }
 
-body[data-theme="dark"]{
+:root[data-theme="dark"]{
   background:
     radial-gradient(1200px 600px at 10% 0%, rgba(122,162,255,.18), transparent 60%),
     radial-gradient(900px 600px at 90% 10%, rgba(101,213,255,.12), transparent 55%),
@@ -134,8 +134,8 @@ body[data-theme="dark"]{
   background: rgba(59,130,246,.05);
 }
 
-body[data-theme="dark"] .topbar-link:hover,
-body[data-theme="dark"] .nav-dropdown-btn:hover{
+:root[data-theme="dark"] .topbar-link:hover,
+:root[data-theme="dark"] .nav-dropdown-btn:hover{
   background: rgba(255,255,255,.05);
 }
 
@@ -244,8 +244,8 @@ body[data-theme="dark"] .nav-dropdown-btn:hover{
   color: var(--text);
 }
 
-body[data-theme="dark"] .theme-option:hover,
-body[data-theme="dark"] .theme-option.active{
+:root[data-theme="dark"] .theme-option:hover,
+:root[data-theme="dark"] .theme-option.active{
   background: rgba(255,255,255,.06);
 }
 
@@ -363,7 +363,7 @@ body[data-theme="dark"] .theme-option.active{
   border-radius: 14px;
   border: 1px solid rgba(154, 52, 18, 0.25);
 
-  background: linear-gradient(to bottom, #ffffff, #fff7ed);
+  background: linear-gradient(to bottom, var(--panel), #fff7ed);
   color: #9a3412;
 
   font-size: 14px;
@@ -382,7 +382,7 @@ body[data-theme="dark"] .theme-option.active{
 .snipeops-warning-button:hover {
   transform: translateY(-2px);
   border-color: rgba(154, 52, 18, 0.4);
-  background: linear-gradient(to bottom, #ffffff, #ffedd5);
+  background: linear-gradient(to bottom, var(--panel), #ffedd5);
   box-shadow: 0 14px 26px rgba(124, 45, 18, 0.14);
 }
 
@@ -451,7 +451,7 @@ body[data-theme="dark"] .theme-option.active{
 }
 
 .snipeops-btn-primary {
-  color: #fff;
+  color:var(--on-accent);
   border-color: color-mix(in srgb, var(--accent) 75%, #000);
   background: linear-gradient(180deg, var(--accent2), var(--accent));
   box-shadow: 0 10px 22px rgba(59, 130, 246, .22);
@@ -608,33 +608,33 @@ body[data-theme="dark"] .theme-option.active{
 }
 
 .sync-badge-create {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .sync-badge-update {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-bg);
+  color: var(--warning-text);
 }
 
 .sync-badge-match {
-  background: #e2e8f0;
-  color: #334155;
+  background: var(--border);
+  color: var(--text);
 }
 
-body[data-theme="dark"] .sync-badge-create {
+:root[data-theme="dark"] .sync-badge-create {
   background: rgba(34, 197, 94, .16);
   color: #86efac;
 }
 
-body[data-theme="dark"] .sync-badge-update {
+:root[data-theme="dark"] .sync-badge-update {
   background: rgba(245, 158, 11, .16);
   color: #fcd34d;
 }
 
-body[data-theme="dark"] .sync-badge-match {
+:root[data-theme="dark"] .sync-badge-match {
   background: rgba(148, 163, 184, .16);
-  color: #cbd5e1;
+  color: var(--border);
 }
 
 .sync-diff {
@@ -686,7 +686,7 @@ body[data-theme="dark"] .sync-badge-match {
   color: #9a3412;
 }
 
-body[data-theme="dark"] .sync-badge-reference {
+:root[data-theme="dark"] .sync-badge-reference {
   background: rgba(249, 115, 22, .16);
   color: #fdba74;
 }

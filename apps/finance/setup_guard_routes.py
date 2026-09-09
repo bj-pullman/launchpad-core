@@ -145,6 +145,13 @@ def require_fiscal_year_setup_for_finance_operations():
     if not department_name:
         return None
 
+    user_id = session.get("user_id")
+    if not user_id:
+        from modules.core.auth.decorators import _auth_failed_response
+        return _auth_failed_response()
+    if not can_access_department(user_id, department_name):
+        abort(403)
+
     status = get_finance_setup_status(department_name)
     if status["is_ready"]:
         return None

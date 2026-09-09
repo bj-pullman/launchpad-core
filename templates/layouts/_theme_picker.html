@@ -1,0 +1,7 @@
+<div class="theme-menu" role="group" aria-label="Theme">
+  <span class="theme-menu-label">Theme</span>
+  {% for value, label in [('system','System'),('light','Light'),('dark','Dark')] %}
+  <button type="button" class="theme-option" data-theme-choice="{{ value }}" aria-pressed="{{ 'true' if current_user_theme == value else 'false' }}">{{ label }}</button>
+  {% endfor %}
+  <span data-theme-message role="status"></span>
+</div>

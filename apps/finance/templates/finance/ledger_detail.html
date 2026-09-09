@@ -124,7 +124,7 @@
         </div>
 
         <div class="finance-linked-item-body">
-          <div><span>Title</span><strong>{{ linked_record.title }}</strong></div>
+          <div><span>Title</span><strong>{{ linked_record|record_name }}</strong></div>
           <div><span>Status</span><strong>{{ linked_record.status|replace("_", " ")|title }}</strong></div>
           <div><span>Vendor</span><strong>{{ linked_record.vendor_name or "-" }}</strong></div>
           <div><span>Cost</span><strong>

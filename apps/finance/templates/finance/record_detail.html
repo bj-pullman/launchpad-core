@@ -20,8 +20,9 @@
 
   <div class="page-header">
     <div>
-      <h1>{{ record.title }}</h1>
+      <h1>{{ record|record_name }}</h1>
       <p class="page-subtitle">{{ department_name }} record detail.</p>
+      <p class="muted">Imported/System Title: {{ record.title }}</p>
     </div>
     <div class="page-header-actions">
       {% if can_manage %}
@@ -58,6 +59,24 @@
     </div>
   </div>
 
+  <section class="content-card">
+    <h2>Relationships</h2>
+    <p>Ledger Activity:
+    {% for activity in relationships.activity %}
+      <a href="{{ url_for('finance.ledger', department_name=department_name, record_id=record.id, fiscal_year_code=activity.fiscal_year_code) }}">{{ activity.count }} transactions · {{ activity.fiscal_year_code or 'Unassigned year' }}</a>
+    {% else %}No linked transactions{% endfor %}</p>
+    <p>Purchase Orders:
+    {% for po in relationships.orders %}<a href="{{ url_for('finance.purchase_order_detail', purchase_order_id=po.id) }}">PO {{ po.normalized_po_number }} · {{ po.fiscal_year_code }}</a>
+    {% else %}{{ record.po_number or 'None' }}{% endfor %}</p>
+    <p>Renewal: {% if renewal_link %}<a href="{{ url_for('finance.renewal_detail', renewal_id=renewal_link.renewal_id) }}">{{ renewal_link.renewal_name }} — {{ renewal_link.fiscal_year_label }}</a>{% else %}Not linked{% endif %}</p>
+  </section>
+  {% if can_manage and not renewal_link and record.status not in ('deleted','archived') %}
+  <form method="post" action="{{ url_for('finance.record_renewal_save', department_name=department_name, record_id=record.id) }}">
+    {% include "finance/_record_renewal_form.html" %}
+    <button class="btn btn-primary" type="submit">Save Renewal Link</button>
+  </form>
+  {% endif %}
+  <script defer src="{{ url_for('finance.static', filename='finance/record_workflow.js') }}"></script>
   <div class="content-card">
     <div class="table-wrap">
       <table class="data-table">
@@ -68,7 +87,7 @@
           </tr>
           <tr>
             <th>Vendor</th>
-            <td>{{ record.friendly_name or record.vendor_name or "—" }}</td>
+            <td>{{ record.vendor_friendly_name or record.vendor_name or "—" }}</td>
           </tr>
           <tr>
             <th>Category</th>

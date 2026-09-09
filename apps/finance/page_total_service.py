@@ -39,7 +39,7 @@ def purchase_order_totals(
                 LOWER(COALESCE(po.po_number, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(po.vendor_name, '')) LIKE LOWER(?)
                 OR LOWER(COALESCE(po.account_code, '')) LIKE LOWER(?)
-                OR LOWER(COALESCE(r.title, '')) LIKE LOWER(?)
+                OR LOWER(COALESCE(r.title, '') || char(10) || COALESCE(r.friendly_name, '')) LIKE LOWER(?)
             )
             """
         )

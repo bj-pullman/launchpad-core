@@ -462,7 +462,7 @@
                             record_id=record.id
                           ) }}"
                         >
-                          {{ record.title }}
+                          {{ record|record_name }}
                         </a>
                       </td>
 
@@ -547,7 +547,7 @@
                         </h3>
 
                         <p class="finance-modal-subtitle">
-                          {{ record.title }}
+                          {{ record|record_name }}
                         </p>
                       </div>
 

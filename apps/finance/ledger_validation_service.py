@@ -5,7 +5,8 @@ from typing import Any
 
 from .db import get_connection
 from .ledger_import_service import _mapped_row, _should_skip_ledger_row
-from .ledger_service import normalize_text, resolve_fiscal_year
+from .ledger_service import normalize_text
+from .ledger_accounting_service import resolve_fiscal_year
 from .service import (
     find_vendor_for_import,
     get_import_profile_fields,
@@ -68,7 +69,7 @@ def validate_ledger_import(
                 tc_info = get_transaction_code_info(transaction_code)
                 ledger_kind = tc_info["ledger_kind"]
                 purchase_date = normalize_text(mapped.get("purchase_date"))
-                fiscal_year = resolve_fiscal_year(conn, purchase_date)
+                fiscal_year = resolve_fiscal_year(conn, purchase_date, normalize_text(mapped.get("department_name")))
 
                 if transaction_code:
                     transaction_codes[transaction_code] += 1

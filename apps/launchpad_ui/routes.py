@@ -589,7 +589,47 @@ def settings_saml():
 @login_required
 @require_permission("launchpad.settings.security.view")
 def settings_security():
-    return render_template("launchpad_ui/settings/security.html", active_section="security")
+    from modules.core.auth.session_policy import read_policy
+    return render_template("launchpad_ui/settings/security.html", active_section="security", policy=read_policy())
+
+
+@launchpad_ui_bp.post("/settings/security")
+@login_required
+@require_permission("launchpad.settings.security.manage")
+def save_security():
+    from modules.core.auth.session_policy import require_csrf
+    require_csrf()
+    limits = {"session_idle_timeout_minutes": 525600,
+              "session_absolute_timeout_hours": 87600,
+              "session_remember_me_days": 3650}
+    values = {}
+    try:
+        for key, maximum in limits.items():
+            value = int(request.form.get(key, ""))
+            if not 0 <= value <= maximum:
+                raise ValueError()
+            values[key] = str(value)
+    except (ValueError, TypeError):
+        flash("Enter valid non-negative session durations.", "error")
+        return redirect(url_for("launchpad_ui.settings_security"))
+    for key in ("session_keep_active", "require_login_for_launchpad", "cookie_secure", "cookie_httponly"):
+        values[key] = "true" if request.form.get(key) == "on" else "false"
+    same_site = request.form.get("cookie_samesite", "Lax")
+    if same_site not in ("Lax", "Strict", "None") or (same_site == "None" and values["cookie_secure"] != "true"):
+        flash("Choose a valid SameSite policy. SameSite None requires Secure cookies.", "error")
+        return redirect(url_for("launchpad_ui.settings_security"))
+    values["cookie_samesite"] = same_site
+    from modules.core.settings.settings_db import get_connection
+    from modules.core.settings.settings_service import utc_now_iso
+    with get_connection() as conn:
+        for key, value in values.items():
+            conn.execute("""INSERT INTO app_settings
+                (setting_key, setting_value, is_sensitive, created_at, updated_at)
+                VALUES (?, ?, 0, ?, ?) ON CONFLICT(setting_key) DO UPDATE SET
+                setting_value=excluded.setting_value, updated_at=excluded.updated_at""",
+                ("security." + key, value, utc_now_iso(), utc_now_iso()))
+    flash("Session policy saved. It applies on the next request.", "success")
+    return redirect(url_for("launchpad_ui.settings_security"))
 
 
 @launchpad_ui_bp.route("/settings/groups")
@@ -2315,9 +2355,11 @@ def settings_integrations_api():
 @launchpad_ui_bp.route("/account/theme", methods=["POST"])
 @login_required
 def update_account_theme():
+    from modules.core.auth.session_policy import require_csrf
+    require_csrf()
     theme_preference = (request.form.get("theme_preference") or "").strip().lower()
 
-    if theme_preference not in ("light", "dark"):
+    if theme_preference not in ("system", "light", "dark"):
         return jsonify({"ok": False, "error": "Invalid theme."}), 400
 
     user_id = session.get("user_id")

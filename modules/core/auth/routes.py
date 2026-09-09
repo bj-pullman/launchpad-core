@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import wraps
 from urllib.parse import urlsplit
 
@@ -131,7 +131,8 @@ def get_auth_settings():
     return get_auth_runtime_settings()
 
 def start_user_session(local_user: dict, userinfo: dict, remember: bool = False):
-    session.clear()
+    from .session_policy import clear_session, read_policy
+    clear_session("reauthentication")
 
     now = utcnow()
     user_id = local_user["id"]
@@ -149,16 +150,13 @@ def start_user_session(local_user: dict, userinfo: dict, remember: bool = False)
     session["last_activity"] = to_iso(now)
     session["remember_me"] = bool(remember)
 
-    remember_days = int(current_app.config.get("SESSION_REMEMBER_ME_DAYS", 0))
-    if remember and remember_days > 0:
-        session.permanent = True
-        current_app.permanent_session_lifetime = timedelta(days=remember_days)
-    else:
-        session.permanent = False
+    remember_days = read_policy()["session_remember_me_days"]
+    session.permanent = bool(remember and remember_days > 0)
 
 
 def logout_current_user():
-    session.clear()
+    from .session_policy import clear_session
+    clear_session("logout")
 
 
 def login_required(view_func):

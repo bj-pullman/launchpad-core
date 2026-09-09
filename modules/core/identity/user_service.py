@@ -99,7 +99,7 @@ def get_user_by_id(user_id: int):
 
 def normalize_theme_preference(value: str | None) -> str:
     value = (value or "light").strip().lower()
-    if value not in ("light", "dark"):
+    if value not in ("system", "light", "dark"):
         return "light"
     return value
 

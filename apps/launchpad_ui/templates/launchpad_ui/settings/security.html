@@ -1,62 +1,38 @@
 {% extends "launchpad_ui/base.html" %}
-
 {% block title %}Security Settings - Launchpad{% endblock %}
-
-{% block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}"
-/>
-{% endblock %}
-
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('launchpad_ui.static', filename='launchpad_ui/settings.css') }}">{% endblock %}
 {% block content %}
-<div class="settings-main-layout">
-  <div class="settings-back-row">
-    <a href="{{ url_for('launchpad_ui.settings_index') }}" class="settings-back-link">
-      <span class="settings-back-link-icon" aria-hidden="true">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="3.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-      </span>
-      <span>Settings</span>
-    </a>
-  </div>
-
-  <div class="settings-page-header">
-    <div>
-      <h1>Security Settings</h1>
-      <p class="muted">
-        Configure local authentication security, MFA, password policy, lockout controls, and session behavior.
-      </p>
-    </div>
-  </div>
-
-  <div class="settings-narrow-stack">
-    <div class="settings-provider-card">
-      <h2>Security</h2>
-      <p class="muted">
-        Local login, TOTP MFA, lockout rules, session controls, and password policy will live here.
-      </p>
-
-      <div class="settings-form-section">
-        <div class="empty-state" style="margin-top: 0;">
-          <h3>Coming soon</h3>
-          <p class="muted">
-            This section is ready for the new settings layout and can be expanded as security controls are added.
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="page-shell settings-narrow-stack">
+  <a href="{{ url_for('launchpad_ui.settings_index') }}">Settings</a>
+  <h1>Security Settings</h1>
+  <form method="post" class="content-card settings-provider-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2>Session Management</h2>
+    {% for key, label, options in [
+      ('session_idle_timeout_minutes', 'Idle Session Timeout', [(30,'30 minutes'),(60,'1 hour'),(120,'2 hours'),(240,'4 hours'),(480,'8 hours'),(0,'Never')]),
+      ('session_absolute_timeout_hours', 'Absolute Session Lifetime', [(8,'8 hours'),(12,'12 hours'),(24,'24 hours'),(168,'7 days'),(720,'30 days'),(0,'Never')])
+    ] %}
+    <p><label for="{{ key }}">{{ label }}</label>
+    <select id="{{ key }}" name="{{ key }}">
+      {% if policy[key] not in options|map(attribute=0)|list %}<option selected value="{{ policy[key] }}">Current: {{ policy[key] }}</option>{% endif %}
+      {% for value, text in options %}<option value="{{ value }}" {% if policy[key] == value %}selected{% endif %}>{{ text }}</option>{% endfor %}
+    </select></p>
+    {% endfor %}
+    <p><label for="remember-days">Remember Me Duration (days)</label>
+      <input id="remember-days" name="session_remember_me_days" type="number" min="0" max="3650" value="{{ policy.session_remember_me_days }}"></p>
+    <p class="muted">Zero disables persistent sign-in. Remember Me keeps the cookie across browser restarts; idle and absolute limits still apply.</p>
+    <p><label><input type="checkbox" name="session_keep_active" {% if policy.session_keep_active %}checked{% endif %}> Keep Active Browser Sessions Alive</label></p>
+    <p class="muted">Recent interaction in a visible Launchpad tab keeps idle activity current. An unattended tab does not.</p>
+    <p><label><input type="checkbox" name="require_login_for_launchpad" {% if policy.require_login_for_launchpad %}checked{% endif %}> Require sign-in for Launchpad</label></p>
+    <h2>Browser Cookie Security</h2>
+    <p><label><input type="checkbox" name="cookie_secure" {% if policy.cookie_secure %}checked{% endif %}> Secure cookies (HTTPS only)</label></p>
+    <p><label><input type="checkbox" name="cookie_httponly" {% if policy.cookie_httponly %}checked{% endif %}> HttpOnly cookies</label></p>
+    <p><label for="cookie-samesite">SameSite</label>
+      <select id="cookie-samesite" name="cookie_samesite">
+      {% for value in ['Lax','Strict','None'] %}<option {% if policy.cookie_samesite == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+      </select></p>
+    <p class="muted">Secure requires HTTPS. SameSite Lax supports normal sign-in redirects; Strict can interfere with external sign-in. None requires Secure.</p>
+    <button class="btn btn-primary" type="submit">Save Session Policy</button>
+  </form>
 </div>
 {% endblock %}

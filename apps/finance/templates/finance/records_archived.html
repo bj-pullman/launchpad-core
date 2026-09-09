@@ -147,10 +147,10 @@
                   </td>
                 {% endif %}
                 <td>
-                  <div class="finance-record-title">{{ record.title }}</div>
+                  <div class="finance-record-title">{{ record|record_name }}</div>
                   <div class="finance-meta">{{ record.record_type|title }}</div>
                 </td>
-                <td>{{ record.friendly_name or record.vendor_name or "—" }}</td>
+                <td>{{ record.vendor_friendly_name or record.vendor_name or "—" }}</td>
                 <td>{{ record.category_name or "—" }}</td>
                 <td>{{ record.renewal_date|localdate if record.renewal_date else "—" }}</td>
                 <td>{{ record.cost|currency if record.cost is not none else "—" }}</td>

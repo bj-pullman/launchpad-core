@@ -124,8 +124,12 @@
         </div>
 
         <div class="finance-field finance-field-span-2">
-          <label for="title">Item / Service Name</label>
+          <label for="title">Imported/System Title</label>
           <input type="text" id="title" name="title" required value="{{ record.title if form_mode == 'edit' else '' }}">
+          <p class="muted">Imported/System Title. Enter a title for manually created Records.</p>
+          <label for="friendly_name">Friendly Name (optional)</label>
+          <input type="text" id="friendly_name" name="friendly_name" value="{{ record.friendly_name or '' if form_mode == 'edit' else '' }}">
+          <p class="muted">When Friendly Name is blank, Launchpad uses the Record title.</p>
         </div>
 
         <div class="finance-field">
@@ -282,6 +286,10 @@
         </div>
       </div>
 
+      <div data-po-preview="{{ url_for('finance.record_po_preview', department_name=department_name) }}" data-record-id="{{ record.id if form_mode == 'edit' else '' }}" role="status"></div>
+      {% if not renewal_link %}{% include "finance/_record_renewal_form.html" %}{% else %}
+      <p>Renewal: <a href="{{ url_for('finance.renewal_detail', renewal_id=renewal_link.renewal_id) }}">{{ renewal_link.renewal_name }} — {{ renewal_link.fiscal_year_label }}</a></p>
+      {% endif %}
       <div class="finance-form-actions">
         <a class="btn btn-secondary finance-action-link"
            href="{{ url_for('finance.records', department_name=department_name) }}">
@@ -299,5 +307,6 @@
 {% endblock %}
 
 {% block extra_js %}
+<script defer src="{{ url_for('finance.static', filename='finance/record_workflow.js') }}"></script>
 <script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
 {% endblock %}

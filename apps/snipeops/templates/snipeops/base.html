@@ -19,9 +19,10 @@
   </script>
 
   {% block head %}{% endblock %}
+  {% include "layouts/_theme_head.html" %}
 </head>
 
-<body data-theme="{{ current_user_theme or 'light' }}">
+<body>
   <header class="topbar">
     <div class="container topbar-inner">
       <div class="topbar-left">
@@ -116,19 +117,7 @@
           </button>
 
           <div class="nav-dropdown-menu nav-dropdown-menu-sm">
-            <div class="theme-menu">
-              <div class="theme-menu-label">Theme</div>
-
-              <button type="button" class="theme-option {% if current_user_theme != 'dark' %}active{% endif %}"
-                data-theme-choice="light">
-                Light
-              </button>
-
-              <button type="button" class="theme-option {% if current_user_theme == 'dark' %}active{% endif %}"
-                data-theme-choice="dark">
-                Dark
-              </button>
-            </div>
+            {% include "layouts/_theme_picker.html" %}
 
             <div class="nav-dropdown-divider"></div>
 
@@ -163,32 +152,7 @@
     </div>
   </footer>
 
-  <script>
-    document.addEventListener("click", async function (event) {
-      const button = event.target.closest("[data-theme-choice]");
-      if (!button) return;
 
-      const theme = button.getAttribute("data-theme-choice");
-      const body = new URLSearchParams();
-      body.set("theme_preference", theme);
-
-      const response = await fetch("{{ url_for('launchpad_ui.update_account_theme') }}", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body
-      });
-
-      if (!response.ok) return;
-
-      document.body.setAttribute("data-theme", theme);
-
-      document.querySelectorAll(".theme-option").forEach(function (item) {
-        item.classList.toggle("active", item.getAttribute("data-theme-choice") === theme);
-      });
-    });
-  </script>
 
   {% block scripts %}{% endblock %}
 </body>

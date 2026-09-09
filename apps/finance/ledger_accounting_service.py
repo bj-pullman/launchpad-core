@@ -54,7 +54,7 @@ def po_line_item(value: Any) -> str | None:
     return None
 
 
-def resolve_fiscal_year(conn, purchase_date: str | None) -> dict | None:
+def resolve_fiscal_year(conn, purchase_date: str | None, department_name: str | None = None) -> dict | None:
     purchase_date_sql = parse_ledger_date_for_sql(purchase_date)
     if not purchase_date_sql:
         return None
@@ -64,10 +64,11 @@ def resolve_fiscal_year(conn, purchase_date: str | None) -> dict | None:
         SELECT *
         FROM finance_fiscal_years
         WHERE date(?) BETWEEN date(start_date) AND date(end_date)
+          AND (? IS NULL OR department_name = ?)
         ORDER BY year_number DESC
         LIMIT 1
         """,
-        (purchase_date_sql,),
+        (purchase_date_sql, department_name, department_name),
     ).fetchone()
     return dict(row) if row else None
 
@@ -339,33 +340,36 @@ def find_record_match(conn, *, ledger: dict) -> tuple[int | None, int, str | Non
     description = (normalize_text(ledger.get("description")) or normalize_text(ledger.get("title")) or "").lower()
 
     if normalized_po:
-        row = conn.execute(
+        rows = conn.execute(
             """
-            SELECT id FROM finance_records
+            SELECT id, po_number FROM finance_records
             WHERE department_name = ?
-              AND UPPER(REPLACE(COALESCE(po_number, ''), ' ', '')) = ?
-              AND status NOT IN ('deleted')
-            ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, id DESC
-            LIMIT 1
+              AND status NOT IN ('deleted', 'archived')
             """,
-            (department_name, normalized_po),
-        ).fetchone()
-        if row:
-            return row["id"], 100, "Exact base PO match"
+            (department_name,),
+        ).fetchall()
+        matches = [row for row in rows if normalize_po(row["po_number"]) == normalized_po]
+        if len(matches) == 1:
+            return matches[0]["id"], 100, "Exact base PO match"
+        if len(matches) > 1:
+            return None, 50, "Multiple active Records share the base PO; choose a Record"
 
     if vendor_id and account_code and description:
         rows = conn.execute(
             """
-            SELECT id, title
+            SELECT id, title, friendly_name
             FROM finance_records
             WHERE department_name = ?
               AND vendor_id = ?
               AND COALESCE(account_code, '') = ?
-              AND status NOT IN ('deleted')
+              AND status NOT IN ('deleted', 'archived')
             """,
             (department_name, vendor_id, account_code),
         ).fetchall()
-        matches = [row for row in rows if row["title"] and row["title"].lower() in description]
+        matches = [row for row in rows if any(
+            name and name.strip() and name.lower() in description
+            for name in (row["title"], row["friendly_name"])
+        )]
         if len(matches) == 1:
             return matches[0]["id"], 90, "Vendor, account, and title keyword match"
 

@@ -111,7 +111,7 @@
             {% for record in related_records %}
               <tr class="finance-row-link" data-href="{{ url_for('finance.record_detail', record_id=record.id) }}">
                 <td>
-                  <div class="finance-record-title">{{ record.title }}</div>
+                  <div class="finance-record-title">{{ record|record_name }}</div>
                   <div class="finance-meta">{{ record.record_type|title }}</div>
                 </td>
                 <td>{{ record.department_name }}</td>
