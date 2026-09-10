@@ -499,16 +499,52 @@ class RouteTests(IsolatedDatabases):
         with self.app.test_request_context():
             saved=policy.read_policy()
             self.assertEqual(saved["session_idle_timeout_minutes"],0)
+            self.assertEqual(saved["session_absolute_timeout_hours"],0)
+            self.assertEqual(saved["session_remember_me_days"],7)
             self.assertTrue(saved["session_keep_active"])
             self.assertTrue(saved["require_login_for_launchpad"])
             self.assertTrue(saved["cookie_secure"])
             self.assertTrue(saved["cookie_httponly"])
             self.assertEqual(saved["cookie_samesite"],"Strict")
+
+        # Each boolean is saved from its own checkbox; omitted checkboxes do not
+        # inherit or force the state of another security control.
+        self.client.post("/settings/security", data={"csrf_token":"test-csrf",
+            "session_idle_timeout_minutes":"30","session_absolute_timeout_hours":"8",
+            "session_remember_me_days":"0","require_login_for_launchpad":"on","cookie_samesite":"Lax"})
+        with self.app.test_request_context():
+            saved=policy.read_policy()
+            self.assertEqual(saved["session_remember_me_days"],0)
+            self.assertTrue(saved["require_login_for_launchpad"])
+            self.assertFalse(saved["cookie_secure"])
+            self.assertFalse(saved["cookie_httponly"])
+            self.assertEqual(saved["cookie_samesite"],"Lax")
+
+        self.client.post("/settings/security", data={"csrf_token":"test-csrf",
+            "session_idle_timeout_minutes":"60","session_absolute_timeout_hours":"12",
+            "session_remember_me_days":"30","cookie_secure":"on","cookie_httponly":"on",
+            "cookie_samesite":"Strict"})
+        with self.app.test_request_context():
+            saved=policy.read_policy()
+            self.assertFalse(saved["require_login_for_launchpad"])
+            self.assertTrue(saved["cookie_secure"])
+            self.assertTrue(saved["cookie_httponly"])
+            self.assertEqual(saved["cookie_samesite"],"Strict")
+
         invalid=self.client.post("/settings/security",data={"csrf_token":"test-csrf","session_idle_timeout_minutes":"0",
             "session_absolute_timeout_hours":"0","session_remember_me_days":"7","cookie_samesite":"None"})
         self.assertEqual(invalid.status_code,302)
         with self.app.test_request_context():
             self.assertEqual(policy.read_policy()["cookie_samesite"],"Strict")
+
+        valid_none=self.client.post("/settings/security",data={"csrf_token":"test-csrf","session_idle_timeout_minutes":"0",
+            "session_absolute_timeout_hours":"0","session_remember_me_days":"0","cookie_secure":"on",
+            "cookie_samesite":"None"})
+        self.assertEqual(valid_none.status_code,302)
+        with self.app.test_request_context():
+            saved=policy.read_policy()
+            self.assertEqual(saved["cookie_samesite"],"None")
+            self.assertTrue(saved["cookie_secure"])
         with self.client.session_transaction() as data:
             data["user_permissions"]=["launchpad.settings.security.view"]
         response=self.client.post("/settings/security",data={"csrf_token":"test-csrf"},headers={"Accept":"application/json"})
@@ -567,8 +603,13 @@ class RouteTests(IsolatedDatabases):
         html = self.client.get("/settings/security").get_data(as_text=True)
         for marker in ("settings-main-layout", "settings-content-card", "form-grid-equal",
                        "checkbox-card", "Session Management", "Advanced Session / Cookie Settings",
-                       "Save Security Settings"):
+                       "settings-security-session-grid", "Recommended for production:",
+                       "cookie-samesite-error", "security_settings.js", "Save Security Settings"):
             self.assertIn(marker, html)
+        security_script = (ROOT/"apps/launchpad_ui/static/launchpad_ui/security_settings.js").read_text(encoding="utf-8")
+        for marker in ("SameSite=None requires Secure cookies.", "setCustomValidity",
+                       "preventDefault", "reportValidity"):
+            self.assertIn(marker, security_script)
         with self.client.session_transaction() as data:
             data["user_permissions"] = ["launchpad.settings.security.view"]
         html = self.client.get("/settings/security").get_data(as_text=True)

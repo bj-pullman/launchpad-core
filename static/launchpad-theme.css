@@ -295,6 +295,25 @@ option { background: var(--lp-surface-input); color: var(--lp-text); }
 .flash-success, .alert-success { background: var(--lp-success-bg); color: var(--lp-success-text); }
 .flash-warning, .alert-warning { background: var(--lp-warning-bg); color: var(--lp-warning-text); }
 .flash-info, .alert-info { background: var(--lp-info-bg); color: var(--lp-info-text); }
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: .25rem .55rem;
+  border: 1px solid var(--lp-border);
+  border-radius: 999px;
+  background: var(--lp-surface-subtle);
+  color: var(--lp-text);
+  font-size: .75rem;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.status-badge-success { background: var(--lp-success-bg); color: var(--lp-success-text); border-color: color-mix(in srgb, var(--lp-success-text) 32%, var(--lp-border)); }
+.status-badge-info { background: var(--lp-info-bg); color: var(--lp-info-text); border-color: color-mix(in srgb, var(--lp-info-text) 32%, var(--lp-border)); }
+.status-badge-warning { background: var(--lp-warning-bg); color: var(--lp-warning-text); border-color: color-mix(in srgb, var(--lp-warning-text) 32%, var(--lp-border)); }
+.status-badge-danger { background: var(--lp-error-bg); color: var(--lp-error-text); border-color: color-mix(in srgb, var(--lp-error-text) 32%, var(--lp-border)); }
+.status-badge-muted { background: var(--lp-surface-subtle); color: var(--lp-text-muted); border-color: var(--lp-border); }
+.status-badge-neutral { background: var(--lp-surface-card); color: var(--lp-text); border-color: var(--lp-border); }
 :focus-visible { outline: 2px solid var(--lp-focus); outline-offset: 3px; }
 [hidden] { display: none !important; }
 

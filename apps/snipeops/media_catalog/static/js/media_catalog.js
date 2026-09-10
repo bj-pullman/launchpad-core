@@ -269,8 +269,8 @@ function renderAssetCatalog(data) {
     }
 
     $("assetCatalogResults").innerHTML = `
-        <div class="asset-catalog-table-wrap">
-            <table class="asset-catalog-table">
+        <div class="sheet-wrap asset-catalog-table-wrap">
+            <table class="media-sheet asset-catalog-table">
                 <thead><tr>
                     <th>Asset Tag</th><th>Serial Number</th><th>Name</th><th>Model</th>
                     <th>Status</th><th>Assigned To</th><th>Location</th><th>Current Cart</th><th>Actions</th>
@@ -288,7 +288,7 @@ function renderAssetCatalog(data) {
                         <td class="mono">${escapeHtml(asset.serial || "—")}</td>
                         <td>${escapeHtml(asset.name || "—")}</td>
                         <td>${escapeHtml(asset.model_name || "—")}</td>
-                        <td><span class="asset-status-badge">${escapeHtml(asset.status_name || "Unknown")}</span></td>
+                        <td><span class="status-badge status-badge-${escapeHtml(asset.status_tone || "neutral")}">${escapeHtml(asset.status_name || "Unknown")}</span></td>
                         <td>${escapeHtml(assignedTo)}</td>
                         <td>${escapeHtml(asset.location_name || currentCart?.location_name || "—")}</td>
                         <td>${escapeHtml(cartLabel)}</td>

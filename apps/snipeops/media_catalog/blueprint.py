@@ -268,6 +268,23 @@ def _asset_unavailable_reason(asset: dict | None) -> str | None:
     return None
 
 
+def _asset_status_tone(status_name: str | None) -> str:
+    """Map free-form Snipe-IT status labels to shared semantic badge tones."""
+    status = re.sub(r"\s+", " ", str(status_name or "").strip().lower())
+
+    if any(label in status for label in ("lost", "stolen")):
+        return "danger"
+    if any(label in status for label in ("retired", "archived", "disposed")):
+        return "muted"
+    if any(label in status for label in ("in repair", "pending", "needs attention", "undeployable")):
+        return "warning"
+    if status == "deployable" or "ready to deploy" in status:
+        return "success"
+    if "deployed" in status or "assigned" in status or status == "active":
+        return "info"
+    return "neutral"
+
+
 def _can_target_cart(user: dict | None, cart_id: int) -> bool:
     if not user:
         return False
@@ -282,6 +299,7 @@ def _can_target_cart(user: dict | None, cart_id: int) -> bool:
 
 def _catalog_asset_payload(asset: dict) -> dict:
     payload = _asset_payload(asset) or {}
+    payload["status_tone"] = _asset_status_tone(asset.get("status_name"))
     current_cart = None
     if str(asset.get("assigned_type") or "").lower() == "asset" and asset.get("assigned_id"):
         parent = get_asset(int(asset["assigned_id"]))

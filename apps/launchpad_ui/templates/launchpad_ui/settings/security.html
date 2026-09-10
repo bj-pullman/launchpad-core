@@ -33,7 +33,7 @@
           <p class="muted">Set how long signed-in sessions remain valid and when active users are refreshed.</p>
         </div>
 
-        <div class="form-grid-equal">
+        <div class="form-grid-equal settings-security-session-grid">
           {% for key, label, help_text, options in [
             ('session_idle_timeout_minutes', 'Idle Session Timeout', 'Ends a session after this period without recent interaction.', [(30,'30 minutes'),(60,'1 hour'),(120,'2 hours'),(240,'4 hours'),(480,'8 hours'),(0,'Never')]),
             ('session_absolute_timeout_hours', 'Absolute Session Lifetime', 'Ends a session at this age even when the user remains active.', [(8,'8 hours'),(12,'12 hours'),(24,'24 hours'),(168,'7 days'),(720,'30 days'),(0,'Never')])
@@ -78,17 +78,27 @@
         <div class="settings-security-toggle-grid">
           <label class="settings-security-toggle">
             <input type="checkbox" name="require_login_for_launchpad" {% if policy.require_login_for_launchpad %}checked{% endif %} {% if not can_manage_security %}disabled{% endif %}>
-            <span class="settings-checkbox-copy"><strong>Require sign-in for Launchpad</strong><small>Requires authentication before users can access the Launchpad shell or any enabled application. Disable only if Launchpad intentionally allows unauthenticated access.</small></span>
+            <span class="settings-checkbox-copy"><strong>Require sign-in for Launchpad</strong><small>Requires users to authenticate before accessing Launchpad and enabled applications.</small></span>
           </label>
           <label class="settings-security-toggle">
             <input type="checkbox" name="cookie_secure" {% if policy.cookie_secure %}checked{% endif %} {% if not can_manage_security %}disabled{% endif %}>
-            <span class="settings-checkbox-copy"><strong>Secure cookies</strong><small>Restricts the session cookie to HTTPS connections. This should normally be enabled in production. Over plain HTTP, browsers will not send the cookie.</small></span>
+            <span class="settings-checkbox-copy">
+              <strong>Secure cookies</strong>
+              <small>Sends the session cookie only over HTTPS. Recommended for production HTTPS deployments.</small>
+              {% if not policy.cookie_secure %}<small class="settings-security-caution">Session cookies may be sent over non-HTTPS connections.</small>{% endif %}
+            </span>
           </label>
           <label class="settings-security-toggle">
             <input type="checkbox" name="cookie_httponly" {% if policy.cookie_httponly %}checked{% endif %} {% if not can_manage_security %}disabled{% endif %}>
-            <span class="settings-checkbox-copy"><strong>HttpOnly cookies</strong><small>Prevents browser JavaScript from reading the session cookie, reducing the risk of session theft from client-side scripts. This should normally remain enabled.</small></span>
+            <span class="settings-checkbox-copy">
+              <strong>HttpOnly cookies</strong>
+              <small>Prevents browser scripts from reading the session cookie. Recommended to remain enabled.</small>
+              {% if not policy.cookie_httponly %}<small class="settings-security-caution">Disabling this increases exposure of the session cookie to client-side scripts.</small>{% endif %}
+            </span>
           </label>
         </div>
+
+        <p class="settings-security-recommendation alert-info" role="note"><strong>Recommended for production:</strong> Require sign-in, Secure cookies, and HttpOnly cookies should normally all be enabled when Launchpad is served over HTTPS.</p>
 
         <div class="form-grid-equal settings-security-cookie-grid">
           <div class="form-field">
@@ -96,6 +106,7 @@
             <select id="cookie-samesite" name="cookie_samesite" {% if not can_manage_security %}disabled{% endif %}>
               {% for value in ['Lax','Strict','None'] %}<option {% if policy.cookie_samesite == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
             </select>
+            <small id="cookie-samesite-error" class="settings-field-error" role="alert" hidden>SameSite=None requires Secure cookies.</small>
             <div class="settings-samesite-help">
               <strong>Recommended: Lax</strong>
               <small><b>Lax</b> is the default for normal Launchpad use and external sign-in redirects.</small>
@@ -116,4 +127,7 @@
     {% endif %}
   </form>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('launchpad_ui.static', filename='launchpad_ui/security_settings.js') }}"></script>
 {% endblock %}

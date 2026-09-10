@@ -141,7 +141,13 @@ class AssetCatalogTests(unittest.TestCase):
             self.assertIn(marker, template)
         for marker in ("searchAssetCatalog", "searchAssetCatalogCarts", "confirmAssetCatalogAdd"):
             self.assertIn(marker, script)
+        self.assertIn('class="media-sheet asset-catalog-table"', script)
+        self.assertIn("status-badge-${escapeHtml(asset.status_tone", script)
         self.assertIn(".asset-catalog-table", stylesheet)
+        shared_stylesheet = (PROJECT_ROOT / "static/launchpad-theme.css").read_text(encoding="utf-8")
+        for marker in (".status-badge-success", ".status-badge-info", ".status-badge-warning",
+                       ".status-badge-muted", ".status-badge-danger", ".status-badge-neutral"):
+            self.assertIn(marker, shared_stylesheet)
         environment = Environment(loader=FileSystemLoader([
             PROJECT_ROOT / "templates",
             PROJECT_ROOT / "apps/snipeops/templates",
@@ -156,12 +162,34 @@ class AssetCatalogTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["results"][0]["current_cart"]["id"], 100)
         self.assertFalse(payload["results"][0]["can_add_to_cart"])
+        self.assertEqual(payload["results"][0]["status_tone"], "success")
         with self.client.session_transaction() as data:
             data["user_permissions"] = []
         self.assertEqual(
             self.client.get("/snipeops/media-catalog/api/asset-catalog?q=CB101").status_code,
             403,
         )
+
+    def test_asset_statuses_map_to_semantic_badge_tones(self):
+        expected = {
+            "Ready to Deploy": "success",
+            "Deployable": "success",
+            "Deployed": "info",
+            "Assigned": "info",
+            "Active": "info",
+            "In Repair": "warning",
+            "Pending": "warning",
+            "Needs Attention": "warning",
+            "Retired": "muted",
+            "Archived": "muted",
+            "Lost": "danger",
+            "Stolen": "danger",
+            "Custom Snipe Status": "neutral",
+            None: "neutral",
+        }
+        for status, tone in expected.items():
+            with self.subTest(status=status):
+                self.assertEqual(blueprint._asset_status_tone(status), tone)
 
     def test_standard_cart_picker_is_owned_scope_and_global_manager_sees_all(self):
         self.login()
