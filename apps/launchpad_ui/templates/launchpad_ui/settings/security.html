@@ -75,18 +75,18 @@
           <p class="muted">Apply browser cookie safeguards and control whether Launchpad requires authentication.</p>
         </div>
 
-        <div class="settings-checkbox-stack">
-          <label class="checkbox-card">
+        <div class="settings-security-toggle-grid">
+          <label class="settings-security-toggle">
             <input type="checkbox" name="require_login_for_launchpad" {% if policy.require_login_for_launchpad %}checked{% endif %} {% if not can_manage_security %}disabled{% endif %}>
-            <span class="settings-checkbox-copy"><strong>Require sign-in for Launchpad</strong><small>Protects the Launchpad shell and enabled applications behind authentication.</small></span>
+            <span class="settings-checkbox-copy"><strong>Require sign-in for Launchpad</strong><small>Requires authentication before users can access the Launchpad shell or any enabled application. Disable only if Launchpad intentionally allows unauthenticated access.</small></span>
           </label>
-          <label class="checkbox-card">
+          <label class="settings-security-toggle">
             <input type="checkbox" name="cookie_secure" {% if policy.cookie_secure %}checked{% endif %} {% if not can_manage_security %}disabled{% endif %}>
-            <span class="settings-checkbox-copy"><strong>Secure cookies</strong><small>Sends session cookies over HTTPS connections only.</small></span>
+            <span class="settings-checkbox-copy"><strong>Secure cookies</strong><small>Restricts the session cookie to HTTPS connections. This should normally be enabled in production. Over plain HTTP, browsers will not send the cookie.</small></span>
           </label>
-          <label class="checkbox-card">
+          <label class="settings-security-toggle">
             <input type="checkbox" name="cookie_httponly" {% if policy.cookie_httponly %}checked{% endif %} {% if not can_manage_security %}disabled{% endif %}>
-            <span class="settings-checkbox-copy"><strong>HttpOnly cookies</strong><small>Prevents browser scripts from reading the session cookie.</small></span>
+            <span class="settings-checkbox-copy"><strong>HttpOnly cookies</strong><small>Prevents browser JavaScript from reading the session cookie, reducing the risk of session theft from client-side scripts. This should normally remain enabled.</small></span>
           </label>
         </div>
 
@@ -96,7 +96,12 @@
             <select id="cookie-samesite" name="cookie_samesite" {% if not can_manage_security %}disabled{% endif %}>
               {% for value in ['Lax','Strict','None'] %}<option {% if policy.cookie_samesite == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
             </select>
-            <small>Lax supports normal sign-in redirects. Strict can block external sign-in. None requires Secure cookies.</small>
+            <div class="settings-samesite-help">
+              <strong>Recommended: Lax</strong>
+              <small><b>Lax</b> is the default for normal Launchpad use and external sign-in redirects.</small>
+              <small><b>Strict</b> applies the strongest cross-site restriction but can interfere with authentication flows.</small>
+              <small><b>None</b> allows cross-site cookie use and requires Secure cookies over HTTPS.</small>
+            </div>
           </div>
         </div>
       </section>

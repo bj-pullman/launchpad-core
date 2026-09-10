@@ -35,6 +35,9 @@
         <button type="button" class="settings-tab active" data-tab="dashboard">
             Dashboard
         </button>
+        <button type="button" class="settings-tab" data-tab="asset-catalog">
+            Asset Catalog
+        </button>
         <button type="button" class="settings-tab" data-tab="cart-management">
             Cart Management
         </button>
@@ -125,6 +128,35 @@
                     </div>
                 </section>
             </div>
+        </div>
+
+        <div class="settings-tab-panel" data-panel="asset-catalog">
+            <section class="media-panel media-wide asset-catalog-panel">
+                <div class="media-section-head asset-catalog-heading">
+                    <div>
+                        <h2>Asset Catalog</h2>
+                        <p class="muted">Search synchronized Snipe-IT assets, confirm their assignment, and add eligible devices to an authorized cart.</p>
+                    </div>
+                </div>
+
+                <form id="assetCatalogSearchForm" class="asset-catalog-search" role="search">
+                    <label class="media-label" for="assetCatalogSearch">Search Assets</label>
+                    <div class="media-row">
+                        <input id="assetCatalogSearch" class="media-input" type="search" autocomplete="off"
+                            placeholder="Search by Asset Tag, Serial Number, Device Name, Model, User, Location...">
+                        <button class="media-btn" type="submit">Search</button>
+                    </div>
+                    <p class="muted asset-catalog-search-help">Exact asset-tag and serial matches appear first. Results come from the synchronized local Snipe-IT catalog.</p>
+                </form>
+
+                <div id="assetCatalogSummary" class="asset-catalog-summary muted" aria-live="polite">
+                    Enter an asset tag, serial number, name, model, user, location, or cart.
+                </div>
+                <div id="assetCatalogResults" class="asset-catalog-results">
+                    <div class="asset-catalog-empty">Search to locate an asset.</div>
+                </div>
+                <div id="assetCatalogPagination" class="media-pagination asset-catalog-pagination"></div>
+            </section>
         </div>
 
         <div class="settings-tab-panel" data-panel="cart-management">
@@ -718,6 +750,35 @@
     </div>
 </div>
 
+<div id="assetCatalogCartModal" class="media-modal hidden" role="dialog" aria-modal="true" aria-labelledby="assetCatalogCartTitle">
+    <div class="media-modal-card asset-catalog-cart-modal-card">
+        <div class="modal-head">
+            <div>
+                <p class="media-eyebrow">Asset Catalog</p>
+                <h2 id="assetCatalogCartTitle">Add Asset to Cart</h2>
+                <p class="muted">Choose an authorized destination cart.</p>
+            </div>
+            <button id="closeAssetCatalogCartBtn" class="mini-btn" type="button">Close</button>
+        </div>
+
+        <div id="assetCatalogSelectedAsset" class="asset-catalog-selected-asset"></div>
+        <div class="form-card">
+            <label id="assetCatalogCartSearchLabel" class="media-label" for="assetCatalogCartSearch">Search My Carts</label>
+            <div class="media-row">
+                <input id="assetCatalogCartSearch" class="media-input" type="search" autocomplete="off"
+                    placeholder="Search by cart tag, name, owner, or location...">
+                <button id="assetCatalogCartSearchBtn" class="media-btn" type="button">Search</button>
+            </div>
+        </div>
+        <div id="assetCatalogCartResults" class="asset-catalog-cart-results"></div>
+        <div id="assetCatalogCartStatus" class="media-status hidden" role="status"></div>
+        <div class="media-modal-actions">
+            <button id="cancelAssetCatalogCartBtn" class="media-btn ghost" type="button">Cancel</button>
+            <button id="confirmAssetCatalogCartBtn" class="media-btn primary-action" type="button" disabled>Add to Cart</button>
+        </div>
+    </div>
+</div>
+
 <div id="deviceDetailModal" class="media-modal hidden" role="dialog" aria-modal="true">
     <div class="media-modal-card device-detail-card">
         <div class="modal-head">
@@ -869,6 +930,15 @@
 
     window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS =
         {{ 'true' if 'snipeops.media_catalog.student_checkouts.manage' in session.get('user_permissions', []) else 'false' }};
+
+    window.MEDIA_CATALOG_CAN_MANAGE =
+        {{ 'true' if 'snipeops.media_catalog.manage' in session.get('user_permissions', []) else 'false' }};
+
+    window.MEDIA_CATALOG_CAN_TARGET_ANY_CART =
+        {{ 'true' if (
+            'snipeops.media_catalog.ownership.manage' in session.get('user_permissions', [])
+            or 'snipeops.home.manage' in session.get('user_permissions', [])
+        ) else 'false' }};
 </script>
 <script defer src="{{ url_for('media_catalog.static', filename='js/media_catalog.js') }}"></script>
 {% endblock %}

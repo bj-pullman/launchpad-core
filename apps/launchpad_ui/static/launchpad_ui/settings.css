@@ -2649,6 +2649,51 @@ body[data-theme="light"] .catalog-sync-interval select {
   margin-top: 2px;
 }
 
+.settings-security-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.settings-security-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.settings-security-toggle input {
+  margin: 3px 0 0;
+}
+
+.settings-samesite-help {
+  display: grid;
+  gap: 5px;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.settings-samesite-help strong {
+  color: var(--info-text);
+  font-size: 13px;
+}
+
+.settings-samesite-help small {
+  display: block;
+  line-height: 1.45;
+}
+
+.settings-samesite-help b { color: var(--text); }
+
+@media (max-width: 980px) {
+  .settings-security-toggle-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .settings-readonly-note {
   margin: 0;
   padding: 12px 14px;
@@ -2682,5 +2727,10 @@ body[data-theme="light"] .catalog-sync-interval select {
   .settings-security-form select {
     min-width: 0;
     max-width: 100%;
+  }
+
+  .settings-security-toggle-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
   }
 }

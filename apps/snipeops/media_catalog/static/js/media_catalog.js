@@ -23,6 +23,11 @@ let studentCheckoutScopeFilter = "mine";
 let studentCheckoutSearchQuery = "";
 let pendingReturnCheckout = null;
 let studentCheckoutScopeInitialized = false;
+let assetCatalogQuery = "";
+let assetCatalogPage = 1;
+let assetCatalogResults = new Map();
+let assetCatalogSelectedAsset = null;
+let assetCatalogSelectedCart = null;
 
 const sheetDevices = new Map();
 const cartMetadataSaveQueues = new Map();
@@ -137,6 +142,7 @@ async function apiPost(path, body, fallbackMessage) {
 
 async function initMediaCatalog() {
     bindDashboard();
+    bindAssetCatalog();
     bindCartSearch();
     bindFindCartToggle();
     bindRefreshMyCarts();
@@ -175,6 +181,298 @@ async function initMediaCatalog() {
 async function loadCurrentUser() {
     const data = await apiGet("/api/me", "Unable to load current user.");
     currentUser = data.user || null;
+}
+
+function bindAssetCatalog() {
+    const form = $("assetCatalogSearchForm");
+    const input = $("assetCatalogSearch");
+    form?.addEventListener("submit", event => {
+        event.preventDefault();
+        searchAssetCatalog(1);
+    });
+    input?.addEventListener("input", debounce(() => {
+        if (input.value.trim().length >= 2) searchAssetCatalog(1);
+        if (!input.value.trim()) resetAssetCatalog();
+    }, 350));
+
+    $("closeAssetCatalogCartBtn")?.addEventListener("click", closeAssetCatalogCartModal);
+    $("cancelAssetCatalogCartBtn")?.addEventListener("click", closeAssetCatalogCartModal);
+    $("assetCatalogCartSearchBtn")?.addEventListener("click", searchAssetCatalogCarts);
+    $("assetCatalogCartSearch")?.addEventListener("input", debounce(searchAssetCatalogCarts, 350));
+    $("assetCatalogCartSearch")?.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            searchAssetCatalogCarts();
+        }
+    });
+    $("confirmAssetCatalogCartBtn")?.addEventListener("click", confirmAssetCatalogAdd);
+    $("assetCatalogCartModal")?.addEventListener("click", event => {
+        if (event.target.id === "assetCatalogCartModal") closeAssetCatalogCartModal();
+    });
+}
+
+function resetAssetCatalog() {
+    assetCatalogQuery = "";
+    assetCatalogPage = 1;
+    assetCatalogResults.clear();
+    if ($("assetCatalogSummary")) {
+        $("assetCatalogSummary").textContent = "Enter an asset tag, serial number, name, model, user, location, or cart.";
+    }
+    if ($("assetCatalogResults")) {
+        $("assetCatalogResults").innerHTML = '<div class="asset-catalog-empty">Search to locate an asset.</div>';
+    }
+    if ($("assetCatalogPagination")) $("assetCatalogPagination").innerHTML = "";
+}
+
+async function searchAssetCatalog(page = 1) {
+    const input = $("assetCatalogSearch");
+    const query = (input?.value || assetCatalogQuery).trim();
+    if (!query) {
+        resetAssetCatalog();
+        input?.focus();
+        return;
+    }
+
+    assetCatalogQuery = query;
+    assetCatalogPage = Math.max(1, Number(page) || 1);
+    if ($("assetCatalogSummary")) $("assetCatalogSummary").textContent = `Searching for “${query}”…`;
+    if ($("assetCatalogResults")) $("assetCatalogResults").innerHTML = '<div class="asset-catalog-empty">Searching synchronized assets…</div>';
+
+    try {
+        const data = await apiGet(
+            `/api/asset-catalog?q=${encodeURIComponent(query)}&page=${assetCatalogPage}&per_page=25`,
+            "Asset search failed."
+        );
+        renderAssetCatalog(data);
+    } catch (err) {
+        if ($("assetCatalogSummary")) $("assetCatalogSummary").textContent = "Search unavailable";
+        if ($("assetCatalogResults")) {
+            $("assetCatalogResults").innerHTML = `<div class="asset-catalog-empty bad">${escapeHtml(err.message || "Asset search failed.")}</div>`;
+        }
+    }
+}
+
+function renderAssetCatalog(data) {
+    const results = data.results || [];
+    const pagination = data.pagination || {};
+    assetCatalogResults = new Map(results.map(asset => [String(asset.id), asset]));
+    if ($("assetCatalogSummary")) {
+        $("assetCatalogSummary").textContent = pagination.total
+            ? `${pagination.total} matching asset${pagination.total === 1 ? "" : "s"}. Exact asset tags and serial numbers are ranked first.`
+            : `No assets matched “${assetCatalogQuery}”.`;
+    }
+    if (!$('assetCatalogResults')) return;
+    if (!results.length) {
+        $("assetCatalogResults").innerHTML = '<div class="asset-catalog-empty"><strong>No matching assets</strong><span>Check the asset tag or serial number and try again.</span></div>';
+        renderAssetCatalogPagination(pagination);
+        return;
+    }
+
+    $("assetCatalogResults").innerHTML = `
+        <div class="asset-catalog-table-wrap">
+            <table class="asset-catalog-table">
+                <thead><tr>
+                    <th>Asset Tag</th><th>Serial Number</th><th>Name</th><th>Model</th>
+                    <th>Status</th><th>Assigned To</th><th>Location</th><th>Current Cart</th><th>Actions</th>
+                </tr></thead>
+                <tbody>${results.map(asset => {
+                    const currentCart = asset.current_cart || null;
+                    const assignedTo = currentCart
+                        ? (currentCart.asset_tag || currentCart.name || asset.assigned_name)
+                        : (asset.assigned_name || "Available");
+                    const cartLabel = currentCart
+                        ? [currentCart.asset_tag, currentCart.name].filter(Boolean).join(" · ")
+                        : "—";
+                    return `<tr>
+                        <td class="mono"><strong>${escapeHtml(asset.asset_tag || "—")}</strong></td>
+                        <td class="mono">${escapeHtml(asset.serial || "—")}</td>
+                        <td>${escapeHtml(asset.name || "—")}</td>
+                        <td>${escapeHtml(asset.model_name || "—")}</td>
+                        <td><span class="asset-status-badge">${escapeHtml(asset.status_name || "Unknown")}</span></td>
+                        <td>${escapeHtml(assignedTo)}</td>
+                        <td>${escapeHtml(asset.location_name || currentCart?.location_name || "—")}</td>
+                        <td>${escapeHtml(cartLabel)}</td>
+                        <td><div class="asset-catalog-actions">
+                            <button class="mini-btn" type="button" data-asset-details="${escapeHtml(asset.id)}">Details</button>
+                            ${asset.can_add_to_cart ? `<button class="media-btn asset-catalog-add-btn" type="button" data-asset-add="${escapeHtml(asset.id)}">Add to Cart</button>` : ""}
+                        </div></td>
+                    </tr>`;
+                }).join("")}</tbody>
+            </table>
+        </div>`;
+
+    $("assetCatalogResults").querySelectorAll("[data-asset-details]").forEach(button => {
+        button.addEventListener("click", () => openAssetCatalogDetail(assetCatalogResults.get(button.dataset.assetDetails)));
+    });
+    $("assetCatalogResults").querySelectorAll("[data-asset-add]").forEach(button => {
+        button.addEventListener("click", () => openAssetCatalogCartModal(assetCatalogResults.get(button.dataset.assetAdd)));
+    });
+    renderAssetCatalogPagination(pagination);
+}
+
+function renderAssetCatalogPagination(pagination) {
+    const container = $("assetCatalogPagination");
+    if (!container || !pagination.pages || pagination.pages <= 1) {
+        if (container) container.innerHTML = "";
+        return;
+    }
+    container.innerHTML = `
+        <button class="mini-btn" type="button" data-catalog-page="${pagination.page - 1}" ${pagination.page <= 1 ? "disabled" : ""}>Previous</button>
+        <span>Page ${pagination.page} of ${pagination.pages}</span>
+        <button class="mini-btn" type="button" data-catalog-page="${pagination.page + 1}" ${pagination.page >= pagination.pages ? "disabled" : ""}>Next</button>`;
+    container.querySelectorAll("[data-catalog-page]:not([disabled])").forEach(button => {
+        button.addEventListener("click", () => searchAssetCatalog(Number(button.dataset.catalogPage)));
+    });
+}
+
+function openAssetCatalogDetail(asset) {
+    if (!asset) return;
+    const title = $("deviceDetailTitle");
+    const body = $("deviceDetailBody");
+    if (!title || !body) return;
+    title.textContent = asset.asset_tag ? `Asset ${asset.asset_tag}` : asset.name || "Asset Details";
+    const currentCart = asset.current_cart || {};
+    const rows = [
+        ["Asset Tag", asset.asset_tag || "—"], ["Serial", asset.serial || "—"],
+        ["Name", asset.name || "—"], ["Model", asset.model_name || "—"],
+        ["Status", asset.status_name || "—"], ["Assigned To", asset.assigned_name || "Available"],
+        ["Location", asset.location_name || "—"],
+        ["Current Cart", [currentCart.asset_tag, currentCart.name].filter(Boolean).join(" · ") || "—"]
+    ];
+    body.innerHTML = `<div class="device-detail-grid">${rows.map(([label, value]) => `
+        <div class="detail-item"><span class="detail-label">${escapeHtml(label)}</span><span class="detail-value">${escapeHtml(value)}</span></div>
+    `).join("")}</div><div class="device-detail-actions">
+        ${asset.asset_url ? `<a class="media-btn ghost" href="${escapeHtml(asset.asset_url)}" target="_blank" rel="noopener">Open in Snipe-IT</a>` : ""}
+        ${asset.can_add_to_cart ? `<button id="detailCatalogAddBtn" class="media-btn" type="button">Add to Cart</button>` : ""}
+    </div>`;
+    $("detailCatalogAddBtn")?.addEventListener("click", () => {
+        closeDeviceDetailModal();
+        openAssetCatalogCartModal(asset);
+    });
+    $("deviceDetailModal")?.classList.remove("hidden");
+}
+
+function openAssetCatalogCartModal(asset) {
+    if (!asset || !window.MEDIA_CATALOG_CAN_MANAGE) return;
+    assetCatalogSelectedAsset = asset;
+    assetCatalogSelectedCart = null;
+    if ($("assetCatalogSelectedAsset")) {
+        $("assetCatalogSelectedAsset").innerHTML = `
+            <span class="media-eyebrow">Asset</span>
+            <strong>${escapeHtml([asset.asset_tag, asset.serial].filter(Boolean).join(" · ") || asset.name || asset.id)}</strong>
+            <span>${escapeHtml(asset.name || asset.model_name || "")}</span>`;
+    }
+    if ($("assetCatalogCartSearchLabel")) {
+        $("assetCatalogCartSearchLabel").textContent = window.MEDIA_CATALOG_CAN_TARGET_ANY_CART ? "Search All Carts" : "Search My Carts";
+    }
+    if ($("assetCatalogCartSearch")) $("assetCatalogCartSearch").value = "";
+    if ($("confirmAssetCatalogCartBtn")) $("confirmAssetCatalogCartBtn").disabled = true;
+    setAssetCatalogCartStatus("", true, true);
+    $("assetCatalogCartModal")?.classList.remove("hidden");
+    searchAssetCatalogCarts();
+}
+
+function closeAssetCatalogCartModal() {
+    assetCatalogSelectedAsset = null;
+    assetCatalogSelectedCart = null;
+    $("assetCatalogCartModal")?.classList.add("hidden");
+}
+
+function setAssetCatalogCartStatus(message, ok = true, hidden = false) {
+    const status = $("assetCatalogCartStatus");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("hidden", hidden || !message);
+    status.classList.toggle("ok", ok);
+    status.classList.toggle("bad", !ok);
+}
+
+async function searchAssetCatalogCarts() {
+    const container = $("assetCatalogCartResults");
+    if (!container) return;
+    const query = ($("assetCatalogCartSearch")?.value || "").trim();
+    container.innerHTML = '<div class="asset-catalog-empty">Loading authorized carts…</div>';
+    try {
+        const data = await apiGet(`/api/asset-catalog/carts?q=${encodeURIComponent(query)}`, "Cart search failed.");
+        renderAssetCatalogCarts(data.carts || [], data.scope);
+    } catch (err) {
+        container.innerHTML = `<div class="asset-catalog-empty bad">${escapeHtml(err.message || "Cart search failed.")}</div>`;
+    }
+}
+
+function renderAssetCatalogCarts(carts, scope) {
+    const container = $("assetCatalogCartResults");
+    if (!container) return;
+    if (!carts.length) {
+        container.innerHTML = `<div class="asset-catalog-empty">No ${scope === "all" ? "eligible" : "authorized"} carts matched.</div>`;
+        return;
+    }
+    container.innerHTML = carts.map(cart => {
+        const owner = cart.ownership?.owner_display_name || cart.ownership?.owner_email || "Unassigned";
+        return `<label class="asset-catalog-cart-option">
+            <input type="radio" name="asset_catalog_cart" value="${escapeHtml(cart.id)}">
+            <span><strong>${escapeHtml([cart.asset_tag, cart.name].filter(Boolean).join(" · ") || `Cart ${cart.id}`)}</strong>
+            <small>${escapeHtml([owner, cart.location_name].filter(Boolean).join(" · "))}</small></span>
+        </label>`;
+    }).join("");
+    container.querySelectorAll('input[name="asset_catalog_cart"]').forEach(input => {
+        input.addEventListener("change", () => {
+            assetCatalogSelectedCart = carts.find(cart => String(cart.id) === String(input.value)) || null;
+            if ($("confirmAssetCatalogCartBtn")) $("confirmAssetCatalogCartBtn").disabled = !assetCatalogSelectedCart;
+        });
+    });
+}
+
+function confirmAssetCatalogAdd() {
+    const asset = assetCatalogSelectedAsset;
+    const cart = assetCatalogSelectedCart;
+    if (!asset || !cart) return;
+    const currentCart = asset.current_cart;
+    if (currentCart && String(currentCart.id) !== String(cart.id)) {
+        const source = currentCart.asset_tag || currentCart.name || `Cart ${currentCart.id}`;
+        const destination = cart.asset_tag || cart.name || `Cart ${cart.id}`;
+        openConfirmModal({
+            title: "Move Asset to Another Cart?",
+            message: `This asset is currently assigned to ${source}. Move it to ${destination}?`,
+            buttonText: "Move Asset",
+            action: async () => submitAssetCatalogAdd(true)
+        });
+        return;
+    }
+    submitAssetCatalogAdd(false);
+}
+
+async function submitAssetCatalogAdd(confirmMove) {
+    const asset = assetCatalogSelectedAsset;
+    const cart = assetCatalogSelectedCart;
+    if (!asset || !cart) return;
+    const button = $("confirmAssetCatalogCartBtn");
+    if (button) button.disabled = true;
+    setAssetCatalogCartStatus(confirmMove ? "Moving asset…" : "Adding asset…", true);
+    try {
+        const data = await apiPost("/api/add-to-cart", {
+            device_id: asset.id,
+            cart_id: cart.id,
+            confirm_move: Boolean(confirmMove)
+        }, "Unable to add asset to cart.");
+        closeAssetCatalogCartModal();
+        setStatus(data.message || "Asset added to cart.", true);
+        await Promise.allSettled([searchAssetCatalog(assetCatalogPage), loadMyCarts(), loadDashboard()]);
+    } catch (err) {
+        if (err.confirmation_required) {
+            const source = err.source_cart?.asset_tag || err.source_cart?.name || "another cart";
+            openConfirmModal({
+                title: "Move Asset to Another Cart?",
+                message: `This asset is currently assigned to ${source}. Move it to the selected cart?`,
+                buttonText: "Move Asset",
+                action: async () => submitAssetCatalogAdd(true)
+            });
+        } else {
+            setAssetCatalogCartStatus(err.message || "Unable to add asset to cart.", false);
+        }
+    } finally {
+        if (button && assetCatalogSelectedAsset) button.disabled = !assetCatalogSelectedCart;
+    }
 }
 
 function bindDashboard() {
@@ -2053,10 +2351,23 @@ async function requestAddDevice(device) {
         return;
     }
 
-    /*
-     * The server handles existing assignments as a move:
-     * check in from the original cart, then check out to the selected cart.
-     */
+    const assignedToAnotherCart =
+        String(device.assigned_type || "").toLowerCase() === "asset" &&
+        device.assigned_id &&
+        String(device.assigned_id) !== String(selectedCart.id);
+
+    if (assignedToAnotherCart) {
+        const source = device.assigned_name || `Cart ${device.assigned_id}`;
+        const destination = selectedCart.asset_tag || selectedCart.name || `Cart ${selectedCart.id}`;
+        openConfirmModal({
+            title: "Move Asset to Cart?",
+            message: `This asset is currently assigned to ${source}. Move it to ${destination}?`,
+            buttonText: "Move Asset",
+            action: async () => addDeviceToCart(device, { confirmMove: true })
+        });
+        return;
+    }
+
     await addDeviceToCart(device);
 }
 
@@ -2112,7 +2423,7 @@ async function refreshStudentCheckoutDependentViews(options = {}) {
 }
 
 
-async function addDeviceToCart(device) {
+async function addDeviceToCart(device, options = {}) {
     if (!selectedCart) {
         setStatus("Select a cart first.", false);
         return;
@@ -2127,7 +2438,8 @@ async function addDeviceToCart(device) {
             "/api/add-to-cart",
             {
                 cart_id: destinationCart.id,
-                device_id: device.id
+                device_id: device.id,
+                confirm_move: Boolean(options.confirmMove)
             },
             "Unable to add device to cart."
         );
@@ -2724,67 +3036,6 @@ function prependRecent(action, device, cart, ok, message) {
     hydrateActivityTimes(tr);
 }
 
-async function moveDeviceToCart(device, destinationCart) {
-    if (!device || !destinationCart) return;
-
-    const sourceCart = selectedCart;
-
-    setStatus("Moving device to destination cart...", true);
-
-    try {
-        const data = await apiPost(
-            "/api/add-to-cart",
-            {
-                cart_id: destinationCart.id,
-                device_id: device.id
-            },
-            "Unable to move device."
-        );
-
-        await refreshMediaCatalogViews();
-
-        selectedCart = data.cart || destinationCart;
-        await selectCart(selectedCart);
-
-        prependRecent(
-            "moved_to_cart",
-            data.device || device,
-            selectedCart,
-            true,
-            data.message || "Device moved to destination cart."
-        );
-
-        setStatus(
-            data.message || "Device moved to destination cart.",
-            true
-        );
-    } catch (err) {
-        await refreshMediaCatalogViews();
-
-        /*
-         * Reload the source cart because the device may have been checked
-         * in successfully before the destination checkout failed.
-         */
-        if (sourceCart) {
-            selectedCart = sourceCart;
-            await selectCart(sourceCart);
-        }
-
-        prependRecent(
-            "move_failed",
-            device,
-            destinationCart,
-            false,
-            err.message || "Unable to move device."
-        );
-
-        setStatus(
-            err.message || "Unable to move device.",
-            false
-        );
-    }
-}
-
 function bindMoveDeviceModal() {
     $("closeMoveDeviceBtn")?.addEventListener("click", closeMoveDeviceModal);
     $("moveCartSearchBtn")?.addEventListener("click", searchMoveDestinationCarts);
@@ -2840,7 +3091,7 @@ async function searchMoveDestinationCarts() {
     resultsEl.innerHTML = `<div class="muted">Searching destination carts...</div>`;
 
     try {
-        const data = await apiGet(`/api/carts?q=${encodeURIComponent(query)}`, "Cart search failed.");
+        const data = await apiGet(`/api/asset-catalog/carts?q=${encodeURIComponent(query)}`, "Cart search failed.");
         renderMoveDestinationCarts(data.carts || []);
     } catch (err) {
         resultsEl.innerHTML = `<div class="muted">${escapeHtml(err.message || "Cart search failed.")}</div>`;
@@ -4050,6 +4301,10 @@ function bindMediaTabs() {
     function loadTabContent(tabName) {
         if (tabName === "dashboard") {
             loadDashboard();
+        }
+
+        if (tabName === "asset-catalog") {
+            $("assetCatalogSearch")?.focus();
         }
 
         if (

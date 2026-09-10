@@ -10,7 +10,7 @@ DB_PATH = SNIPE_CATALOG_DB_PATH
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(SNIPE_CATALOG_DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -380,6 +380,119 @@ def search_assets(query: str, limit: int = 25) -> list[dict]:
         ).fetchall()
 
         return [dict(r) for r in rows]
+
+
+def search_asset_catalog(
+    query: str,
+    *,
+    page: int = 1,
+    per_page: int = 25,
+) -> dict:
+    """Search the synchronized Snipe-IT asset cache with exact identifiers first."""
+    q = str(query or "").strip()
+    page = max(1, int(page or 1))
+    per_page = min(100, max(10, int(per_page or 25)))
+    if not q:
+        return {"results": [], "total": 0, "page": page, "per_page": per_page, "pages": 0}
+
+    like = f"%{q}%"
+    match_sql = """
+        a.asset_tag LIKE ?
+        OR a.serial LIKE ?
+        OR a.name LIKE ?
+        OR a.model_name LIKE ?
+        OR a.assigned_name LIKE ?
+        OR a.location_name LIKE ?
+        OR a.status_name LIKE ?
+        OR parent.asset_tag LIKE ?
+        OR parent.name LIKE ?
+    """
+    match_params = [like] * 9
+
+    with _connect() as conn:
+        total = int(conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM catalog_assets AS a
+            LEFT JOIN catalog_assets AS parent
+              ON lower(COALESCE(a.assigned_type, '')) = 'asset'
+             AND parent.id = a.assigned_id
+            WHERE {match_sql}
+            """,
+            match_params,
+        ).fetchone()[0])
+
+        rows = conn.execute(
+            f"""
+            SELECT a.*,
+                   parent.asset_tag AS current_cart_asset_tag,
+                   parent.name AS current_cart_name,
+                   parent.location_name AS current_cart_location
+            FROM catalog_assets AS a
+            LEFT JOIN catalog_assets AS parent
+              ON lower(COALESCE(a.assigned_type, '')) = 'asset'
+             AND parent.id = a.assigned_id
+            WHERE {match_sql}
+            ORDER BY
+                CASE
+                    WHEN lower(COALESCE(a.asset_tag, '')) = lower(?) THEN 0
+                    WHEN lower(COALESCE(a.serial, '')) = lower(?) THEN 1
+                    WHEN lower(COALESCE(a.name, '')) = lower(?) THEN 2
+                    ELSE 3
+                END,
+                a.asset_tag,
+                a.name,
+                a.id
+            LIMIT ? OFFSET ?
+            """,
+            [*match_params, q, q, q, per_page, (page - 1) * per_page],
+        ).fetchall()
+
+    pages = (total + per_page - 1) // per_page if total else 0
+    return {
+        "results": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+    }
+
+
+def search_cart_assets(query: str = "", *, limit: int = 50) -> list[dict]:
+    """Search cart-like assets in the local catalog without calling Snipe-IT."""
+    q = str(query or "").strip()
+    search_params: list = []
+    search_sql = ""
+    if q:
+        like = f"%{q}%"
+        search_sql = """
+          AND (asset_tag LIKE ? OR name LIKE ? OR category_name LIKE ? OR location_name LIKE ?)
+        """
+        search_params.extend([like, like, like, like])
+    row_limit = min(250, max(1, int(limit)))
+
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM catalog_assets
+            WHERE (
+                name LIKE 'CART%'
+                OR asset_tag LIKE '%CART%'
+                OR category_name LIKE '%CART%'
+                OR model_name LIKE '%CART%'
+            )
+            {search_sql}
+            ORDER BY
+                CASE WHEN lower(COALESCE(asset_tag, '')) = lower(?) THEN 0 ELSE 1 END,
+                location_name,
+                asset_tag,
+                name
+            LIMIT ?
+            """,
+            [*search_params, q, row_limit],
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def get_asset(asset_id: int) -> dict | None:

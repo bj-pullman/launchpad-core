@@ -493,10 +493,22 @@ class RouteTests(IsolatedDatabases):
 
     def test_security_save_permissions_and_validation(self):
         response=self.client.post("/settings/security",data={"csrf_token":"test-csrf","session_idle_timeout_minutes":"0",
-            "session_absolute_timeout_hours":"0","session_remember_me_days":"7","session_keep_active":"on"})
+            "session_absolute_timeout_hours":"0","session_remember_me_days":"7","session_keep_active":"on",
+            "require_login_for_launchpad":"on","cookie_secure":"on","cookie_httponly":"on","cookie_samesite":"Strict"})
         self.assertEqual(response.status_code,302)
         with self.app.test_request_context():
-            self.assertEqual(policy.read_policy()["session_idle_timeout_minutes"],0)
+            saved=policy.read_policy()
+            self.assertEqual(saved["session_idle_timeout_minutes"],0)
+            self.assertTrue(saved["session_keep_active"])
+            self.assertTrue(saved["require_login_for_launchpad"])
+            self.assertTrue(saved["cookie_secure"])
+            self.assertTrue(saved["cookie_httponly"])
+            self.assertEqual(saved["cookie_samesite"],"Strict")
+        invalid=self.client.post("/settings/security",data={"csrf_token":"test-csrf","session_idle_timeout_minutes":"0",
+            "session_absolute_timeout_hours":"0","session_remember_me_days":"7","cookie_samesite":"None"})
+        self.assertEqual(invalid.status_code,302)
+        with self.app.test_request_context():
+            self.assertEqual(policy.read_policy()["cookie_samesite"],"Strict")
         with self.client.session_transaction() as data:
             data["user_permissions"]=["launchpad.settings.security.view"]
         response=self.client.post("/settings/security",data={"csrf_token":"test-csrf"},headers={"Accept":"application/json"})
@@ -537,6 +549,19 @@ class RouteTests(IsolatedDatabases):
         user_service.update_user_theme_preference(self.user["id"], "light")
         with self.client.session_transaction() as data:
             data["theme_preference"] = "light"
+
+    def test_shared_applications_dropdown_keeps_permission_driven_links_and_polished_styles(self):
+        for base in (ROOT/"apps/launchpad_ui/templates/launchpad_ui/base.html",
+                     ROOT/"apps/snipeops/templates/snipeops/base.html"):
+            source=base.read_text(encoding="utf-8")
+            self.assertIn("nav-dropdown-menu-applications",source)
+            self.assertIn("{% if launchpad_apps %}",source)
+            self.assertIn("{% for app in launchpad_apps %}",source)
+            self.assertIn("url_for(app.endpoint)",source)
+        shared_css=(ROOT/"static/launchpad-theme.css").read_text(encoding="utf-8")
+        self.assertIn(".nav-dropdown-menu-applications",shared_css)
+        self.assertIn("text-decoration: none",shared_css)
+        self.assertIn(".nav-dropdown-item:focus-visible",shared_css)
 
     def test_security_uses_shared_settings_components_and_readonly_state(self):
         html = self.client.get("/settings/security").get_data(as_text=True)

@@ -29,6 +29,8 @@ from modules.core.identity.identity_db import get_connection
 from apps.snipeops.snipe_catalog.catalog_db import (
     get_asset,
     search_assets,
+    search_asset_catalog,
+    search_cart_assets,
     get_assets_assigned_to_asset,
     count_assets_assigned_to_assets,
     list_cart_assets,
@@ -226,6 +228,91 @@ def _can_view_ownership() -> bool:
 
 def _can_manage_student_checkouts() -> bool:
     return STUDENT_CHECKOUT_PERMISSION in session.get("user_permissions", [])
+
+
+def _can_manage_media_catalog() -> bool:
+    return "snipeops.media_catalog.manage" in session.get("user_permissions", [])
+
+
+def _can_manage_all_carts() -> bool:
+    permissions = session.get("user_permissions", [])
+    return (
+        "snipeops.media_catalog.ownership.manage" in permissions
+        or "snipeops.home.manage" in permissions
+    )
+
+
+def _is_cart_asset(asset: dict | None) -> bool:
+    if not asset:
+        return False
+    category = str(asset.get("category_name") or "").lower()
+    model = str(asset.get("model_name") or "").lower()
+    tag = str(asset.get("asset_tag") or "").lower()
+    name = str(asset.get("name") or "").strip().lower()
+    return (
+        "cart" in category
+        or "cart" in model
+        or "cart" in tag
+        or name.startswith("cart ")
+        or name == "cart"
+    )
+
+
+def _asset_unavailable_reason(asset: dict | None) -> str | None:
+    if not asset:
+        return "Asset does not exist."
+    status = str(asset.get("status_name") or "").strip().lower()
+    blocked = ("archived", "deleted", "retired", "disposed", "lost", "stolen")
+    if any(value in status for value in blocked):
+        return f'Asset status "{asset.get("status_name")}" is not eligible for cart assignment.'
+    return None
+
+
+def _can_target_cart(user: dict | None, cart_id: int) -> bool:
+    if not user:
+        return False
+    if _can_manage_all_carts():
+        return True
+    ownership = get_cart_ownership(int(cart_id))
+    try:
+        return bool(ownership and int(ownership.get("owner_user_id")) == int(user["id"]))
+    except (TypeError, ValueError, KeyError):
+        return False
+
+
+def _catalog_asset_payload(asset: dict) -> dict:
+    payload = _asset_payload(asset) or {}
+    current_cart = None
+    if str(asset.get("assigned_type") or "").lower() == "asset" and asset.get("assigned_id"):
+        parent = get_asset(int(asset["assigned_id"]))
+        if parent and _is_cart_asset(parent):
+            current_cart = _asset_payload(parent)
+        elif asset.get("current_cart_asset_tag") or asset.get("current_cart_name"):
+            current_cart = {
+                "id": asset.get("assigned_id"),
+                "asset_tag": asset.get("current_cart_asset_tag") or "",
+                "name": asset.get("current_cart_name") or asset.get("assigned_name") or "",
+                "location_name": asset.get("current_cart_location") or "",
+            }
+    payload["current_cart"] = current_cart
+    payload["is_cart"] = _is_cart_asset(asset)
+    payload["unavailable_reason"] = _asset_unavailable_reason(asset)
+    payload["can_add_to_cart"] = bool(
+        _can_manage_media_catalog()
+        and not payload["is_cart"]
+        and not payload["unavailable_reason"]
+    )
+    return payload
+
+
+def _cart_search_text(cart: dict) -> str:
+    ownership = cart.get("ownership") or {}
+    return " ".join(str(value or "") for value in (
+        cart.get("asset_tag"), cart.get("name"), cart.get("location_name"),
+        ownership.get("owner_display_name"), ownership.get("owner_email"),
+        ownership.get("media_specialist_owner"), ownership.get("teacher_name"),
+        ownership.get("room_number"),
+    )).lower()
 
 
 def _student_checkout_error_response(exc: StudentCheckoutError):
@@ -948,11 +1035,40 @@ def api_add_to_cart():
     device = get_asset(device_id)
     actor_user = _current_user_profile()
 
-    if not cart or not device:
+    if not actor_user:
         return jsonify({
             "ok": False,
-            "error": "Cart or device not found.",
+            "error": "Current user profile not found.",
         }), 404
+
+    if not cart:
+        return jsonify({
+            "ok": False,
+            "error": "Target cart does not exist.",
+        }), 404
+
+    if not device:
+        return jsonify({"ok": False, "error": "Asset does not exist."}), 404
+
+    if not _is_cart_asset(cart):
+        return jsonify({"ok": False, "error": "The selected target is not an eligible cart."}), 400
+
+    if not _can_target_cart(actor_user, cart_id):
+        return jsonify({
+            "ok": False,
+            "error": "You do not have permission to manage the selected cart.",
+        }), 403
+
+    cart_unavailable = _asset_unavailable_reason(cart)
+    if cart_unavailable:
+        return jsonify({"ok": False, "error": cart_unavailable}), 409
+
+    device_unavailable = _asset_unavailable_reason(device)
+    if device_unavailable:
+        return jsonify({"ok": False, "error": device_unavailable}), 409
+
+    if _is_cart_asset(device):
+        return jsonify({"ok": False, "error": "Cart assets cannot be added inside another cart."}), 409
 
     if int(device["id"]) == int(cart["id"]):
         return jsonify({
@@ -969,11 +1085,12 @@ def api_add_to_cart():
         current_assigned_id = None
 
     current_assigned_name = device.get("assigned_name") or ""
+    current_assigned_type = str(device.get("assigned_type") or "").strip().lower()
     destination_cart_id = int(cart["id"])
 
     already_in_destination = (
         current_assigned_id == destination_cart_id
-        and str(device.get("assigned_type") or "").lower() == "asset"
+        and current_assigned_type == "asset"
     )
 
     if already_in_destination:
@@ -986,10 +1103,40 @@ def api_add_to_cart():
             "device": _asset_payload(device),
         })
 
+    if current_assigned_id is not None and current_assigned_type != "asset":
+        return jsonify({
+            "ok": False,
+            "error": (
+                f'Asset is currently assigned to {current_assigned_name or current_assigned_type}. '
+                "Check it in through the appropriate Snipe-IT workflow before adding it to a cart."
+            ),
+            "assignment_type": current_assigned_type,
+        }), 409
+
     moving_from_another_assignment = (
         current_assigned_id is not None
         and current_assigned_id != destination_cart_id
     )
+
+    previous_cart = get_asset(current_assigned_id) if moving_from_another_assignment else None
+    if moving_from_another_assignment and not _is_cart_asset(previous_cart):
+        return jsonify({
+            "ok": False,
+            "error": "Asset is assigned to another asset that is not recognized as a Media Catalog cart.",
+        }), 409
+
+    confirmed_move = str(body.get("confirm_move") or body.get("force") or "").lower() in (
+        "1", "true", "yes", "on"
+    )
+    if moving_from_another_assignment and not confirmed_move:
+        return jsonify({
+            "ok": False,
+            "error": "This asset is currently assigned to another cart. Confirm the move to continue.",
+            "confirmation_required": True,
+            "source_cart": _asset_payload(previous_cart),
+            "destination_cart": _asset_payload(cart),
+            "device": _asset_payload(device),
+        }), 409
 
     previous_cart_id = current_assigned_id
     previous_cart_name = current_assigned_name
@@ -1324,6 +1471,79 @@ def api_search():
     return jsonify({
         "ok": True,
         "results": [_asset_payload(row) for row in rows],
+    })
+
+
+@bp.get("/api/asset-catalog")
+@login_required
+@require_permission("snipeops.media_catalog.view")
+def api_asset_catalog():
+    query = (request.args.get("q") or "").strip()
+    try:
+        page = max(1, int(request.args.get("page") or 1))
+        per_page = min(100, max(10, int(request.args.get("per_page") or 25)))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid pagination values."}), 400
+
+    result = search_asset_catalog(query, page=page, per_page=per_page)
+    return jsonify({
+        "ok": True,
+        "query": query,
+        "results": [_catalog_asset_payload(row) for row in result["results"]],
+        "pagination": {
+            "page": result["page"],
+            "per_page": result["per_page"],
+            "pages": result["pages"],
+            "total": result["total"],
+        },
+        "can_add_to_cart": _can_manage_media_catalog(),
+        "can_target_any_cart": _can_manage_all_carts(),
+    })
+
+
+@bp.get("/api/asset-catalog/carts")
+@login_required
+@require_permission("snipeops.media_catalog.manage")
+def api_asset_catalog_carts():
+    user = _current_user_profile()
+    if not user:
+        return jsonify({"ok": False, "error": "Current user profile not found."}), 404
+
+    query = (request.args.get("q") or "").strip().lower()
+    can_target_any = _can_manage_all_carts()
+    carts_by_id: dict[int, dict] = {}
+
+    if can_target_any:
+        for cart in search_cart_assets(query, limit=75):
+            payload = _asset_payload(cart) or {}
+            carts_by_id[int(cart["id"])] = payload
+
+        # Ownership rows make owner-name/email searches possible without a Snipe-IT call.
+        for row in list_all_owned_carts():
+            payload = _ownership_payload(row)
+            if query and query not in _cart_search_text(payload):
+                continue
+            carts_by_id[int(payload["id"])] = payload
+    else:
+        for row in list_owned_carts(int(user["id"])):
+            payload = _ownership_payload(row)
+            if query and query not in _cart_search_text(payload):
+                continue
+            carts_by_id[int(payload["id"])] = payload
+
+    carts = [
+        cart for cart in carts_by_id.values()
+        if _is_cart_asset(cart) and not _asset_unavailable_reason(cart)
+    ]
+    carts.sort(key=lambda cart: (
+        0 if query and str(cart.get("asset_tag") or "").lower() == query else 1,
+        str(cart.get("asset_tag") or "").lower(),
+        str(cart.get("name") or "").lower(),
+    ))
+    return jsonify({
+        "ok": True,
+        "scope": "all" if can_target_any else "owned",
+        "carts": carts[:50],
     })
 
 
