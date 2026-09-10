@@ -102,7 +102,7 @@ body.public-layout {
 }
 
 .flash-success {
-    background: #ecfdf5;
+    background: var(--success-bg);
     border-color: #a7f3d0;
     color: #065f46;
 }
@@ -285,7 +285,7 @@ body.public-layout {
 }
 
 .alert-warning {
-  background: #fff7ed;
+  background: var(--warning-bg);
   border: 1px solid #fdba74;
   color: #9a3412;
   padding: 10px 12px;

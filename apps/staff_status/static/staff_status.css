@@ -1395,7 +1395,7 @@ ABSENCE REQUEST REVIEW
 }
 
 .staff-status-request-status-approved {
-  background: #ecfdf5;
+  background: var(--ss-success-bg);
   color: var(--success-text);
   border-color: #bbf7d0;
 }

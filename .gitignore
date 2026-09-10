@@ -72,6 +72,7 @@ logs/
 # CACHE / TEMP FILES
 # ==============================
 .cache/
+.visual-qa/
 tmp/
 temp/
 *.tmp

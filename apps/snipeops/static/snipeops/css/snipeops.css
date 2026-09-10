@@ -75,180 +75,6 @@ body{
   padding: 18px;
 }
 
-.topbar{
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: var(--topbar-bg);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--topbar-border);
-}
-
-.topbar-inner{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 18px;
-  min-height: 56px;
-}
-
-.brand{
-  color: var(--text);
-  text-decoration:none;
-  font-weight: 700;
-  letter-spacing:.2px;
-  padding: 10px 12px;
-  border-radius: 8px;
-}
-
-.brand:hover{
-  background: rgba(255,255,255,.04);
-}
-
-.topbar-nav{
-  display:flex;
-  align-items:center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.topbar-link,
-.nav-dropdown-btn{
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  color: var(--nav-text);
-  padding: 10px 13px;
-  border-radius: 8px;
-  font-weight: 600;
-  font: inherit;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.topbar-link:hover,
-.nav-dropdown-btn:hover{
-  color: var(--text);
-  background: rgba(59,130,246,.05);
-}
-
-:root[data-theme="dark"] .topbar-link:hover,
-:root[data-theme="dark"] .nav-dropdown-btn:hover{
-  background: rgba(255,255,255,.05);
-}
-
-.nav-dropdown{
-  position: relative;
-}
-
-.nav-dropdown::after{
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 100%;
-  height: 6px;
-}
-
-.nav-caret{
-  font-size: 9px;
-  opacity: .55;
-}
-
-.nav-dropdown-menu{
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  min-width: 180px;
-  display: none;
-  padding: 4px;
-  background: var(--dropdown-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--dropdown-shadow);
-  z-index: 200;
-}
-
-.nav-dropdown-menu-sm{
-  min-width: 160px;
-}
-
-.nav-dropdown-right .nav-dropdown-menu{
-  left: auto;
-  right: 0;
-}
-
-.nav-dropdown:hover .nav-dropdown-menu,
-.nav-dropdown:focus-within .nav-dropdown-menu{
-  display: block;
-}
-
-.nav-dropdown-item{
-  display: block;
-  padding: 8px 10px;
-  border-radius: 6px;
-  text-decoration: none;
-  color: var(--nav-text);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.nav-dropdown-item:hover{
-  background: rgba(255,255,255,.05);
-  color: var(--text);
-}
-
-.topbar-left{
-  display: flex;
-  align-items: center;
-}
-
-.nav-dropdown-divider{
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-
-.theme-menu{
-  padding: 6px;
-}
-
-.theme-menu-label{
-  padding: 4px 4px 8px;
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-}
-
-.theme-option{
-  width: 100%;
-  display: block;
-  text-align: left;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--nav-text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.theme-option:hover,
-.theme-option.active{
-  background: rgba(59,130,246,.08);
-  color: var(--text);
-}
-
-:root[data-theme="dark"] .theme-option:hover,
-:root[data-theme="dark"] .theme-option.active{
-  background: rgba(255,255,255,.06);
-}
-
 .hero{
   margin-top: 18px;
   padding: 18px;
@@ -319,7 +145,7 @@ body{
   border: 1px solid rgba(249, 115, 22, 0.35);
   border-radius: 18px;
 
-  background: linear-gradient(to bottom, #fff7ed, #ffedd5);
+  background: linear-gradient(to bottom, var(--warning-bg), color-mix(in srgb, var(--warning-bg) 82%, var(--panel)));
   box-shadow: 0 12px 26px rgba(124, 45, 18, 0.10);
 }
 
@@ -333,14 +159,14 @@ body{
 .snipeops-warning-banner-title {
   font-size: 16px;
   font-weight: 800;
-  color: #9a3412;
+  color: var(--warning-text);
   letter-spacing: 0.01em;
 }
 
 .snipeops-warning-banner-text {
   font-size: 14px;
   line-height: 1.55;
-  color: #7c2d12;
+  color: var(--warning-text);
 }
 
 .snipeops-warning-banner-actions {
@@ -363,8 +189,8 @@ body{
   border-radius: 14px;
   border: 1px solid rgba(154, 52, 18, 0.25);
 
-  background: linear-gradient(to bottom, var(--panel), #fff7ed);
-  color: #9a3412;
+  background: linear-gradient(to bottom, var(--panel), var(--warning-bg));
+  color: var(--warning-text);
 
   font-size: 14px;
   font-weight: 700;
@@ -382,7 +208,7 @@ body{
 .snipeops-warning-button:hover {
   transform: translateY(-2px);
   border-color: rgba(154, 52, 18, 0.4);
-  background: linear-gradient(to bottom, var(--panel), #ffedd5);
+  background: linear-gradient(to bottom, var(--panel), var(--warning-bg));
   box-shadow: 0 14px 26px rgba(124, 45, 18, 0.14);
 }
 

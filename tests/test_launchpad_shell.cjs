@@ -12,7 +12,7 @@ function shell({preference='system', dark=true, keepActive=true}={}) {
   const media={matches:dark, addEventListener:(type, fn)=>{mediaListener=fn;}};
   const metadata={'launchpad-csrf':'csrf','launchpad-keep-active':String(keepActive),
     'launchpad-theme-url':'/account/theme','launchpad-activity-url':'/auth/session/activity'};
-  const document={hidden:false,documentElement:root,body:{removeAttribute(){}},
+  const document={hidden:false,documentElement:root,body:{dataset:{}},
     querySelector:selector=>({content:metadata[selector.match(/name="([^"]+)"/)[1]]}),
     querySelectorAll:()=>[],addEventListener:(type,fn)=>{listeners[type]=fn;}};
   const window={fetch:async (url,init)=>{calls.push({url,init});return {ok:true,status:204};}};
@@ -26,8 +26,8 @@ function shell({preference='system', dark=true, keepActive=true}={}) {
 }
 
 test('System follows OS changes; explicit themes override OS',()=>{
-  const system=shell();assert.equal(system.root.dataset.theme,'dark');
-  system.mediaChange(false);assert.equal(system.root.dataset.theme,'light');
+  const system=shell();assert.equal(system.root.dataset.theme,'dark');assert.equal(system.document.body.dataset.theme,'dark');
+  system.mediaChange(false);assert.equal(system.root.dataset.theme,'light');assert.equal(system.document.body.dataset.theme,'light');
   for(const preference of ['light','dark']) {
     const explicit=shell({preference});explicit.mediaChange(preference==='light');
     assert.equal(explicit.root.dataset.theme,preference);

@@ -515,6 +515,41 @@ class RouteTests(IsolatedDatabases):
         for name in self.app.jinja_env.list_templates():
             self.app.jinja_env.get_template(name)
 
+    def test_shared_account_and_theme_shell_render_across_apps(self):
+        account_source = (ROOT/"templates/layouts/_account_dropdown.html").read_text(encoding="utf-8")
+        for base in (ROOT/"apps/launchpad_ui/templates/launchpad_ui/base.html",
+                     ROOT/"apps/snipeops/templates/snipeops/base.html"):
+            self.assertIn('layouts/_account_dropdown.html', base.read_text(encoding="utf-8"))
+        self.assertIn('nav-dropdown-menu-account', account_source)
+        self.assertIn('layouts/_theme_picker.html', account_source)
+        for path in ("/settings/security", "/finance/Technology/records"):
+            html = self.client.get(path).get_data(as_text=True)
+            self.assertIn('class="nav-dropdown nav-dropdown-account"', html)
+            self.assertIn('data-theme-choice="system"', html)
+            self.assertIn('data-theme-choice="light"', html)
+            self.assertIn('data-theme-choice="dark"', html)
+            self.assertIn('dataset.themePreference', html)
+        user_service.update_user_theme_preference(self.user["id"], "dark")
+        with self.client.session_transaction() as data:
+            data["theme_preference"] = "dark"
+        html = self.client.get("/settings/security").get_data(as_text=True)
+        self.assertIn('data-theme-choice="dark" aria-pressed="true"', html)
+        user_service.update_user_theme_preference(self.user["id"], "light")
+        with self.client.session_transaction() as data:
+            data["theme_preference"] = "light"
+
+    def test_security_uses_shared_settings_components_and_readonly_state(self):
+        html = self.client.get("/settings/security").get_data(as_text=True)
+        for marker in ("settings-main-layout", "settings-content-card", "form-grid-equal",
+                       "checkbox-card", "Session Management", "Advanced Session / Cookie Settings",
+                       "Save Security Settings"):
+            self.assertIn(marker, html)
+        with self.client.session_transaction() as data:
+            data["user_permissions"] = ["launchpad.settings.security.view"]
+        html = self.client.get("/settings/security").get_data(as_text=True)
+        self.assertIn("Management permission is required", html)
+        self.assertNotIn("Save Security Settings", html)
+
     def test_theme_endpoint_persists_all_modes_and_requires_csrf(self):
         for theme in ("light","dark","system"):
             response=self.client.post("/account/theme",data={"csrf_token":"test-csrf","theme_preference":theme})

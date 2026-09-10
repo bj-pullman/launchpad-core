@@ -4,8 +4,10 @@
   const media = matchMedia('(prefers-color-scheme: dark)');
   function applyTheme(preference) {
     root.dataset.themePreference = preference;
-    root.dataset.theme = preference === 'dark' || (preference === 'system' && media.matches) ? 'dark' : 'light';
-    document.body.removeAttribute('data-theme');
+    const resolved = preference === 'dark' || (preference === 'system' && media.matches) ? 'dark' : 'light';
+    root.dataset.theme = resolved;
+    // Keep legacy app selectors synchronized while :root remains authoritative.
+    if (document.body) document.body.dataset.theme = resolved;
     document.querySelectorAll('[data-theme-choice]').forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.themeChoice === preference));
       button.classList.toggle('active', button.dataset.themeChoice === preference);
