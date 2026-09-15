@@ -27,7 +27,7 @@ let generatedUuid = '264a70c6-73d5-4e61-a312-cb9019f7f452';
 const properties = {
   ABSENCE_SUBMISSION_SHEET_ID: 'sheet-id',
   APPROVER_EMAILS: 'manager@sheridanschools.org',
-  GLOBAL_APPROVER_EMAILS: 'admin@sheridanschools.org'
+  GLOBAL_APPROVER_EMAILS: 'admin@sheridanschools.org,personal.reviewer@gmail.com'
 };
 
 function range(row, column, rowCount, columnCount) {
@@ -77,7 +77,15 @@ const context = {
   HtmlService: {
     createHtmlOutputFromFile: htmlOutput,
     createTemplateFromFile(file) {
-      return { file, requestId: '', evaluate() { return htmlOutput(file); } };
+      return {
+        file, requestId: '', signedInEmail: '', deniedTitle: '', deniedMessage: '',
+        evaluate() {
+          return Object.assign(htmlOutput(file), {
+            requestId: this.requestId, signedInEmail: this.signedInEmail,
+            deniedTitle: this.deniedTitle, deniedMessage: this.deniedMessage
+          });
+        }
+      };
     }
   },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
@@ -102,12 +110,21 @@ activeEmail = '';
 const opensBeforeAnonymousReview = sheetOpenCount;
 assert.throws(() => context.getReviewRequest(UUID), /could not verify/);
 assert.equal(sheetOpenCount, opensBeforeAnonymousReview, 'anonymous review fails before Sheet access');
-assert.equal(context.doGet({ parameter: { action: 'review', id: UUID } }).file, 'AccessDenied');
-activeEmail = 'other@sheridanschools.org';
+const signInRequired = context.doGet({ parameter: { action: 'review', id: UUID } });
+assert.equal(signInRequired.file, 'AccessDenied');
+assert.equal(signInRequired.deniedTitle, 'Sign-in Required');
+assert.equal(signInRequired.signedInEmail, '');
+activeEmail = 'random.account@gmail.com';
 assert.throws(() => context.getReviewRequest(UUID), /not authorized/);
+const randomDenied = context.doGet({ parameter: { action: 'review', id: UUID } });
+assert.equal(randomDenied.deniedTitle, 'Access Denied');
+assert.equal(randomDenied.signedInEmail, 'random.account@gmail.com');
+activeEmail = 'other@sheridanschools.org';
 properties.APPROVER_EMAILS += ',other@sheridanschools.org';
 assert.throws(() => context.getReviewRequest(UUID), /another reviewer/);
 activeEmail = 'admin@sheridanschools.org';
+assert.equal(context.getReviewRequest(UUID).staffEmail, 'employee@sheridanschools.org');
+activeEmail = 'personal.reviewer@gmail.com';
 assert.equal(context.getReviewRequest(UUID).staffEmail, 'employee@sheridanschools.org');
 
 const workflowColumn = headers.indexOf('workflow_status');
@@ -124,10 +141,10 @@ assert.equal(rows[0][headers.indexOf('reviewed_by')], 'manager@sheridanschools.o
 
 rows[0][workflowColumn] = 'pending';
 rows[0][headers.indexOf('reviewed_by')] = '';
-activeEmail = 'admin@sheridanschools.org';
+activeEmail = 'personal.reviewer@gmail.com';
 context.submitReviewDecision(UUID, 'denied', 'Denied in test');
 assert.equal(rows[0][workflowColumn], 'denied');
-assert.equal(rows[0][headers.indexOf('reviewed_by')], 'admin@sheridanschools.org');
+assert.equal(rows[0][headers.indexOf('reviewed_by')], 'personal.reviewer@gmail.com');
 
 const beforeSubmitCount = rows.length;
 context.submitAbsenceRequest({

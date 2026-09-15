@@ -71,7 +71,13 @@ function doGet(event) {
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     } catch (error) {
       console.warn('Review access denied: %s', error && error.message ? error.message : 'unknown');
-      return HtmlService.createHtmlOutputFromFile('AccessDenied')
+      const deniedTemplate = HtmlService.createTemplateFromFile('AccessDenied');
+      deniedTemplate.signedInEmail = getActiveReviewerEmail_();
+      deniedTemplate.deniedTitle = deniedTemplate.signedInEmail ? 'Access Denied' : 'Sign-in Required';
+      deniedTemplate.deniedMessage = deniedTemplate.signedInEmail
+        ? 'This Google account is not authorized to review this absence request.'
+        : 'Google could not verify the account being used for this reviewer portal.';
+      return deniedTemplate.evaluate()
         .setTitle('Access Denied')
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     }
@@ -102,6 +108,10 @@ function initializeAbsenceRequestSheet_() {
   } finally {
     lock.releaseLock();
   }
+}
+
+function initializeAbsenceRequestSheet() {
+  return initializeAbsenceRequestSheet_();
 }
 
 function submitAbsenceRequest(input) {
@@ -333,7 +343,7 @@ function configuredReviewerEmails_(propertyName) {
 }
 
 function getCurrentReviewer_() {
-  const reviewer = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  const reviewer = getActiveReviewerEmail_();
   if (!reviewer) throw new Error('Google could not verify your signed-in account.');
   const approvers = configuredReviewerEmails_(SCRIPT_PROPERTY_APPROVERS);
   const globalApprovers = configuredReviewerEmails_(SCRIPT_PROPERTY_GLOBAL_APPROVERS);
@@ -341,6 +351,10 @@ function getCurrentReviewer_() {
     throw new Error('This account is not authorized.');
   }
   return reviewer;
+}
+
+function getActiveReviewerEmail_() {
+  return String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
 }
 
 function authorizeReviewer_(row, reviewer) {

@@ -385,19 +385,21 @@ class StaffStatusServiceTests(unittest.TestCase):
         self.assertIsNone(record["created_absence_id"])
         self.assertEqual(queue.rows[0]["workflow_status"], "denied")
 
-    def test_google_rejects_unauthorized_reviewer_and_allows_global_reviewer(self):
+    def test_google_rejects_unconfigured_gmail_and_allows_configured_global_gmail(self):
         self._district_user()
         queue, _, _ = self._run_queue_sync([self._queue_row()])
-        queue.rows[0].update({"workflow_status": "approved", "reviewed_by": "other@sheridanschools.org",
+        queue.rows[0].update({"workflow_status": "approved", "reviewed_by": "personal.reviewer@gmail.com",
                               "reviewed_at": "2026-09-15T14:05:00+00:00", "launchpad_sync_status": "pending"})
         result = google_absence_sync.sync_google_absence_requests(client=queue)
         record = staff_status_service.get_pending_absence_request_by_submission_uuid(queue.rows[0]["submission_uuid"])
         self.assertEqual(record["status"], "pending")
         self.assertIn("not authorized", queue.rows[0]["launchpad_sync_error"])
-        set_setting("staff_status.absence_google_sync.global_reviewer_emails", "other@sheridanschools.org")
+        set_setting("staff_status.absence_google_sync.global_reviewer_emails", "personal.reviewer@gmail.com")
         with patch.object(google_absence_sync, "send_absence_decision_result_email_once"):
             result = google_absence_sync.sync_google_absence_requests(client=queue)
         self.assertEqual(result["counts"]["decisions"], 1)
+        record = staff_status_service.get_pending_absence_request_by_submission_uuid(queue.rows[0]["submission_uuid"])
+        self.assertEqual(record["reviewed_by_email"], "personal.reviewer@gmail.com")
 
     def test_request_history_and_friendly_formatting(self):
         self._district_user()
@@ -405,7 +407,8 @@ class StaffStatusServiceTests(unittest.TestCase):
         rows = staff_status_service.list_absence_requests_for_department("Technology", "pending")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["date_range_label"], "Wednesday, September 16, 2026")
-        self.assertIn("2:", rows[0]["submitted_at_label"])
+        self.assertIn(" at ", rows[0]["submitted_at_label"])
+        self.assertRegex(rows[0]["submitted_at_label"], r"\d{1,2}:\d{2} [AP]M$")
         self.assertNotIn("T", rows[0]["submitted_at_label"])
 
     def test_disabled_department_rejects_public_submission(self):
