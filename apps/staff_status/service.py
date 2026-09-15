@@ -1,6 +1,7 @@
 import calendar
 import json, zoneinfo, secrets, csv, io
 import sqlite3
+from urllib.parse import quote
 from collections import Counter
 from datetime import date, datetime, time, timezone, timedelta
 from html import escape
@@ -103,6 +104,41 @@ def get_app_zoneinfo() -> zoneinfo.ZoneInfo:
 
 def get_local_now() -> datetime:
     return datetime.now(get_app_zoneinfo())
+
+
+def format_friendly_date(value: str | date | None, include_weekday: bool = True) -> str:
+    parsed = value if isinstance(value, date) else parse_iso_date(value)
+    if not parsed:
+        return "N/A"
+    pattern = "%A, %B %d, %Y" if include_weekday else "%B %d, %Y"
+    return parsed.strftime(pattern).replace(" 0", " ")
+
+
+def format_friendly_date_range(start_value: str | None, end_value: str | None) -> str:
+    start = parse_iso_date(start_value)
+    end = parse_iso_date(end_value) or start
+    if not start:
+        return "N/A"
+    if not end or end == start:
+        return format_friendly_date(start)
+    if start.year == end.year:
+        start_label = start.strftime("%A, %B %d").replace(" 0", " ")
+        end_label = end.strftime("%A, %B %d, %Y").replace(" 0", " ")
+        return f"{start_label} – {end_label}"
+    return f"{format_friendly_date(start)} – {format_friendly_date(end)}"
+
+
+def format_friendly_timestamp(value: str | datetime | None) -> str:
+    if not value:
+        return "N/A"
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        local_value = parsed.astimezone(get_app_zoneinfo())
+        return local_value.strftime("%B %d, %Y at %I:%M %p").replace(" 0", " ")
+    except (TypeError, ValueError):
+        return "N/A"
 
 
 def _normalize_local_datetime(value: datetime | None = None) -> datetime:
@@ -2567,6 +2603,10 @@ def _pending_absence_request_from_row(row) -> dict | None:
     item["hours_value"] = absence_days_to_hours(item.get("days_value"))
     item["start_time_label"] = format_start_time(item.get("start_time"))
     item["time_window_label"] = get_absence_time_window_label(item)
+    item["date_range_label"] = format_friendly_date_range(item.get("start_date"), item.get("end_date"))
+    item["submitted_at_label"] = format_friendly_timestamp(item.get("submitted_at"))
+    item["reviewed_at_label"] = format_friendly_timestamp(item.get("reviewed_at"))
+    item["status_label"] = "Denied" if item.get("status") == "rejected" else str(item.get("status") or "").title()
     return item
 
 
@@ -2622,6 +2662,32 @@ def list_pending_absence_requests(status: str | None = "pending") -> list[dict]:
             params,
         ).fetchall()
 
+    return [_pending_absence_request_from_row(row) for row in rows]
+
+
+def list_absence_requests_for_department(
+    department_name: str,
+    status: str | None = None,
+) -> list[dict]:
+    normalized_status = (status or "").strip().lower()
+    if normalized_status == "denied":
+        normalized_status = "rejected"
+    params = [department_name.strip()]
+    status_sql = ""
+    if normalized_status in VALID_PENDING_ABSENCE_STATUSES:
+        status_sql = "AND status = ?"
+        params.append(normalized_status)
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM staff_status_pending_absence_requests
+            WHERE department_name = ?
+            {status_sql}
+            ORDER BY submitted_at DESC, id DESC
+            """,
+            params,
+        ).fetchall()
     return [_pending_absence_request_from_row(row) for row in rows]
 
 
@@ -2754,11 +2820,17 @@ def create_pending_absence_request_from_public_submission(
 def approve_pending_absence_request(
     *,
     request_id: int,
-    reviewed_by_user_id: int,
+    reviewed_by_user_id: int | None,
     reviewed_by_display_name: str,
+    reviewed_by_email: str | None = None,
+    reviewed_at: str | None = None,
+    review_source: str = "launchpad",
     decision_note: str | None = None,
 ) -> dict:
-    now = utc_now_iso()
+    now = reviewed_at or utc_now_iso()
+    normalized_note = normalize_text(decision_note)
+    if normalized_note and len(normalized_note) > 1000:
+        raise StaffStatusValidationError("Decision note cannot exceed 1000 characters.")
 
     with get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -2811,7 +2883,7 @@ def approve_pending_absence_request(
             days_value=request_record["days_value"],
             start_time=request_record["start_time"],
             note=request_record.get("note"),
-            created_by_user_id=reviewed_by_user_id,
+            created_by_user_id=reviewed_by_user_id or 0,
             created_by_display_name=reviewed_by_display_name,
             now=now,
         )
@@ -2823,6 +2895,8 @@ def approve_pending_absence_request(
                 reviewed_at = ?,
                 reviewed_by_user_id = ?,
                 reviewed_by_display_name = ?,
+                reviewed_by_email = ?,
+                review_source = ?,
                 decision_note = ?,
                 created_absence_id = ?,
                 updated_at = ?
@@ -2832,7 +2906,9 @@ def approve_pending_absence_request(
                 now,
                 reviewed_by_user_id,
                 reviewed_by_display_name,
-                normalize_text(decision_note),
+                normalize_text(reviewed_by_email),
+                normalize_text(review_source),
+                normalized_note,
                 absence_id,
                 now,
                 request_id,
@@ -2846,11 +2922,17 @@ def approve_pending_absence_request(
 def reject_pending_absence_request(
     *,
     request_id: int,
-    reviewed_by_user_id: int,
+    reviewed_by_user_id: int | None,
     reviewed_by_display_name: str,
+    reviewed_by_email: str | None = None,
+    reviewed_at: str | None = None,
+    review_source: str = "launchpad",
     decision_note: str | None = None,
 ) -> dict:
-    now = utc_now_iso()
+    now = reviewed_at or utc_now_iso()
+    normalized_note = normalize_text(decision_note)
+    if normalized_note and len(normalized_note) > 1000:
+        raise StaffStatusValidationError("Decision note cannot exceed 1000 characters.")
 
     with get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -2879,6 +2961,8 @@ def reject_pending_absence_request(
                 reviewed_at = ?,
                 reviewed_by_user_id = ?,
                 reviewed_by_display_name = ?,
+                reviewed_by_email = ?,
+                review_source = ?,
                 decision_note = ?,
                 updated_at = ?
             WHERE id = ?
@@ -2887,7 +2971,9 @@ def reject_pending_absence_request(
                 now,
                 reviewed_by_user_id,
                 reviewed_by_display_name,
-                normalize_text(decision_note),
+                normalize_text(reviewed_by_email),
+                normalize_text(review_source),
+                normalized_note,
                 now,
                 request_id,
             ),
@@ -2897,7 +2983,71 @@ def reject_pending_absence_request(
     return get_pending_absence_request_by_id(request_id)
 
 
-def send_pending_absence_request_email(request_record: dict) -> None:
+def _update_pending_request_fields(request_id: int, fields: dict) -> None:
+    allowed = {
+        "review_notification_sent_at",
+        "review_notification_error",
+        "result_notification_status",
+        "result_notification_attempted_at",
+        "result_notification_sent_at",
+        "result_notification_error",
+    }
+    updates = {key: value for key, value in fields.items() if key in allowed}
+    if not updates:
+        return
+    assignments = ", ".join(f"{key} = ?" for key in updates)
+    with get_connection() as conn:
+        conn.execute(
+            f"UPDATE staff_status_pending_absence_requests SET {assignments}, updated_at = ? WHERE id = ?",
+            [*updates.values(), utc_now_iso(), request_id],
+        )
+        conn.commit()
+
+
+def _email_summary_html(request_record: dict) -> str:
+    absence_type = escape(str(request_record.get("absence_type") or "").title())
+    date_range = escape(format_friendly_date_range(request_record.get("start_date"), request_record.get("end_date")))
+    duration = escape(str(request_record.get("duration_label") or get_absence_duration_label(request_record.get("duration_mode"))))
+    hours = escape(str(request_record.get("hours_value") or absence_days_to_hours(request_record.get("days_value"))))
+    time_label = escape(str(request_record.get("time_window_label") or get_absence_time_window_label(request_record)))
+    return f"""
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f8fafc;border:1px solid #dbe4ee;border-radius:12px;">
+        <tr><td style="padding:20px;">
+          <div style="font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#2563eb;margin-bottom:8px;">{absence_type}</div>
+          <div style="font-size:20px;font-weight:800;color:#172033;line-height:1.35;margin-bottom:8px;">{date_range}</div>
+          <div style="font-size:15px;color:#475569;line-height:1.6;">{duration} &middot; {hours} hours<br>{time_label}</div>
+        </td></tr>
+      </table>
+    """
+
+
+def _email_shell(*, eyebrow: str, title: str, intro_html: str, body_html: str, footer_html: str) -> str:
+    return f"""
+    <html><body style="margin:0;padding:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#172033;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#eef3f8;">
+        <tr><td align="center" style="padding:24px 12px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:16px;overflow:hidden;">
+            <tr><td style="padding:24px 26px;background:#172b4d;color:#ffffff;">
+              <div style="font-size:20px;font-weight:800;">Launchpad</div><div style="font-size:13px;color:#cbd5e1;margin-top:3px;">Staff Status</div>
+            </td></tr>
+            <tr><td style="padding:28px 26px;">
+              <div style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#2563eb;margin-bottom:9px;">{escape(eyebrow)}</div>
+              <h1 style="margin:0 0 12px;font-size:27px;line-height:1.25;color:#172033;">{escape(title)}</h1>
+              <div style="font-size:16px;line-height:1.55;color:#475569;margin-bottom:22px;">{intro_html}</div>
+              {body_html}
+              <div style="margin-top:22px;font-size:13px;line-height:1.5;color:#64748b;">{footer_html}</div>
+            </td></tr>
+            <tr><td style="padding:18px 26px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;">Sheridan School District &middot; Launchpad</td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </body></html>
+    """
+
+
+def send_pending_absence_request_email(request_record: dict) -> bool:
+    if request_record.get("review_notification_sent_at"):
+        return False
     settings = get_absence_form_integration_settings()
     sender_email = (settings.get("notification_sender_email") or "").strip()
     recipient_email = (request_record.get("approval_manager_email") or "").strip()
@@ -2905,69 +3055,150 @@ def send_pending_absence_request_email(request_record: dict) -> None:
     if not sender_email:
         raise ValueError("Staff Status notification sender email is not configured.")
 
-    review_url = build_public_url(
-        "staff_status.review_absence_request",
-        request_id=request_record["id"],
-    )
+    review_base_url = (get_setting("staff_status.absence_google_sync.review_web_app_url", "") or "").strip()
+    if not review_base_url:
+        raise ValueError("The authenticated absence review web app URL is not configured.")
+    separator = "&" if "?" in review_base_url else "?"
+    review_url = f"{review_base_url}{separator}action=review&id={quote(str(request_record['submission_uuid']))}"
 
-    subject = f"Staff Status Absence Request: {request_record.get('staff_display_name')}"
+    subject = f"New Absence Request — {request_record.get('staff_display_name')}"
     html_staff_display_name = escape(str(request_record.get("staff_display_name") or ""))
     html_department_name = escape(str(request_record.get("department_name") or ""))
-    html_start_date = escape(str(request_record.get("start_date") or ""))
-    html_end_date = escape(str(request_record.get("end_date") or ""))
-    html_absence_type = escape(str((request_record.get("absence_type") or "").title()))
-    html_duration_label = escape(str(request_record.get("duration_label") or ""))
-    html_time_window_label = escape(str(request_record.get("time_window_label") or ""))
-    html_note = escape(str(request_record.get("note") or "None"))
-    html_submitted_at = escape(str(request_record.get("submitted_at") or ""))
+    html_note = escape(str(request_record.get("note") or "No note provided."))
+    html_submitted_at = escape(format_friendly_timestamp(request_record.get("submitted_at")))
     html_review_url = escape(review_url, quote=True)
 
     text_body = "\n".join([
-        "A Staff Status absence request is waiting for review.",
+        "A new Staff Status absence request is waiting for review.",
         "",
         f"Staff Member: {request_record.get('staff_display_name')}",
         f"Department: {request_record.get('department_name')}",
-        f"Date Range: {request_record.get('start_date')} to {request_record.get('end_date')}",
+        f"Date: {format_friendly_date_range(request_record.get('start_date'), request_record.get('end_date'))}",
         f"Absence Type: {(request_record.get('absence_type') or '').title()}",
         f"Duration: {request_record.get('duration_label')}",
         f"Time: {request_record.get('time_window_label')}",
         f"Notes: {request_record.get('note') or 'None'}",
-        f"Submitted: {request_record.get('submitted_at')}",
+        f"Submitted: {format_friendly_timestamp(request_record.get('submitted_at'))}",
         "",
         f"Review Absence Request: {review_url}",
     ])
 
-    html_body = f"""
-    <html>
-      <body style="margin:0; padding:24px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif; color:#0f172a;">
-        <div style="max-width:680px; margin:0 auto; background:#ffffff; border:1px solid #dbe4ee; border-radius:14px; overflow:hidden;">
-          <div style="padding:26px;">
-            <h1 style="margin:0 0 12px; font-size:24px; line-height:1.25;">Staff Status Absence Request</h1>
-            <p style="margin:0 0 18px; color:#475569;">A public absence request is waiting for review.</p>
-            <table style="width:100%; border-collapse:collapse; margin-bottom:22px;">
-              <tr><td style="padding:8px 0; font-weight:bold;">Staff Member</td><td style="padding:8px 0;">{html_staff_display_name}</td></tr>
-              <tr><td style="padding:8px 0; font-weight:bold;">Department</td><td style="padding:8px 0;">{html_department_name}</td></tr>
-              <tr><td style="padding:8px 0; font-weight:bold;">Date Range</td><td style="padding:8px 0;">{html_start_date} to {html_end_date}</td></tr>
-              <tr><td style="padding:8px 0; font-weight:bold;">Absence Type</td><td style="padding:8px 0;">{html_absence_type}</td></tr>
-              <tr><td style="padding:8px 0; font-weight:bold;">Duration</td><td style="padding:8px 0;">{html_duration_label}</td></tr>
-              <tr><td style="padding:8px 0; font-weight:bold;">Time</td><td style="padding:8px 0;">{html_time_window_label}</td></tr>
-              <tr><td style="padding:8px 0; font-weight:bold;">Notes</td><td style="padding:8px 0;">{html_note}</td></tr>
-              <tr><td style="padding:8px 0; font-weight:bold;">Submitted</td><td style="padding:8px 0;">{html_submitted_at}</td></tr>
-            </table>
-            <a href="{html_review_url}" style="display:inline-block; background:#2563eb; color:#ffffff; text-decoration:none; font-weight:bold; padding:12px 16px; border-radius:10px;">Review Absence Request</a>
-          </div>
-        </div>
-      </body>
-    </html>
-    """
-
-    send_mail(
-        sender_email=sender_email,
-        recipient_email=recipient_email,
-        subject=subject,
-        text_body=text_body,
-        html_body=html_body,
+    html_body = _email_shell(
+        eyebrow="New Absence Request",
+        title=html_staff_display_name,
+        intro_html=f"<strong style='color:#172033'>{html_department_name}</strong><br>A request is ready for your review.",
+        body_html=f"""
+          {_email_summary_html(request_record)}
+          <div style="margin-top:20px;"><div style="font-size:13px;font-weight:800;color:#172033;margin-bottom:6px;">Staff Note</div><div style="font-size:15px;line-height:1.55;color:#475569;white-space:pre-wrap;">{html_note}</div></div>
+          <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;"><tr><td style="border-radius:10px;background:#2563eb;"><a href="{html_review_url}" style="display:inline-block;padding:14px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;">Review Absence Request</a></td></tr></table>
+        """,
+        footer_html=f"Submitted {html_submitted_at}",
     )
+
+    try:
+        send_mail(sender_email=sender_email, recipient_email=recipient_email, subject=subject, text_body=text_body, html_body=html_body)
+    except Exception as exc:
+        _update_pending_request_fields(request_record["id"], {"review_notification_error": str(exc)[:500]})
+        raise
+    sent_at = utc_now_iso()
+    _update_pending_request_fields(request_record["id"], {"review_notification_sent_at": sent_at, "review_notification_error": None})
+    return True
+
+
+def send_absence_decision_result_email_once(request_record: dict) -> bool:
+    attempted_at = utc_now_iso()
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM staff_status_pending_absence_requests WHERE id = ?",
+            (request_record["id"],),
+        ).fetchone()
+        if not row:
+            conn.rollback()
+            return False
+        claim = dict(row)
+        previous_attempt = None
+        if claim.get("result_notification_attempted_at"):
+            try:
+                previous_attempt = datetime.fromisoformat(
+                    claim["result_notification_attempted_at"].replace("Z", "+00:00"))
+                if previous_attempt.tzinfo is None:
+                    previous_attempt = previous_attempt.replace(tzinfo=timezone.utc)
+            except ValueError:
+                previous_attempt = None
+        sending_is_fresh = (
+            claim.get("result_notification_status") == "sending"
+            and previous_attempt
+            and previous_attempt > datetime.now(timezone.utc) - timedelta(minutes=15)
+        )
+        if (claim.get("status") not in {"approved", "rejected"}
+                or claim.get("result_notification_sent_at") or sending_is_fresh):
+            conn.rollback()
+            return False
+        conn.execute(
+            """
+            UPDATE staff_status_pending_absence_requests
+            SET result_notification_status = 'sending',
+                result_notification_attempted_at = ?,
+                result_notification_error = NULL,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (attempted_at, attempted_at, request_record["id"]),
+        )
+        conn.commit()
+    latest = get_pending_absence_request_by_id(request_record["id"])
+    settings = get_absence_form_integration_settings()
+    sender_email = (settings.get("notification_sender_email") or "").strip()
+    approved = latest["status"] == "approved"
+    status_label = "Approved" if approved else "Denied"
+    start = parse_iso_date(latest.get("start_date"))
+    subject_date = start.strftime("%B %d").replace(" 0", " ") if start else "Absence Request"
+    reviewer = latest.get("reviewed_by_display_name") or latest.get("reviewed_by_email") or "Your reviewer"
+    decision_note = latest.get("decision_note") or ""
+    outcome = "Your absence has been added to Staff Status." if approved else "No Staff Status absence was created."
+    text_lines = [
+        f"Your absence request was {status_label.lower()}.", "",
+        format_friendly_date_range(latest.get("start_date"), latest.get("end_date")),
+        str(latest.get("absence_type") or "").title(),
+        str(latest.get("duration_label") or ""), "",
+        f"Reviewed by {reviewer}",
+        format_friendly_timestamp(latest.get("reviewed_at")),
+    ]
+    if decision_note:
+        text_lines.extend(["", "Manager Note", decision_note])
+    text_lines.extend(["", outcome])
+    note_html = ""
+    if decision_note:
+        note_html = f"<div style='margin-top:20px;'><div style='font-size:13px;font-weight:800;margin-bottom:6px;'>Manager Note</div><div style='white-space:pre-wrap;color:#475569;'>{escape(decision_note)}</div></div>"
+    html_body = _email_shell(
+        eyebrow=status_label,
+        title=f"Your Absence Request Was {status_label}",
+        intro_html=escape(outcome),
+        body_html=f"{_email_summary_html(latest)}{note_html}",
+        footer_html=f"Reviewed by {escape(str(reviewer))}<br>{escape(format_friendly_timestamp(latest.get('reviewed_at')))}",
+    )
+    try:
+        send_mail(
+            sender_email=sender_email,
+            recipient_email=latest["staff_email"],
+            subject=f"Absence Request {status_label} — {subject_date}",
+            text_body="\n".join(text_lines),
+            html_body=html_body,
+        )
+    except Exception as exc:
+        _update_pending_request_fields(latest["id"], {
+            "result_notification_status": "error",
+            "result_notification_error": str(exc)[:500],
+        })
+        raise
+    sent_at = utc_now_iso()
+    _update_pending_request_fields(latest["id"], {
+        "result_notification_status": "sent",
+        "result_notification_sent_at": sent_at,
+        "result_notification_error": None,
+    })
+    return True
 
 
 def get_school_year_rollover_reminder(today: date | None = None) -> dict:

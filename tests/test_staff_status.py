@@ -348,6 +348,66 @@ class StaffStatusServiceTests(unittest.TestCase):
         self.assertEqual(queue.rows[0]["processing_error"], "A valid district email is required.")
         self.assertNotIn("Traceback", queue.rows[0]["processing_error"])
 
+    def test_google_remote_approval_is_idempotent_and_persists_reviewer(self):
+        self._district_user()
+        queue, _, _ = self._run_queue_sync([self._queue_row()])
+        queue.rows[0].update({
+            "workflow_status": "approved",
+            "reviewed_by": "bjpullman@sheridanschools.org",
+            "reviewed_at": "2026-09-15T14:05:00+00:00",
+            "decision_note": "Approved remotely",
+            "launchpad_sync_status": "pending",
+        })
+        with patch.object(google_absence_sync, "send_absence_decision_result_email_once") as result_email:
+            first = google_absence_sync.sync_google_absence_requests(
+                client=queue, now=datetime(2026, 9, 15, 14, 6, tzinfo=ZoneInfo("UTC")))
+            second = google_absence_sync.sync_google_absence_requests(
+                client=queue, now=datetime(2026, 9, 15, 14, 7, tzinfo=ZoneInfo("UTC")))
+        record = staff_status_service.get_pending_absence_request_by_submission_uuid(
+            queue.rows[0]["submission_uuid"])
+        self.assertEqual(first["counts"]["decisions"], 1)
+        self.assertEqual(second["counts"]["decisions"], 0)
+        self.assertEqual(record["status"], "approved")
+        self.assertEqual(record["reviewed_by_email"], "bjpullman@sheridanschools.org")
+        self.assertEqual(record["review_source"], "google_apps_script")
+        self.assertIsNotNone(record["created_absence_id"])
+        self.assertEqual(result_email.call_count, 2)  # second call is a persisted-state no-op in production
+
+    def test_google_remote_denial_creates_no_absence(self):
+        self._district_user()
+        queue, _, _ = self._run_queue_sync([self._queue_row()])
+        queue.rows[0].update({"workflow_status": "denied", "reviewed_by": "bjpullman@sheridanschools.org",
+                              "reviewed_at": "2026-09-15T14:05:00+00:00", "launchpad_sync_status": "pending"})
+        with patch.object(google_absence_sync, "send_absence_decision_result_email_once"):
+            google_absence_sync.sync_google_absence_requests(client=queue)
+        record = staff_status_service.get_pending_absence_request_by_submission_uuid(queue.rows[0]["submission_uuid"])
+        self.assertEqual(record["status"], "rejected")
+        self.assertIsNone(record["created_absence_id"])
+        self.assertEqual(queue.rows[0]["workflow_status"], "denied")
+
+    def test_google_rejects_unauthorized_reviewer_and_allows_global_reviewer(self):
+        self._district_user()
+        queue, _, _ = self._run_queue_sync([self._queue_row()])
+        queue.rows[0].update({"workflow_status": "approved", "reviewed_by": "other@sheridanschools.org",
+                              "reviewed_at": "2026-09-15T14:05:00+00:00", "launchpad_sync_status": "pending"})
+        result = google_absence_sync.sync_google_absence_requests(client=queue)
+        record = staff_status_service.get_pending_absence_request_by_submission_uuid(queue.rows[0]["submission_uuid"])
+        self.assertEqual(record["status"], "pending")
+        self.assertIn("not authorized", queue.rows[0]["launchpad_sync_error"])
+        set_setting("staff_status.absence_google_sync.global_reviewer_emails", "other@sheridanschools.org")
+        with patch.object(google_absence_sync, "send_absence_decision_result_email_once"):
+            result = google_absence_sync.sync_google_absence_requests(client=queue)
+        self.assertEqual(result["counts"]["decisions"], 1)
+
+    def test_request_history_and_friendly_formatting(self):
+        self._district_user()
+        self._run_queue_sync([self._queue_row()])
+        rows = staff_status_service.list_absence_requests_for_department("Technology", "pending")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["date_range_label"], "Wednesday, September 16, 2026")
+        self.assertIn("2:", rows[0]["submitted_at_label"])
+        self.assertNotIn("T", rows[0]["submitted_at_label"])
+
     def test_disabled_department_rejects_public_submission(self):
         staff_status_service.update_absence_form_integration_settings(
             approval_manager_email="manager@example.test",
@@ -398,6 +458,23 @@ class StaffStatusServiceTests(unittest.TestCase):
                 reviewed_by_user_id=self.admin_user["id"],
                 reviewed_by_display_name="Manager User",
             )
+
+    def test_result_notification_sends_once_and_persists_retry_state(self):
+        staff_status_service.update_absence_form_integration_settings(
+            approval_manager_email="manager@example.test", notification_sender_email="sender@example.test")
+        request_record, _ = staff_status_service.create_pending_absence_request_from_public_submission(payload={
+            "submission_uuid": "result-email-request", "staff_email": "tech@example.test",
+            "absence_type": "sick", "duration_mode": "full_day", "start_date": "2026-09-17"})
+        approved = staff_status_service.approve_pending_absence_request(
+            request_id=request_record["id"], reviewed_by_user_id=self.admin_user["id"],
+            reviewed_by_display_name="Manager User", reviewed_by_email="manager@example.test")
+        with patch.object(staff_status_service, "send_mail") as send_mail:
+            self.assertTrue(staff_status_service.send_absence_decision_result_email_once(approved))
+            self.assertFalse(staff_status_service.send_absence_decision_result_email_once(approved))
+        send_mail.assert_called_once()
+        saved = staff_status_service.get_pending_absence_request_by_id(approved["id"])
+        self.assertEqual(saved["result_notification_status"], "sent")
+        self.assertTrue(saved["result_notification_sent_at"])
 
     def test_pdf_export_builds_one_section_per_active_user(self):
         staff_status_service.create_absence(

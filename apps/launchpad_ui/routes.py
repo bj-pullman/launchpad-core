@@ -1546,6 +1546,8 @@ def settings_staff_status():
                 type=int,
             ) or 15
             approval_manager_email = (request.form.get("approval_manager_email") or "").strip().lower()
+            review_web_app_url = (request.form.get("absence_google_review_web_app_url") or "").strip()
+            global_reviewer_emails = (request.form.get("absence_google_global_reviewer_emails") or "").strip().lower()
 
             if integration_enabled and not spreadsheet_id:
                 flash("Spreadsheet ID is required when Google absence synchronization is enabled.", "error")
@@ -1559,12 +1561,22 @@ def settings_staff_status():
             if approval_manager_email and "@" not in approval_manager_email:
                 flash("Approval manager email must be a valid email address.", "error")
                 return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+            if integration_enabled and not review_web_app_url.startswith("https://script.google.com/"):
+                flash("Authenticated review web app URL must be a script.google.com HTTPS URL.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+            invalid_reviewers = [value.strip() for value in global_reviewer_emails.split(",")
+                                 if value.strip() and "@" not in value]
+            if invalid_reviewers:
+                flash("Global reviewer emails must be a comma-separated list of valid email addresses.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
             update_google_absence_sync_settings(
                 enabled=integration_enabled,
                 spreadsheet_id=spreadsheet_id,
                 worksheet_name=worksheet_name,
                 interval_minutes=interval_minutes,
                 processing_timeout_minutes=processing_timeout_minutes,
+                review_web_app_url=review_web_app_url,
+                global_reviewer_emails=global_reviewer_emails,
             )
             set_setting(
                 "staff_status.absence_form.approval_manager_email",
@@ -1581,6 +1593,8 @@ def settings_staff_status():
                 flash(
                     "Google absence sync completed: "
                     f"{counts.get('processed', 0)} processed, "
+                    f"{counts.get('decisions', 0)} decisions, "
+                    f"{counts.get('reconciled', 0)} reconciled, "
                     f"{counts.get('errors', 0)} errors.",
                     "success",
                 )

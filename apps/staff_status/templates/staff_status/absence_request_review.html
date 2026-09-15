@@ -1,127 +1,21 @@
 {% extends "launchpad_ui/base.html" %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('staff_status.static', filename='staff_status.css') }}">
-{% endblock %}
-
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('staff_status.static', filename='staff_status.css') }}">{% endblock %}
 {% block content %}
-<div class="page-shell">
-  <div class="page-header">
-    <div>
-      <h1>Absence Request Review</h1>
-      <p class="page-subtitle">
-        {{ request_record.staff_display_name }} - {{ request_record.department_name }}
-      </p>
-    </div>
-
-    <div class="page-header-actions">
-      <a href="{{ url_for('staff_status.absences', department_name=request_record.department_name) }}"
-        class="btn btn-secondary">
-        Department Absences
-      </a>
-    </div>
-  </div>
-
-  <div class="content-card staff-status-review-card">
-    <div class="staff-status-review-header">
-      <div>
-        <h2>Request Details</h2>
-        <p class="muted">Submitted {{ request_record.submitted_at|localtime }}</p>
-      </div>
-
-      <span class="staff-status-request-status staff-status-request-status-{{ request_record.status }}">
-        {{ request_record.status|title }}
-      </span>
-    </div>
-
-    <dl class="staff-status-review-grid">
-      <div>
-        <dt>Staff Member</dt>
-        <dd>{{ request_record.staff_display_name }}</dd>
-      </div>
-      <div>
-        <dt>Email</dt>
-        <dd>{{ request_record.staff_email }}</dd>
-      </div>
-      <div>
-        <dt>Department</dt>
-        <dd>{{ request_record.department_name }}</dd>
-      </div>
-      <div>
-        <dt>Absence Type</dt>
-        <dd>{{ request_record.absence_type|title }}</dd>
-      </div>
-      <div>
-        <dt>Start Date</dt>
-        <dd>{{ request_record.start_date|localdate }}</dd>
-      </div>
-      <div>
-        <dt>End Date</dt>
-        <dd>{{ request_record.end_date|localdate }}</dd>
-      </div>
-      <div>
-        <dt>Duration</dt>
-        <dd>{{ request_record.duration_label }}</dd>
-      </div>
-      <div>
-        <dt>Time</dt>
-        <dd>{{ request_record.time_window_label or "All day" }}</dd>
-      </div>
-      <div>
-        <dt>Days</dt>
-        <dd>{{ request_record.days_value if request_record.days_value is not none else "N/A" }}</dd>
-      </div>
-      <div>
-        <dt>Hours</dt>
-        <dd>{{ request_record.hours_value }}</dd>
-      </div>
-      <div>
-        <dt>Approval Manager</dt>
-        <dd>{{ request_record.approval_manager_email }}</dd>
-      </div>
-      <div>
-        <dt>Submission ID</dt>
-        <dd>{{ request_record.submission_uuid }}</dd>
-      </div>
-    </dl>
-
-    <div class="staff-status-review-note">
-      <h3>Staff Note</h3>
-      <p>{{ request_record.note or "No note provided." }}</p>
-    </div>
-
-    {% if request_record.status == "pending" %}
-      <div class="staff-status-review-decision">
-        <form method="post" class="settings-form">
-          <div class="form-field">
-            <label for="decision_note">Decision Note</label>
-            <textarea id="decision_note" name="decision_note" rows="4"
-              placeholder="Optional note for the request history"></textarea>
-          </div>
-
-          <div class="form-actions">
-            <button type="submit" name="action" value="approve" class="btn btn-success">
-              Approve Request
-            </button>
-            <button type="submit" name="action" value="reject" class="btn btn-danger">
-              Reject Request
-            </button>
-          </div>
-        </form>
-      </div>
+<div class="page-shell staff-status-review-shell">
+  <div class="page-header"><div><p class="staff-status-eyebrow">Staff Status</p><h1>Absence Request</h1></div><div class="page-header-actions"><a href="{{ url_for('staff_status.absences', department_name=request_record.department_name) }}" class="btn btn-secondary">Back to Absences</a></div></div>
+  <article class="content-card staff-status-review-card">
+    <div class="staff-status-review-header"><div><h2>{{ request_record.staff_display_name }}</h2><p>{{ request_record.department_name }}</p><p class="muted">{{ request_record.staff_email }}</p></div><span class="staff-status-request-status staff-status-request-status-{{ request_record.status }}">{{ request_record.status_label }}</span></div>
+    <section class="staff-status-review-summary"><p class="staff-status-eyebrow">Request Summary</p><h3>{{ request_record.absence_type|title }}</h3><strong>{{ request_record.date_range_label }}</strong><p>{{ request_record.duration_label }} · {{ request_record.hours_value }} hours<br>{{ request_record.time_window_label or 'All day' }}</p></section>
+    <section class="staff-status-review-note"><h3>Staff Note</h3><p>{{ request_record.note or 'No note provided.' }}</p></section>
+    {% if request_record.status == 'pending' %}
+      <section class="staff-status-review-decision"><form method="post" class="settings-form" data-decision-form>
+        <div class="form-field"><label for="decision_note">Decision Note <span class="muted">(optional)</span></label><textarea id="decision_note" name="decision_note" rows="4" maxlength="1000" placeholder="Add context for the staff member and request history"></textarea></div>
+        <div class="form-actions staff-status-decision-actions"><button type="submit" name="action" value="reject" class="btn btn-danger" onclick="return confirm('Deny this absence request?');">Deny Request</button><button type="submit" name="action" value="approve" class="btn btn-success" onclick="return confirm('Approve this absence request?');">Approve Request</button></div>
+      </form></section>
     {% else %}
-      <div class="staff-status-review-note">
-        <h3>Decision</h3>
-        <p>
-          Reviewed by {{ request_record.reviewed_by_display_name or "Unknown" }}
-          on {{ request_record.reviewed_at|localtime }}.
-        </p>
-        <p>{{ request_record.decision_note or "No decision note provided." }}</p>
-        {% if request_record.created_absence_id %}
-          <p class="muted">Created absence record #{{ request_record.created_absence_id }}.</p>
-        {% endif %}
-      </div>
+      <section class="staff-status-final-decision"><h3>{{ request_record.status_label }}</h3><p>Reviewed by <strong>{{ request_record.reviewed_by_display_name or request_record.reviewed_by_email or 'Unknown' }}</strong>{% if request_record.reviewed_by_email %}<br>{{ request_record.reviewed_by_email }}{% endif %}</p><p>{{ request_record.reviewed_at_label }}</p><div class="staff-status-review-note"><h3>Decision Note</h3><p>{{ request_record.decision_note or 'No decision note provided.' }}</p></div>{% if request_record.created_absence_id %}<p class="muted">Staff Status absence #{{ request_record.created_absence_id }} was created.</p>{% else %}<p class="muted">No Staff Status absence was created.</p>{% endif %}</section>
     {% endif %}
-  </div>
+    <footer class="staff-status-review-metadata"><p>Submitted {{ request_record.submitted_at_label }}</p><p>Approval manager: {{ request_record.approval_manager_email }}</p><p>Submission ID: <code>{{ request_record.submission_uuid }}</code></p>{% if request_record.review_source %}<p>Review source: {{ request_record.review_source|replace('_',' ')|title }}</p>{% endif %}</footer>
+  </article>
 </div>
 {% endblock %}

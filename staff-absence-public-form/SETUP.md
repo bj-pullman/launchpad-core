@@ -1,124 +1,61 @@
-# Staff Absence Public Form Setup
+# Staff Absence Apps Script Setup
 
-Complete these steps in order. The Google Sheet is a private queue even though the Apps Script web page is public.
+Use a controlled district account as the Apps Script owner. The Sheet must stay private and be shared only with necessary administrators, the script owner, and the Launchpad service account.
 
-## A. Create and initialize the Google Sheet
+## 1. Update the project and migrate the existing Sheet
 
-1. Create a Google Sheet owned by an appropriate district account. Suggested name: **Staff Absence Requests**.
-2. Copy the spreadsheet ID from the URL. In `https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit`, the value between `/d/` and `/edit` is the ID.
-3. Do not enable public or link-based sharing for the Sheet.
-4. In the Apps Script project described below, create the Script Property `ABSENCE_SUBMISSION_SHEET_ID` with this ID.
-5. Run `initializeAbsenceRequestSheet` once from the Apps Script editor and authorize it.
-6. Confirm that the `Absence Requests` worksheet was created with all 18 headers shown in `README.md`.
+1. Copy `Code.gs` and `Index.html` into the existing public Apps Script project.
+2. Set its `ABSENCE_SUBMISSION_SHEET_ID` Script Property to the existing private spreadsheet ID.
+3. Run `initializeAbsenceRequestSheet_` once from the Apps Script editor and authorize it. The trailing underscore deliberately prevents public browser calls.
+4. Verify the first 18 headers and all rows are unchanged and eleven fields were appended: `staff_display_name`, `department_name`, `approval_manager_email`, `workflow_status`, `reviewed_by`, `reviewed_at`, `decision_note`, `launchpad_sync_status`, `launchpad_synced_at`, `launchpad_sync_error`, `decision_claim_id`.
 
-Do not rename, reorder, remove, or add columns ahead of these headers. Both Apps Script and Launchpad validate the exact schema.
+The initializer never recreates a populated worksheet, clears cells, reorders headers, or deletes rows. Stop if the original 18 headers are not in their established order.
 
-## B. Create the Apps Script project
+## 2. Publish the anonymous intake deployment
 
-Manual setup does not require `clasp`:
+1. Make `appsscript.json` the active manifest.
+2. Under **Deploy > Manage deployments**, edit the existing public web app and select **New version**.
+3. Execute as the deploying account and allow **Anyone** / anonymous access.
+4. Publish and retain the employee `/exec` URL.
+5. In a signed-out browser, confirm intake works but a review URL shows Access denied.
 
-1. Go to [script.google.com](https://script.google.com) with the controlled district owner account.
-2. Create a new project and name it **Staff Absence Public Form**.
-3. Replace the default `Code.gs` with this directory's `Code.gs`.
-4. Add an HTML file named `Index` and copy in `Index.html`.
-5. In Project Settings, enable display of the `appsscript.json` manifest and replace it with this directory's manifest.
-6. Under Script Properties, add `ABSENCE_SUBMISSION_SHEET_ID` with the spreadsheet ID.
-7. Run `initializeAbsenceRequestSheet` and approve the requested Google Sheets permission.
+## 3. Publish the authenticated review deployment
 
-Optional `clasp` workflow:
+1. Create a second Apps Script project and copy in `staff-absence-review-form/Code.gs`, `Review.html`, `AccessDenied.html`, and `appsscript.json`.
+2. Set `ABSENCE_SUBMISSION_SHEET_ID`, `APPROVER_EMAILS`, and `GLOBAL_APPROVER_EMAILS` in that project's Script Properties.
+3. Create a web-app deployment that executes as the deploying account, is restricted to the district domain, and publish it.
+4. Record its `/exec` URL. Never add the review source or identity scope to the anonymous public project.
 
-1. Install and authenticate `clasp` according to Google's official documentation.
-2. Clone or initialize the Apps Script project in a separate working directory.
-3. Copy these source files into that working directory and run `clasp push`.
+The separate project is intentional: Apps Script exposes a project's public server functions to every deployment of that project. Isolation guarantees the anonymous deployment remains intake-only. Keep both project and deployment IDs in the administrator runbook. If Workspace does not offer domain-only access, do not publish review until domain restriction is available; exact-email checks remain defense in depth, not a substitute for sign-in-required deployment access.
 
-`clasp` is optional and is not required for setup or updates.
+## 4. Google service account
 
-## C. Deploy the public web app
+1. Enable Google Sheets API in a district-controlled Cloud project.
+2. Create a dedicated service account and share the private Sheet directly with it as Editor.
+3. Store JSON credentials outside this repository and web-served directories.
+4. Set `STAFF_STATUS_GOOGLE_SERVICE_ACCOUNT_FILE=C:\secure\launchpad\staff-absence-sheets.json` for the Launchpad service and restart it.
 
-1. In Apps Script, select **Deploy > New deployment**.
-2. Choose **Web app**.
-3. Set **Execute as** to the deploying/owner account.
-4. Set access to **Anyone** (or the equivalent anonymous public option available to the Workspace tenant).
-5. Deploy and authorize the project.
-6. Use the production URL ending in `/exec` for employees.
+Never paste credentials or paths into the Sheet.
 
-The `/dev` URL runs the latest saved code and is available only to users with editor access; use it for development checks. The `/exec` URL runs the published deployment version and is the employee-facing URL.
+## 5. Configure Launchpad
 
-Public deployment makes only the form callable. It does not make the Sheet public, and it does not create any connection to Launchpad.
+In **Settings > Staff Status > Absence Form**, configure the spreadsheet and worksheet, authenticated review `/exec` URL, approval manager, global reviewers (matching `GLOBAL_APPROVER_EMAILS`), polling interval, and stale timeout. Enable sync, save, then click **Sync Now**. Scheduled and manual runs use the same outbound-only service.
 
-## D. Create the Launchpad service account and share the Sheet
+## 6. End-to-end test
 
-1. In a district-controlled Google Cloud project, enable the **Google Sheets API**.
-2. Create a dedicated service account for the Launchpad absence sync.
-3. Create and securely download a JSON key only if the server's deployment model requires a key file.
-4. Obtain the service account email from Google Cloud IAM or the JSON file's `client_email` field.
-5. Share the **Staff Absence Requests** Sheet directly with that service account email as **Editor**. Editor access is required because Launchpad must claim rows and write processing results.
-6. Do not share the Sheet with “Anyone,” “Anyone with the link,” or a public group.
+1. Submit at a 360–430 px phone viewport using a valid district email.
+2. Confirm a pending row appears and contains no Launchpad data.
+3. Sync. Confirm Launchpad resolves the active employee's current department, creates one pending request, fills manager/sync metadata, and sends a manager CTA to the review deployment.
+4. Open the CTA signed out, unauthorized, assigned-manager, and global-reviewer. Only the authorized cases may load it.
+5. Approve once. Confirm GET made no change, sync creates one absence, audit fields are retained, one employee email is sent, and Google becomes synced.
+6. Deny another. Confirm no absence and one denied email.
+7. Repeat polling; confirm no duplicate request, absence, or ordinary retry email.
+8. Complete a request locally and confirm the next poll reconciles Google to Launchpad's final state.
+9. Make `processing` or `syncing` stale beyond the timeout and confirm recovery.
+10. Confirm final history remains under All/Approved/Denied in Launchpad.
 
-Allowed Sheet principals should be limited to appropriate district administrators, the Apps Script owner, and this service account.
+## 7. Operations
 
-## E. Install Launchpad Google credentials
+Saving source does not update `/exec`; publish a new version to each affected deployment with its matching manifest. Run the initializer after future append-only schema changes.
 
-1. Copy the service-account JSON file to a protected location on the private Launchpad server, outside the repository and outside any web-served directory.
-2. Restrict file permissions to the Windows service identity (or operating-system account) that runs Launchpad and necessary administrators.
-3. Set this environment variable for the Launchpad service:
-
-```text
-STAFF_STATUS_GOOGLE_SERVICE_ACCOUNT_FILE=C:\secure\launchpad\staff-absence-sheets.json
-```
-
-4. Restart the Launchpad service so it receives the environment variable.
-
-Do not put credential JSON in this repository, `.env` committed to source control, the Google Sheet, or a visible Launchpad setting. The settings page displays only `Yes` or `No` for credential availability.
-
-## F. Configure Launchpad
-
-1. Sign in with an account that has `launchpad.settings.staff_status.manage`.
-2. Open **Settings > Staff Status > Absence Form**.
-3. Enter the spreadsheet ID.
-4. Enter `Absence Requests` as the worksheet name.
-5. Set the polling interval (default 5 minutes) and stale-processing timeout (default 15 minutes).
-6. Confirm **Google Credentials Configured** shows **Yes**.
-7. Enter the existing approval manager email.
-8. Enable Google absence synchronization and save.
-9. Click **Sync Now**. Confirm the connection/last-run panel reports a successful sync.
-10. Confirm the scheduler lists/runs `staff_status.google_absence_sync` at the configured interval in server logs.
-
-The manual action and scheduler call the same sync service. Manual sync is intended for initial verification and troubleshooting; scheduled polling is normal operation.
-
-## G. Test the complete workflow
-
-1. Open the `/exec` URL on a personal phone, preferably while not signed in to a district Google account.
-2. Submit a request with a valid `@sheridanschools.org` email.
-3. Confirm one row appears and its status is `pending`.
-4. Wait for polling or click **Sync Now**.
-5. Confirm Launchpad resolves the correct current active user.
-6. Confirm it uses the user's current department, not any Google-provided department.
-7. Confirm a normal pending Staff Status absence request is created.
-8. Confirm the Sheet row becomes `processed` and contains the pending-request ID.
-9. Confirm the existing approval notification and review workflow operate normally.
-10. Run sync again and confirm no second pending request is created.
-11. Temporarily reproduce a stale `processing` row older than the timeout and confirm Launchpad safely reclaims or repairs it.
-12. Confirm an invalid district email is rejected by Apps Script.
-13. Test a valid district address that has no Launchpad user; the private queue row should become `error`.
-14. Test an inactive user and confirm `error`.
-15. Test a user whose current department has Staff Status disabled and confirm `error`.
-16. Test all conditional duration fields and the layout at approximately 360–430 px width.
-17. Confirm the Sheet itself remains inaccessible to anonymous users.
-18. Confirm there is no public Launchpad absence integration route and no request from Apps Script to Launchpad.
-
-## H. Update Apps Script
-
-1. Make and review changes in this repository first.
-2. Copy the updated files into Apps Script, or use `clasp push`.
-3. Test saved code with the editor and `/dev` URL.
-4. Select **Deploy > Manage deployments**, edit the production web-app deployment, and publish a **new version**.
-5. Verify the existing `/exec` URL now serves the new version. Creating a new deployment instead may produce a different URL.
-
-Changing repository files or saving editor code alone does not update an existing versioned `/exec` deployment.
-
-## Operational notes
-
-- Validation/identity errors are retained as `error` rows with safe descriptions. Correct the underlying Launchpad identity/configuration issue, then an authorized Sheet administrator may reset `processing_status` to `pending` for an intentional retry.
-- If Launchpad loses connectivity after creating a pending request, stale recovery uses the UUID to repair the row without creating a duplicate.
-- Never paste raw Google API errors, stack traces, tokens, credential paths, private keys, internal URLs, or database information into queue cells.
+Safe queue errors contain no tracebacks, credentials, internal URLs, or database detail. Launchpad is authoritative and repairs conflicting final state. If Google cannot provide `Session.getActiveUser().getEmail()`, review access intentionally fails closed; verify domain restriction, district sign-in, and Workspace active-user policy.

@@ -197,6 +197,29 @@ def init_staff_status_db():
         if "start_time" not in absence_columns:
             conn.execute("ALTER TABLE staff_status_absences ADD COLUMN start_time TEXT NULL")
 
+        pending_request_columns = {
+            row["name"]
+            for row in conn.execute(
+                "PRAGMA table_info(staff_status_pending_absence_requests)"
+            ).fetchall()
+        }
+        pending_request_additions = {
+            "reviewed_by_email": "TEXT NULL",
+            "review_source": "TEXT NULL",
+            "review_notification_sent_at": "TEXT NULL",
+            "review_notification_error": "TEXT NULL",
+            "result_notification_status": "TEXT NULL",
+            "result_notification_attempted_at": "TEXT NULL",
+            "result_notification_sent_at": "TEXT NULL",
+            "result_notification_error": "TEXT NULL",
+        }
+        for column_name, column_definition in pending_request_additions.items():
+            if column_name not in pending_request_columns:
+                conn.execute(
+                    "ALTER TABLE staff_status_pending_absence_requests "
+                    f"ADD COLUMN {column_name} {column_definition}"
+                )
+
         conn.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_status_departments_board_token

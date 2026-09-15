@@ -2,7 +2,7 @@ const SCRIPT_PROPERTY_SHEET_ID = 'ABSENCE_SUBMISSION_SHEET_ID';
 const WORKSHEET_NAME = 'Absence Requests';
 const MAX_NOTES_LENGTH = 1000;
 
-const QUEUE_HEADERS = [
+const BASE_QUEUE_HEADERS = [
   'submission_uuid',
   'submitted_at',
   'staff_email',
@@ -22,6 +22,20 @@ const QUEUE_HEADERS = [
   'last_processing_attempt_at',
   'processing_claim_id'
 ];
+const WORKFLOW_HEADERS = [
+  'staff_display_name',
+  'department_name',
+  'approval_manager_email',
+  'workflow_status',
+  'reviewed_by',
+  'reviewed_at',
+  'decision_note',
+  'launchpad_sync_status',
+  'launchpad_synced_at',
+  'launchpad_sync_error',
+  'decision_claim_id'
+];
+const QUEUE_HEADERS = BASE_QUEUE_HEADERS.concat(WORKFLOW_HEADERS);
 
 const ABSENCE_TYPES = [
   { value: 'sick', label: 'Sick' },
@@ -61,7 +75,7 @@ function newSubmissionUuid() {
   return Utilities.getUuid();
 }
 
-function initializeAbsenceRequestSheet() {
+function initializeAbsenceRequestSheet_() {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -84,21 +98,18 @@ function submitAbsenceRequest(input) {
         return { ok: true, duplicate: true };
       }
 
-      const row = [
-        payload.submission_uuid,
-        new Date().toISOString(),
-        payload.staff_email,
-        payload.absence_type,
-        payload.duration_mode,
-        payload.start_date,
-        payload.end_date,
-        payload.start_time,
-        payload.days_value,
-        payload.notes,
-        'pending',
-        '', '', '', '', 0, '', ''
-      ];
-      const target = sheet.getRange(sheet.getLastRow() + 1, 1, 1, QUEUE_HEADERS.length);
+      const headers = getHeaders_(sheet);
+      const values = {
+        submission_uuid: payload.submission_uuid, submitted_at: new Date().toISOString(),
+        staff_email: payload.staff_email, absence_type: payload.absence_type,
+        duration_mode: payload.duration_mode, start_date: payload.start_date,
+        end_date: payload.end_date, start_time: payload.start_time,
+        days_value: payload.days_value, notes: payload.notes,
+        processing_status: 'pending', processing_attempts: 0,
+        workflow_status: 'pending', launchpad_sync_status: 'pending'
+      };
+      const row = headers.map(function(header) { return values[header] === undefined ? '' : values[header]; });
+      const target = sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length);
       target.setNumberFormat('@');
       target.setValues([row]);
       SpreadsheetApp.flush();
@@ -133,12 +144,27 @@ function getOrCreateQueueSheet_() {
     headerRange.setBackground('#e8eef8');
     sheet.setFrozenRows(1);
   } else {
-    const existing = sheet.getRange(1, 1, 1, QUEUE_HEADERS.length).getDisplayValues()[0];
-    if (existing.join('\n') !== QUEUE_HEADERS.join('\n')) {
+    const lastColumn = Math.max(sheet.getLastColumn(), 1);
+    const existing = sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0]
+      .map(function(value) { return String(value || '').trim(); });
+    if (existing.slice(0, BASE_QUEUE_HEADERS.length).join('\n') !== BASE_QUEUE_HEADERS.join('\n')) {
       throw new Error('The absence request service is not configured correctly.');
+    }
+    const missing = QUEUE_HEADERS.filter(function(header) { return existing.indexOf(header) === -1; });
+    if (missing.length) {
+      const startColumn = existing.length + 1;
+      const range = sheet.getRange(1, startColumn, 1, missing.length);
+      range.setValues([missing]);
+      range.setFontWeight('bold');
+      range.setBackground('#e8eef8');
     }
   }
   return sheet;
+}
+
+function getHeaders_(sheet) {
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0]
+    .map(function(value) { return String(value || '').trim(); });
 }
 
 function submissionExists_(sheet, submissionUuid) {

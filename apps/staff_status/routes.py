@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
-from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for, Response
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for, Response
 import time, queue
 from modules.core.settings.settings_service import get_setting
 
@@ -53,6 +53,8 @@ from .service import (
     get_school_year_rollover_reminder,
     get_department_absence_usage_summary,
     get_pending_absence_request_by_id,
+    list_absence_requests_for_department,
+    send_absence_decision_result_email_once,
     StaffStatusValidationError,
     PendingAbsenceRequestStateError,
 )
@@ -67,7 +69,7 @@ def _actor_display_name(actor: dict) -> str:
 
 
 def _can_review_absence_request(user_id: int, actor: dict, request_record: dict) -> bool:
-    if has_staff_status_admin(user_id):
+    if has_staff_status_admin(user_id) or can_operate_department(user_id, request_record["department_name"]):
         return True
 
     actor_email = (actor.get("email") or "").strip().lower()
@@ -661,6 +663,9 @@ def absences(department_name: str):
     can_operate = can_operate_department(user_id, department_name)
     users = list_active_users_for_department(department_name)
     absence_types = ["sick", "vacation", "personal", "other"]
+    request_status = (request.args.get("request_status") or "all").strip().lower()
+    if request_status not in {"all", "pending", "approved", "denied"}:
+        request_status = "all"
 
     if request.method == "POST":
         if not can_operate:
@@ -869,6 +874,9 @@ def absences(department_name: str):
         accessible_department_count=len(accessible_departments),
         is_staff_status_admin=has_staff_status_admin(user_id),
         can_operate=can_operate,
+        absence_requests=list_absence_requests_for_department(
+            department_name, None if request_status == "all" else request_status),
+        current_request_status=request_status,
     )
 
 
@@ -900,6 +908,8 @@ def review_absence_request(request_id: int):
                     request_id=request_id,
                     reviewed_by_user_id=actor["id"],
                     reviewed_by_display_name=_actor_display_name(actor),
+                    reviewed_by_email=actor.get("email"),
+                    review_source="launchpad",
                     decision_note=decision_note,
                 )
                 publish_department_update(request_record["department_name"])
@@ -909,11 +919,19 @@ def review_absence_request(request_id: int):
                     request_id=request_id,
                     reviewed_by_user_id=actor["id"],
                     reviewed_by_display_name=_actor_display_name(actor),
+                    reviewed_by_email=actor.get("email"),
+                    review_source="launchpad",
                     decision_note=decision_note,
                 )
-                flash("Absence request rejected.", "success")
+                flash("Absence request denied.", "success")
             else:
                 flash("Choose whether to approve or reject the request.", "error")
+            if action in {"approve", "reject"}:
+                try:
+                    send_absence_decision_result_email_once(request_record)
+                except Exception:
+                    current_app.logger.exception("Absence decision email failed for request %s", request_id)
+                    flash("The decision was saved, but the employee email will be retried by Google sync.", "warning")
         except (StaffStatusValidationError, PendingAbsenceRequestStateError) as exc:
             flash(str(exc), "error")
 

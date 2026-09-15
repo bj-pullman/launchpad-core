@@ -223,6 +223,39 @@
 
   {{ absence_table("Upcoming Absences", upcoming_absences, "start", "asc", current_table_sort_key, current_table_sort_direction, table_sort_urls.upcoming, "Scheduled future absences") }}
   {{ absence_table("Past Absences", past_absences, "end", "desc", current_table_sort_key, current_table_sort_direction, table_sort_urls.past, table_period_summary, active_table_filters, clear_table_filters_url, true) }}
+
+  <section class="content-card staff-status-requests-card" aria-labelledby="absence-requests-title">
+    <div class="staff-status-table-header-row">
+      <div><h2 id="absence-requests-title">Absence Requests</h2><p class="muted">Complete request history from the Google intake workflow.</p></div>
+    </div>
+    <nav class="staff-status-request-filters" aria-label="Absence request status">
+      {% for value, label in [('all','All'),('pending','Pending'),('approved','Approved'),('denied','Denied')] %}
+        <a href="{{ url_for('staff_status.absences', department_name=department_name, request_status=value) }}"
+          class="{% if current_request_status == value %}is-active{% endif %}" {% if current_request_status == value %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    {% if absence_requests %}
+      <div class="table-wrap staff-status-request-table">
+        <table class="data-table"><thead><tr><th>Staff member</th><th>Type</th><th>Date(s)</th><th>Duration</th><th>Status</th><th>Submitted</th><th>Reviewed</th><th>Reviewed by</th><th></th></tr></thead>
+          <tbody>{% for item in absence_requests %}<tr>
+            <td class="table-primary">{{ item.staff_display_name }}<small>{{ item.department_name }}</small></td>
+            <td>{{ item.absence_type|title }}</td><td>{{ item.date_range_label }}</td><td>{{ item.duration_label }}</td>
+            <td><span class="staff-status-request-status staff-status-request-status-{{ item.status }}">{{ item.status_label }}</span></td>
+            <td>{{ item.submitted_at_label }}</td><td>{{ item.reviewed_at_label or '—' }}</td>
+            <td>{{ item.reviewed_by_display_name or item.reviewed_by_email or '—' }}</td>
+            <td><a class="table-link" href="{{ url_for('staff_status.review_absence_request', request_id=item.id) }}">View</a></td>
+          </tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      <div class="staff-status-request-cards">
+        {% for item in absence_requests %}<article>
+          <div class="staff-status-request-card-head"><div><strong>{{ item.staff_display_name }}</strong><span>{{ item.department_name }}</span></div><span class="staff-status-request-status staff-status-request-status-{{ item.status }}">{{ item.status_label }}</span></div>
+          <dl><div><dt>Request</dt><dd>{{ item.absence_type|title }} · {{ item.duration_label }}</dd></div><div><dt>Date(s)</dt><dd>{{ item.date_range_label }}</dd></div><div><dt>Submitted</dt><dd>{{ item.submitted_at_label }}</dd></div>{% if item.reviewed_at %}<div><dt>Reviewed</dt><dd>{{ item.reviewed_at_label }} by {{ item.reviewed_by_display_name or item.reviewed_by_email or 'Unknown' }}</dd></div>{% endif %}</dl>
+          <a class="btn btn-secondary" href="{{ url_for('staff_status.review_absence_request', request_id=item.id) }}">View Request</a>
+        </article>{% endfor %}
+      </div>
+    {% else %}<div class="empty-state"><h3>No requests found</h3><p class="muted">No requests match this status.</p></div>{% endif %}
+  </section>
 </div>
 
 {% if can_operate %}
