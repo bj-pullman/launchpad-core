@@ -1,61 +1,69 @@
-# Staff Absence Apps Script Setup
+# Unified Staff Absence Apps Script Setup
 
-Use a controlled district account as the Apps Script owner. The Sheet must stay private and be shared only with necessary administrators, the script owner, and the Launchpad service account.
+Use one Apps Script project owned by a controlled district account. Publish two deployments from that same project. The private Sheet should be shared only with necessary administrators, the project owner, and the Launchpad service account.
 
-## 1. Update the project and migrate the existing Sheet
+## 1. Update the project and existing Sheet
 
-1. Copy `Code.gs` and `Index.html` into the existing public Apps Script project.
-2. Set its `ABSENCE_SUBMISSION_SHEET_ID` Script Property to the existing private spreadsheet ID.
-3. Run `initializeAbsenceRequestSheet_` once from the Apps Script editor and authorize it. The trailing underscore deliberately prevents public browser calls.
-4. Verify the first 18 headers and all rows are unchanged and eleven fields were appended: `staff_display_name`, `department_name`, `approval_manager_email`, `workflow_status`, `reviewed_by`, `reviewed_at`, `decision_note`, `launchpad_sync_status`, `launchpad_synced_at`, `launchpad_sync_error`, `decision_claim_id`.
+1. In the existing Apps Script project, copy in `Code.gs`, `Index.html`, `Review.html`, `AccessDenied.html`, and `appsscript.json` from this directory.
+2. Configure these Script Properties:
+   - `ABSENCE_SUBMISSION_SHEET_ID`: existing private spreadsheet ID
+   - `APPROVER_EMAILS`: comma-separated exact manager emails
+   - `GLOBAL_APPROVER_EMAILS`: comma-separated exact global reviewer emails, or blank
+3. Run `initializeAbsenceRequestSheet_` once from the Apps Script editor and authorize it. The trailing underscore prevents browser calls.
+4. Verify all existing rows and the first 18 headers are unchanged. Missing review/workflow columns are appended at the end.
 
 The initializer never recreates a populated worksheet, clears cells, reorders headers, or deletes rows. Stop if the original 18 headers are not in their established order.
 
-## 2. Publish the anonymous intake deployment
+## 2. Deployment A — Public Intake
 
-1. Make `appsscript.json` the active manifest.
-2. Under **Deploy > Manage deployments**, edit the existing public web app and select **New version**.
-3. Execute as the deploying account and allow **Anyone** / anonymous access.
-4. Publish and retain the employee `/exec` URL.
-5. In a signed-out browser, confirm intake works but a review URL shows Access denied.
+1. Choose **Deploy > Manage deployments** and edit the existing public web app.
+2. Select a new project version.
+3. Set **Execute as** to the deploying/owner account.
+4. Set access to **Anyone** / anonymous.
+5. Publish and retain the existing employee `/exec` URL.
 
-## 3. Publish the authenticated review deployment
+Test in a signed-out browser: the base URL must load the intake form and accept a valid district-email submission. An `action=review&id=...` URL must show Access denied without request details.
 
-1. Create a second Apps Script project and copy in `staff-absence-review-form/Code.gs`, `Review.html`, `AccessDenied.html`, and `appsscript.json`.
-2. Set `ABSENCE_SUBMISSION_SHEET_ID`, `APPROVER_EMAILS`, and `GLOBAL_APPROVER_EMAILS` in that project's Script Properties.
-3. Create a web-app deployment that executes as the deploying account, is restricted to the district domain, and publish it.
-4. Record its `/exec` URL. Never add the review source or identity scope to the anonymous public project.
+## 3. Deployment B — Reviewer Portal
 
-The separate project is intentional: Apps Script exposes a project's public server functions to every deployment of that project. Isolation guarantees the anonymous deployment remains intake-only. Keep both project and deployment IDs in the administrator runbook. If Workspace does not offer domain-only access, do not publish review until domain restriction is available; exact-email checks remain defense in depth, not a substitute for sign-in-required deployment access.
+1. In the same project, choose **Deploy > New deployment**.
+2. Choose **Web app** and the same current project version.
+3. Set **Execute as** to the deploying/owner account.
+4. Restrict access to authenticated users in the Sheridan School District domain.
+5. Publish and record this distinct reviewer `/exec` URL.
 
-## 4. Google service account
+Do not distribute the reviewer URL as the employee form. Keep both deployment IDs and purposes in the administrator runbook. If Workspace does not offer domain-only web-app access, do not publish the reviewer deployment until that policy is available.
 
-1. Enable Google Sheets API in a district-controlled Cloud project.
-2. Create a dedicated service account and share the private Sheet directly with it as Editor.
-3. Store JSON credentials outside this repository and web-served directories.
-4. Set `STAFF_STATUS_GOOGLE_SERVICE_ACCOUNT_FILE=C:\secure\launchpad\staff-absence-sheets.json` for the Launchpad service and restart it.
+Deployment authentication is backed by application authorization: every review load and decision checks active Google identity, the exact allowlists, and row assignment server-side.
 
-Never paste credentials or paths into the Sheet.
+## 4. Launchpad configuration
 
-## 5. Configure Launchpad
+In **Settings > Staff Status > Absence Form** configure:
 
-In **Settings > Staff Status > Absence Form**, configure the spreadsheet and worksheet, authenticated review `/exec` URL, approval manager, global reviewers (matching `GLOBAL_APPROVER_EMAILS`), polling interval, and stale timeout. Enable sync, save, then click **Sync Now**. Scheduled and manual runs use the same outbound-only service.
+- Spreadsheet ID and `Absence Requests` worksheet
+- **Authenticated Review Web App URL:** the Deployment B `/exec` URL
+- Approval manager email
+- Global reviewer emails matching `GLOBAL_APPROVER_EMAILS`
+- Polling interval and stale-processing timeout
 
-## 6. End-to-end test
+Launchpad automatically appends `?action=review&id=<submission_uuid>` to the reviewer base URL in manager emails. Enable sync, save, and click **Sync Now**.
 
-1. Submit at a 360–430 px phone viewport using a valid district email.
-2. Confirm a pending row appears and contains no Launchpad data.
-3. Sync. Confirm Launchpad resolves the active employee's current department, creates one pending request, fills manager/sync metadata, and sends a manager CTA to the review deployment.
-4. Open the CTA signed out, unauthorized, assigned-manager, and global-reviewer. Only the authorized cases may load it.
-5. Approve once. Confirm GET made no change, sync creates one absence, audit fields are retained, one employee email is sent, and Google becomes synced.
-6. Deny another. Confirm no absence and one denied email.
-7. Repeat polling; confirm no duplicate request, absence, or ordinary retry email.
+The Launchpad server continues using `STAFF_STATUS_GOOGLE_SERVICE_ACCOUNT_FILE` for outbound Google Sheets API access. Store that credential outside the repository and web-served directories.
+
+## 5. End-to-end test
+
+1. Submit through Deployment A at a 360–430 px phone viewport.
+2. Sync and confirm Launchpad resolves the active employee's current department, creates one pending request, fills review metadata, and emails the Deployment B URL.
+3. Open the review link signed out, as an unlisted user, as a listed but wrong manager, as the assigned manager, and as a global reviewer. Only the final two valid cases may see the request.
+4. Confirm refreshing or opening the GET URL never changes `workflow_status`.
+5. Approve once and sync. Confirm one absence, preserved reviewer audit, one employee result email, and Google synced state.
+6. Deny another request and confirm no absence and one denied email.
+7. Repeat polling and confirm no duplicate request, absence, or ordinary retry email.
 8. Complete a request locally and confirm the next poll reconciles Google to Launchpad's final state.
-9. Make `processing` or `syncing` stale beyond the timeout and confirm recovery.
-10. Confirm final history remains under All/Approved/Denied in Launchpad.
+9. Confirm completed requests remain visible in Launchpad's All, Approved, and Denied history filters.
 
-## 7. Operations
+## 6. Updating both deployments
 
-Saving source does not update `/exec`; publish a new version to each affected deployment with its matching manifest. Run the initializer after future append-only schema changes.
+Saving code does not update `/exec`. After future changes, create a new project version and edit both deployments so each uses that same new version. Retain their distinct access settings and URLs. Run the initializer after any future append-only Sheet schema change.
 
-Safe queue errors contain no tracebacks, credentials, internal URLs, or database detail. Launchpad is authoritative and repairs conflicting final state. If Google cannot provide `Session.getActiveUser().getEmail()`, review access intentionally fails closed; verify domain restriction, district sign-in, and Workspace active-user policy.
+If Google returns a blank active-user email, reviewer access intentionally fails closed. Verify the reviewer deployment requires district sign-in and that Workspace policy permits active-user identity for the web app.
