@@ -4,6 +4,7 @@ import zoneinfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from flask import current_app, has_app_context
 
 from modules.core.settings.settings_service import get_bool_setting, get_setting
 from tasks.registry import get_all_jobs
@@ -16,6 +17,7 @@ from tasks.job_runs import (
 )
 
 _scheduler = None
+_application = None
 
 
 def get_scheduler():
@@ -96,7 +98,11 @@ def _run_job_with_tracking(job_def):
 
     try:
         print(f"[tasks] running {job_id} for {run_date}")
-        job_def["func"]()
+        if _application is not None:
+            with _application.app_context():
+                job_def["func"]()
+        else:
+            job_def["func"]()
         mark_job_finished(job_id, run_date)
         print(f"[tasks] completed {job_id} for {run_date}")
     except Exception as exc:
@@ -127,7 +133,11 @@ def _run_interval_job_with_tracking(job_def):
             flush=True,
         )
 
-        result = job_def["func"]()
+        if _application is not None:
+            with _application.app_context():
+                result = job_def["func"]()
+        else:
+            result = job_def["func"]()
 
         mark_job_finished(job_id, run_key)
 
@@ -208,6 +218,10 @@ def run_due_daily_jobs_once():
 
 
 def configure_jobs():
+    global _application
+    if has_app_context():
+        _application = current_app._get_current_object()
+
     scheduler = start_scheduler()
     desired_jobs = get_all_jobs()
 

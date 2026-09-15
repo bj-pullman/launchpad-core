@@ -26,8 +26,8 @@ for package_name, package_path in {
     package.__path__ = [str(package_path)]
     sys.modules[package_name] = package
 
-from apps.staff_status import api_routes as staff_status_api_routes
 from apps.staff_status import db as staff_status_db
+from apps.staff_status import google_absence_sync
 from apps.staff_status import routes as staff_status_routes
 from apps.staff_status import service as staff_status_service
 from apps.staff_status.blueprint import bp as staff_status_bp
@@ -116,13 +116,6 @@ class StaffStatusServiceTests(unittest.TestCase):
         app.secret_key = "test-secret"
         app.config["SERVER_NAME"] = "launchpad.example.test"
         app.register_blueprint(staff_status_bp)
-        return app
-
-    def make_api_app(self):
-        app = Flask(__name__)
-        app.secret_key = "test-secret"
-        app.config["SERVER_NAME"] = "launchpad.example.test"
-        app.register_blueprint(staff_status_api_routes.staff_status_integrations_bp)
         return app
 
     def test_department_availability_uses_table_after_legacy_migration(self):
@@ -215,62 +208,148 @@ class StaffStatusServiceTests(unittest.TestCase):
             "9:30 AM - 1:30 PM",
         )
 
-    def test_integration_api_auth_and_idempotency(self):
-        secret = staff_status_service.generate_absence_form_integration_secret()["raw_secret"]
-        staff_status_service.update_absence_form_integration_settings(
-            enabled=True,
-            apps_script_url="https://script.google.com/macros/s/test/exec",
-            approval_manager_email="manager@example.test",
-            notification_sender_email="sender@example.test",
-        )
-        app = self.make_api_app()
-        payload = {
-            "submission_uuid": "same-request-id",
-            "staff_email": "tech@example.test",
+    def _configure_google_absence_sync(self):
+        set_setting("staff_status.absence_google_sync.enabled", 1)
+        set_setting("staff_status.absence_google_sync.spreadsheet_id", "test-sheet")
+        set_setting("staff_status.absence_google_sync.worksheet_name", "Absence Requests")
+        set_setting("staff_status.absence_google_sync.processing_timeout_minutes", "15")
+
+    def _district_user(self, **overrides):
+        values = {
+            "email": "tech@sheridanschools.org",
+            "display_name": "District Tech",
+            "department": "Technology",
+            "is_active": 1,
+        }
+        values.update(overrides)
+        return user_service.create_user(values)
+
+    def _queue_row(self, **overrides):
+        row = {header: "" for header in google_absence_sync.QUEUE_HEADERS}
+        row.update({
+            "submission_uuid": "164a70c6-73d5-4e61-a312-cb9019f7f451",
+            "submitted_at": "2026-09-15T12:00:00+00:00",
+            "staff_email": "tech@sheridanschools.org",
             "absence_type": "sick",
             "duration_mode": "quarter_day",
-            "start_date": "2026-09-01",
-            "start_time": "10:00",
-            "note": "Morning appointment",
-        }
+            "start_date": "2026-09-16",
+            "end_date": "2026-09-16",
+            "start_time": "08:00",
+            "processing_status": "pending",
+            "processing_attempts": "0",
+        })
+        row.update(overrides)
+        return row
 
-        with app.test_client() as client:
-            missing_auth = client.post(
-                "/api/integrations/staff-status/absence-requests",
-                json=payload,
-            )
-            self.assertEqual(missing_auth.status_code, 401)
+    def _run_queue_sync(self, rows):
+        class FakeQueue:
+            def __init__(self, source_rows):
+                self.rows = []
+                self.updates = []
+                for number, source in enumerate(source_rows, start=2):
+                    item = dict(source)
+                    item["_row_number"] = number
+                    self.rows.append(item)
 
-            with patch.object(
-                staff_status_api_routes,
-                "send_pending_absence_request_email",
-                return_value=None,
-            ) as send_email:
-                first = client.post(
-                    "/api/integrations/staff-status/absence-requests",
-                    json=payload,
-                    headers={"Authorization": f"Bearer {secret}"},
-                )
-                second = client.post(
-                    "/api/integrations/staff-status/absence-requests",
-                    json=payload,
-                    headers={"Authorization": f"Bearer {secret}"},
-                )
+            def fetch_rows(self):
+                return [dict(row) for row in self.rows]
 
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(second.status_code, 200)
-        self.assertFalse(first.get_json()["duplicate"])
-        self.assertTrue(second.get_json()["duplicate"])
-        self.assertEqual(send_email.call_count, 1)
+            def fetch_row(self, row_number):
+                return dict(self.rows[row_number - 2])
 
+            def update_row(self, row_number, updates):
+                self.rows[row_number - 2].update(updates)
+                self.updates.append((row_number, dict(updates)))
+
+        self._configure_google_absence_sync()
+        queue = FakeQueue(rows)
+        fixed_now = datetime(2026, 9, 15, 14, 0, tzinfo=ZoneInfo("UTC"))
+        with patch.object(google_absence_sync, "send_pending_absence_request_email") as send_email:
+            result = google_absence_sync.sync_google_absence_requests(client=queue, now=fixed_now)
+        return queue, result, send_email
+
+    def test_google_queue_import_resolves_active_user_current_department(self):
+        self._district_user()
+        queue, result, send_email = self._run_queue_sync([self._queue_row()])
         pending = staff_status_service.list_pending_absence_requests()
-        self.assertEqual(len(pending), 1)
-        self.assertEqual(pending[0]["start_time"], "10:00")
+        self.assertEqual(result["counts"]["processed"], 1)
+        self.assertEqual(pending[0]["department_name"], "Technology")
+        self.assertEqual(queue.rows[0]["processing_status"], "processed")
+        self.assertEqual(str(pending[0]["id"]), str(queue.rows[0]["launchpad_request_id"]))
+        send_email.assert_called_once()
+
+    def test_google_queue_rejects_inactive_user(self):
+        self._district_user(is_active=0)
+        queue, result, _ = self._run_queue_sync([self._queue_row()])
+        self.assertEqual(result["counts"]["errors"], 1)
+        self.assertEqual(queue.rows[0]["processing_status"], "error")
+        self.assertIn("could not be found", queue.rows[0]["processing_error"])
+
+    def test_google_queue_rejects_missing_user(self):
+        queue, result, _ = self._run_queue_sync([self._queue_row()])
+        self.assertEqual(result["counts"]["errors"], 1)
+        self.assertEqual(queue.rows[0]["processing_status"], "error")
+
+    def test_google_queue_uses_current_department_and_rejects_disabled_department(self):
+        self._district_user(department="Human Resources")
+        staff_status_service.set_department_staff_status_enabled("Human Resources", False)
+        queue, result, _ = self._run_queue_sync([self._queue_row()])
+        self.assertEqual(result["counts"]["errors"], 1)
+        self.assertIn("not available", queue.rows[0]["processing_error"])
+
+    def test_google_queue_rejects_malformed_absence(self):
+        self._district_user()
+        queue, result, _ = self._run_queue_sync([self._queue_row(duration_mode="invented")])
+        self.assertEqual(result["counts"]["errors"], 1)
+        self.assertEqual(queue.rows[0]["processing_attempts"], 1)
+
+    def test_google_queue_duplicate_uuid_creates_one_pending_request(self):
+        self._district_user()
+        second = self._queue_row(processing_status="pending")
+        queue, result, send_email = self._run_queue_sync([self._queue_row(), second])
+        self.assertEqual(len(staff_status_service.list_pending_absence_requests()), 1)
+        self.assertEqual(result["counts"]["duplicates"], 1)
+        self.assertEqual([row["processing_status"] for row in queue.rows], ["processed", "processed"])
+        send_email.assert_called_once()
+
+    def test_google_queue_ignores_already_processed_row(self):
+        queue, result, _ = self._run_queue_sync([self._queue_row(processing_status="processed")])
+        self.assertEqual(result["counts"]["claimed"], 0)
+        self.assertEqual(queue.updates, [])
+
+    def test_google_queue_repairs_stale_row_after_partial_processing(self):
+        self._district_user()
+        payload = {
+            "submission_uuid": "164a70c6-73d5-4e61-a312-cb9019f7f451",
+            "staff_email": "tech@sheridanschools.org",
+            "absence_type": "sick",
+            "duration_mode": "quarter_day",
+            "start_date": "2026-09-16",
+            "end_date": "2026-09-16",
+            "start_time": "08:00",
+        }
+        existing, _ = staff_status_service.create_pending_absence_request_from_public_submission(payload=payload)
+        stale = self._queue_row(
+            processing_status="processing",
+            processing_started_at="2026-09-15T12:00:00+00:00",
+            processing_attempts="1",
+        )
+        queue, result, send_email = self._run_queue_sync([stale])
+        self.assertEqual(result["counts"]["duplicates"], 1)
+        self.assertEqual(queue.rows[0]["processing_status"], "processed")
+        self.assertEqual(queue.rows[0]["launchpad_request_id"], existing["id"])
+        self.assertEqual(queue.rows[0]["processing_attempts"], 2)
+        send_email.assert_not_called()
+
+    def test_google_queue_rejects_non_district_email_and_records_safe_error(self):
+        self._district_user()
+        queue, result, _ = self._run_queue_sync([self._queue_row(staff_email="attacker@example.com")])
+        self.assertEqual(result["counts"]["errors"], 1)
+        self.assertEqual(queue.rows[0]["processing_error"], "A valid district email is required.")
+        self.assertNotIn("Traceback", queue.rows[0]["processing_error"])
 
     def test_disabled_department_rejects_public_submission(self):
         staff_status_service.update_absence_form_integration_settings(
-            enabled=True,
-            apps_script_url="",
             approval_manager_email="manager@example.test",
             notification_sender_email="sender@example.test",
         )

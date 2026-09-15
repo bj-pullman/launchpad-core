@@ -25,7 +25,6 @@ from apps.snipeops.secure_user_rostering.routes import bp as secure_user_rosteri
 from apps.snipeops.secure_user_rostering.db import init_secure_user_rostering_db
 
 from apps.staff_status.blueprint import bp as staff_status_bp
-from apps.staff_status.api_routes import staff_status_integrations_bp
 from apps.staff_status.db import init_staff_status_db
 from apps.finance.blueprint import bp as finance_bp
 from apps.finance.db import init_finance_db
@@ -285,7 +284,6 @@ def create_app() -> Flask:
         "/logout",
         "/auth/google/start",
         "/auth/google/callback",
-        "/api/integrations/staff-status/",
     ]
 
     app.config["GOOGLE_DIRECTORY_SERVICE_ACCOUNT_FILE"] = get_setting(
@@ -320,7 +318,6 @@ def create_app() -> Flask:
     app.register_blueprint(snipeops_bp)
     app.register_blueprint(setup_bp)
     app.register_blueprint(staff_status_bp)
-    app.register_blueprint(staff_status_integrations_bp)
     app.register_blueprint(finance_bp)
     app.register_blueprint(finance_api_bp)
     app.register_blueprint(checkout_assets_bp)

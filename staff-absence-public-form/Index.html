@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root { --navy:#172b4d; --blue:#1769aa; --blue-dark:#0f4f83; --bg:#eef3f8; --card:#fff; --text:#172033; --muted:#5c6b7a; --border:#cbd6e2; --danger:#a61b1b; --danger-bg:#fff1f1; --success:#17643a; --focus:#f2b134; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:0; min-height:100vh; background:linear-gradient(180deg,#e6eef7 0,#f6f8fb 240px); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+    main { width:min(100% - 24px,680px); margin:0 auto; padding:18px 0 36px; }
+    .card { overflow:hidden; border:1px solid var(--border); border-radius:16px; background:var(--card); box-shadow:0 14px 34px rgba(25,48,75,.12); }
+    header { padding:24px 20px 20px; color:#fff; background:var(--navy); }
+    h1 { margin:0 0 8px; font-size:1.65rem; line-height:1.15; }
+    header p,.success p { margin:0; line-height:1.45; }
+    form { display:grid; gap:20px; padding:22px 20px 24px; }
+    .fields { display:grid; gap:18px; }
+    .field { display:grid; gap:7px; min-width:0; }
+    label { font-weight:700; font-size:.94rem; }
+    .optional { color:var(--muted); font-size:.84rem; font-weight:400; }
+    input,select,textarea,button { width:100%; font:inherit; font-size:16px; }
+    input,select,textarea { min-height:48px; padding:11px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:var(--text); }
+    textarea { min-height:108px; resize:vertical; line-height:1.4; }
+    input:focus,select:focus,textarea:focus,button:focus-visible { outline:3px solid var(--focus); outline-offset:2px; border-color:var(--navy); }
+    button { min-height:50px; border:0; border-radius:10px; padding:12px 18px; color:#fff; background:var(--blue); font-weight:800; cursor:pointer; }
+    button:hover { background:var(--blue-dark); }
+    button:disabled { opacity:.68; cursor:wait; }
+    .message { padding:13px 14px; border:1px solid #e5a7a7; border-radius:10px; background:var(--danger-bg); color:var(--danger); font-weight:700; line-height:1.4; }
+    .success { padding:34px 22px 38px; text-align:center; }
+    .success-icon { display:grid; place-items:center; width:58px; height:58px; margin:0 auto 18px; border-radius:50%; background:#e4f5eb; color:var(--success); font-size:32px; font-weight:900; }
+    .success h2 { margin:0 0 10px; color:var(--success); font-size:1.5rem; }
+    .success button { margin-top:24px; }
+    [hidden] { display:none!important; }
+    @media (min-width:620px) {
+      main { padding-top:36px; }
+      header { padding:30px 32px 24px; }
+      form { padding:28px 32px 32px; }
+      .fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .field.full { grid-column:1/-1; }
+      .success { padding:48px 42px 52px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <section class="card" aria-labelledby="page-title">
+    <header>
+      <h1 id="page-title">Staff Absence Request</h1>
+      <p>Send your request for review using your district email.</p>
+    </header>
+
+    <form id="absence-form" novalidate>
+      <input type="hidden" id="submission_uuid" name="submission_uuid">
+      <div id="message" class="message" role="alert" aria-live="assertive" hidden></div>
+      <div class="fields">
+        <div class="field full">
+          <label for="staff_email">District Email</label>
+          <input id="staff_email" name="staff_email" type="email" inputmode="email" autocomplete="email"
+            placeholder="name@sheridanschools.org" pattern="^[^@\s]+@sheridanschools\.org$" required>
+        </div>
+        <div class="field">
+          <label for="absence_type">Absence Type</label>
+          <select id="absence_type" name="absence_type" required><option value="">Choose type</option></select>
+        </div>
+        <div class="field">
+          <label for="duration_mode">Duration</label>
+          <select id="duration_mode" name="duration_mode" required><option value="">Choose duration</option></select>
+        </div>
+        <div class="field">
+          <label for="start_date">Start Date</label>
+          <input id="start_date" name="start_date" type="date" required>
+        </div>
+        <div class="field" id="end-date-field" hidden>
+          <label for="end_date">End Date</label>
+          <input id="end_date" name="end_date" type="date">
+        </div>
+        <div class="field" id="start-time-field" hidden>
+          <label for="start_time">Start Time</label>
+          <input id="start_time" name="start_time" type="time">
+        </div>
+        <div class="field" id="days-field" hidden>
+          <label for="days_value">Total Days</label>
+          <input id="days_value" name="days_value" type="number" min="0.25" step="0.25" inputmode="decimal">
+        </div>
+        <div class="field full">
+          <label for="notes">Notes <span class="optional">(optional)</span></label>
+          <textarea id="notes" name="notes" maxlength="1000"></textarea>
+        </div>
+      </div>
+      <button id="submit-button" type="submit">Submit Request</button>
+    </form>
+
+    <div id="success-screen" class="success" role="status" tabindex="-1" hidden>
+      <div class="success-icon" aria-hidden="true">✓</div>
+      <h2>Your absence request has been submitted.</h2>
+      <p>Your request will be reviewed according to district procedures.</p>
+      <button id="another-button" type="button">Submit Another Request</button>
+    </div>
+  </section>
+</main>
+<script>
+  const state = { durationOptions: [] };
+  const form = document.getElementById('absence-form');
+  const message = document.getElementById('message');
+  const submitButton = document.getElementById('submit-button');
+  const successScreen = document.getElementById('success-screen');
+  const durationSelect = document.getElementById('duration_mode');
+  const endDateField = document.getElementById('end-date-field');
+  const startTimeField = document.getElementById('start-time-field');
+  const daysField = document.getElementById('days-field');
+
+  function showError(text) { message.textContent = text; message.hidden = false; message.focus(); }
+  function clearError() { message.textContent = ''; message.hidden = true; }
+  function addOptions(select, options) {
+    options.forEach(function(item) { const option=document.createElement('option'); option.value=item.value; option.textContent=item.label; select.appendChild(option); });
+  }
+  function selectedDuration() { return state.durationOptions.find(function(item) { return item.value === durationSelect.value; }); }
+  function updateConditionalFields() {
+    const option = selectedDuration() || {};
+    const endDate = document.getElementById('end_date');
+    const startTime = document.getElementById('start_time');
+    const days = document.getElementById('days_value');
+    endDateField.hidden = !option.requiresEndDate; endDate.required = !!option.requiresEndDate;
+    startTimeField.hidden = !option.requiresStartTime; startTime.required = !!option.requiresStartTime;
+    daysField.hidden = !option.requiresDays; days.required = !!option.requiresDays;
+    if (!option.requiresEndDate) endDate.value = '';
+    if (!option.requiresStartTime) startTime.value = '';
+    if (!option.requiresDays) days.value = '';
+  }
+  function payload() {
+    return {
+      submission_uuid: document.getElementById('submission_uuid').value,
+      staff_email: document.getElementById('staff_email').value,
+      absence_type: document.getElementById('absence_type').value,
+      duration_mode: durationSelect.value,
+      start_date: document.getElementById('start_date').value,
+      end_date: document.getElementById('end_date').value,
+      start_time: document.getElementById('start_time').value,
+      days_value: document.getElementById('days_value').value,
+      notes: document.getElementById('notes').value
+    };
+  }
+  function setBusy(busy) { submitButton.disabled=busy; submitButton.textContent=busy?'Submitting...':'Submit Request'; }
+  function showSuccess() { form.hidden=true; successScreen.hidden=false; successScreen.focus(); }
+  function resetForm(uuid) {
+    form.reset(); document.getElementById('submission_uuid').value=uuid; updateConditionalFields(); clearError();
+    successScreen.hidden=true; form.hidden=false; document.getElementById('staff_email').focus();
+  }
+  form.addEventListener('submit', function(event) {
+    event.preventDefault(); clearError();
+    if (!form.reportValidity()) return;
+    setBusy(true);
+    google.script.run.withSuccessHandler(function(result) {
+      setBusy(false);
+      if (result && result.ok) showSuccess(); else showError('Your request could not be submitted. Please try again.');
+    }).withFailureHandler(function(error) {
+      setBusy(false); showError(error && error.message ? error.message : 'Your request could not be submitted. Please try again.');
+    }).submitAbsenceRequest(payload());
+  });
+  durationSelect.addEventListener('change', updateConditionalFields);
+  document.getElementById('another-button').addEventListener('click', function() {
+    google.script.run.withSuccessHandler(resetForm).withFailureHandler(function() { location.reload(); }).newSubmissionUuid();
+  });
+  google.script.run.withSuccessHandler(function(config) {
+    state.durationOptions=config.durationOptions||[];
+    addOptions(document.getElementById('absence_type'),config.absenceTypes||[]);
+    addOptions(durationSelect,state.durationOptions);
+    document.getElementById('submission_uuid').value=config.submissionUuid;
+  }).withFailureHandler(function() {
+    showError('The form could not be loaded. Please try again later.'); submitButton.disabled=true;
+  }).getFormConfig();
+</script>
+</body>
+</html>

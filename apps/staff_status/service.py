@@ -1,6 +1,4 @@
 import calendar
-import hashlib
-import hmac
 import json, zoneinfo, secrets, csv, io
 import sqlite3
 from collections import Counter
@@ -2529,53 +2527,19 @@ def resolve_absence_report_date_range(
     }
 
 
-def _hash_integration_secret(raw_secret: str) -> str:
-    return hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
-
-
-def generate_absence_form_integration_secret() -> dict:
-    raw_secret = f"lp_staff_absence_{secrets.token_urlsafe(48)}"
-    now = utc_now_iso()
-
-    set_setting(
-        f"{ABSENCE_FORM_SETTING_PREFIX}.secret_hash",
-        _hash_integration_secret(raw_secret),
-        is_sensitive=1,
-    )
-    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_prefix", raw_secret[:24])
-    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_rotated_at", now)
-
-    return {
-        "raw_secret": raw_secret,
-        "secret_prefix": raw_secret[:24],
-        "secret_rotated_at": now,
-    }
-
-
 def update_absence_form_integration_settings(
     *,
-    enabled: bool,
-    apps_script_url: str | None,
     approval_manager_email: str | None,
     notification_sender_email: str | None,
 ) -> None:
     manager_email = (approval_manager_email or DEFAULT_ABSENCE_APPROVAL_MANAGER_EMAIL).strip().lower()
     sender_email = (notification_sender_email or "").strip().lower()
 
-    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.enabled", 1 if enabled else 0)
-    set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.apps_script_url", apps_script_url or "")
     set_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.approval_manager_email", manager_email)
     set_setting(f"{ABSENCE_NOTIFICATION_SETTING_PREFIX}.sender_email", sender_email)
 
 
 def get_absence_form_integration_settings() -> dict:
-    secret_hash = get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_hash", "") or ""
-    endpoint_url = ""
-    try:
-        endpoint_url = build_public_url("staff_status_integrations.submit_absence_request")
-    except Exception:
-        endpoint_url = "/api/integrations/staff-status/absence-requests"
-
     sender_email = (
         get_setting(f"{ABSENCE_NOTIFICATION_SETTING_PREFIX}.sender_email", "")
         or get_setting("mail.smtp_username", "")
@@ -2583,9 +2547,6 @@ def get_absence_form_integration_settings() -> dict:
     )
 
     return {
-        "enabled": get_bool_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.enabled", False),
-        "endpoint_url": endpoint_url,
-        "apps_script_url": get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.apps_script_url", "") or "",
         "approval_manager_email": (
             get_setting(
                 f"{ABSENCE_FORM_SETTING_PREFIX}.approval_manager_email",
@@ -2594,24 +2555,7 @@ def get_absence_form_integration_settings() -> dict:
             or DEFAULT_ABSENCE_APPROVAL_MANAGER_EMAIL
         ),
         "notification_sender_email": sender_email,
-        "secret_prefix": get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_prefix", "") or "",
-        "secret_rotated_at": get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_rotated_at", "") or "",
-        "has_secret": bool(secret_hash.strip()),
     }
-
-
-def verify_absence_form_integration_secret(provided_secret: str | None) -> bool:
-    if not get_bool_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.enabled", False):
-        return False
-
-    secret_hash = (get_setting(f"{ABSENCE_FORM_SETTING_PREFIX}.secret_hash", "") or "").strip()
-    provided_secret = (provided_secret or "").strip()
-
-    if not secret_hash or not provided_secret:
-        return False
-
-    provided_hash = _hash_integration_secret(provided_secret)
-    return hmac.compare_digest(provided_hash, secret_hash)
 
 
 def _pending_absence_request_from_row(row) -> dict | None:
@@ -2724,6 +2668,10 @@ def create_pending_absence_request_from_public_submission(
     if not _is_department_enabled(department_name):
         raise StaffStatusValidationError("Staff Status is not available for this department.")
 
+    note = normalize_text(payload.get("note"))
+    if note and len(note) > 1000:
+        raise StaffStatusValidationError("Notes cannot exceed 1000 characters.")
+
     duration_mode = (payload.get("duration_mode") or "").strip()
     days_value = payload.get("days_value")
     if duration_mode != "multi_day":
@@ -2784,7 +2732,7 @@ def create_pending_absence_request_from_public_submission(
                     normalized["start_time"],
                     normalized["duration_mode"],
                     normalized["days_value"],
-                    normalize_text(payload.get("note")),
+                    note,
                     settings["approval_manager_email"],
                     now,
                     source_ip,

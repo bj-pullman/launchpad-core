@@ -33,7 +33,6 @@ from .service import (
 )
 
 from apps.staff_status.service import (
-    generate_absence_form_integration_secret,
     get_absence_form_integration_settings,
     list_staff_status_departments,
     migrate_legacy_enabled_departments_setting,
@@ -42,6 +41,11 @@ from apps.staff_status.service import (
     upsert_department_settings,
     update_absence_form_integration_settings,
     build_public_url as build_staff_status_public_url,
+)
+from apps.staff_status.google_absence_sync import (
+    get_google_absence_sync_settings,
+    sync_google_absence_requests,
+    update_google_absence_sync_settings,
 )
 
 from apps.staff_status.access_service import (
@@ -1532,43 +1536,60 @@ def settings_staff_status():
             flash("Staff Status department availability saved.", "success")
             return redirect(url_for("launchpad_ui.settings_staff_status", tab="departments"))
 
-        if action in {"generate_absence_secret", "rotate_absence_secret"}:
-            generated_secret = generate_absence_form_integration_secret()
-            session["staff_status_generated_absence_secret"] = generated_secret["raw_secret"]
-            flash("Integration secret generated. Copy it now; it will not be shown again.", "success")
-            return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
-
-        if action == "save_absence_form":
-            integration_enabled = 1 if request.form.get("absence_form_enabled") == "1" else 0
-            apps_script_url = (request.form.get("apps_script_url") or "").strip()
+        if action == "save_absence_google_sync":
+            integration_enabled = request.form.get("absence_google_sync_enabled") == "1"
+            spreadsheet_id = (request.form.get("absence_google_spreadsheet_id") or "").strip()
+            worksheet_name = (request.form.get("absence_google_worksheet_name") or "Absence Requests").strip()
+            interval_minutes = request.form.get("absence_google_interval_minutes", type=int) or 5
+            processing_timeout_minutes = request.form.get(
+                "absence_google_processing_timeout_minutes",
+                type=int,
+            ) or 15
             approval_manager_email = (request.form.get("approval_manager_email") or "").strip().lower()
-            current_integration = get_absence_form_integration_settings()
-            notification_sender_email = (
-                (request.form.get("notification_sender_email") or "").strip().lower()
-                if "notification_sender_email" in request.form
-                else current_integration["notification_sender_email"]
-            )
 
-            if integration_enabled and not approval_manager_email:
-                flash("Approval manager email is required when the absence form integration is enabled.", "error")
+            if integration_enabled and not spreadsheet_id:
+                flash("Spreadsheet ID is required when Google absence synchronization is enabled.", "error")
                 return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
-
+            if not worksheet_name:
+                flash("Worksheet name is required.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+            if integration_enabled and not approval_manager_email:
+                flash("Approval manager email is required when Google absence synchronization is enabled.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
             if approval_manager_email and "@" not in approval_manager_email:
                 flash("Approval manager email must be a valid email address.", "error")
                 return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
-
-            if notification_sender_email and "@" not in notification_sender_email:
-                flash("Notification sender email must be a valid email address.", "error")
-                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
-
-            update_absence_form_integration_settings(
-                enabled=bool(integration_enabled),
-                apps_script_url=apps_script_url,
-                approval_manager_email=approval_manager_email,
-                notification_sender_email=notification_sender_email,
+            update_google_absence_sync_settings(
+                enabled=integration_enabled,
+                spreadsheet_id=spreadsheet_id,
+                worksheet_name=worksheet_name,
+                interval_minutes=interval_minutes,
+                processing_timeout_minutes=processing_timeout_minutes,
             )
+            set_setting(
+                "staff_status.absence_form.approval_manager_email",
+                approval_manager_email,
+            )
+            configure_jobs()
+            flash("Google absence synchronization settings saved.", "success")
+            return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
 
-            flash("Absence form integration settings saved.", "success")
+        if action == "sync_absence_google_now":
+            try:
+                result = sync_google_absence_requests()
+                counts = result.get("counts") or {}
+                flash(
+                    "Google absence sync completed: "
+                    f"{counts.get('processed', 0)} processed, "
+                    f"{counts.get('errors', 0)} errors.",
+                    "success",
+                )
+            except Exception:
+                current_app.logger.exception("Manual Google absence sync failed")
+                flash(
+                    "Google absence sync failed. Review the safe status message and server logs.",
+                    "error",
+                )
             return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
 
         if action == "save_notifications":
@@ -1580,8 +1601,6 @@ def settings_staff_status():
 
             current_integration = get_absence_form_integration_settings()
             update_absence_form_integration_settings(
-                enabled=current_integration["enabled"],
-                apps_script_url=current_integration["apps_script_url"],
                 approval_manager_email=current_integration["approval_manager_email"],
                 notification_sender_email=notification_sender_email,
             )
@@ -1657,7 +1676,7 @@ def settings_staff_status():
         active_staff_status_tab=active_staff_status_tab,
         settings=settings,
         absence_form_settings=get_absence_form_integration_settings(),
-        generated_absence_secret=session.pop("staff_status_generated_absence_secret", None),
+        absence_google_sync_settings=get_google_absence_sync_settings(),
         department_rows=department_rows,
         department_operator_assignments=list_staff_status_access_with_users(),
         assignable_users=list_users(active_only=True),

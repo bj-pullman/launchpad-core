@@ -110,39 +110,41 @@
     <div class="settings-tab-panel {% if active_staff_status_tab == 'absence_form' %}active{% endif %}"
       data-panel="absence_form">
       <div class="finance-settings-card settings-provider-card">
-        <h2>Apps Script Absence Form</h2>
+        <h2>Google Absence Queue</h2>
         <p class="muted">
-          Manage the server-to-server endpoint used by the public Google Apps Script absence request form.
+          Launchpad polls a private Google Sheet using an outbound-only connection. The public form has no access to
+          Launchpad, its users, departments, settings, or records.
         </p>
 
         <form method="post" class="finance-settings-form" novalidate>
           <input type="hidden" name="active_staff_status_tab" value="absence_form" />
-          <input type="hidden" name="action" value="save_absence_form" />
+          <input type="hidden" name="action" value="save_absence_google_sync" />
 
           <div class="settings-toggle-row">
             <div class="settings-toggle-copy">
-              <strong>Enable Apps Script absence requests</strong>
-              <span>Accept authenticated pending absence requests from the configured Google Apps Script project.</span>
+              <strong>Enable Google absence synchronization</strong>
+              <span>Poll the private intake queue automatically from Launchpad.</span>
             </div>
 
             <label class="settings-switch">
-              <input type="checkbox" name="absence_form_enabled" value="1" {% if absence_form_settings.enabled %}checked{% endif %} />
+              <input type="checkbox" name="absence_google_sync_enabled" value="1"
+                {% if absence_google_sync_settings.enabled %}checked{% endif %} />
               <span class="settings-switch-slider"></span>
             </label>
           </div>
 
           <div class="finance-settings-grid">
             <div class="form-field">
-              <label for="absence_endpoint_url">Launchpad Endpoint URL</label>
-              <input type="text" id="absence_endpoint_url" value="{{ absence_form_settings.endpoint_url }}" readonly />
-              <small>Use this as <code>LAUNCHPAD_API_URL</code> in Apps Script Script Properties.</small>
+              <label for="absence_google_spreadsheet_id">Spreadsheet ID</label>
+              <input type="text" id="absence_google_spreadsheet_id" name="absence_google_spreadsheet_id"
+                value="{{ absence_google_sync_settings.spreadsheet_id or '' }}" autocomplete="off" />
+              <small>The Sheet remains private and must be shared directly with the service account.</small>
             </div>
 
             <div class="form-field">
-              <label for="apps_script_url">Apps Script Web App URL</label>
-              <input type="url" id="apps_script_url" name="apps_script_url"
-                value="{{ absence_form_settings.apps_script_url or '' }}"
-                placeholder="https://script.google.com/macros/s/.../exec" />
+              <label for="absence_google_worksheet_name">Worksheet Name</label>
+              <input type="text" id="absence_google_worksheet_name" name="absence_google_worksheet_name"
+                value="{{ absence_google_sync_settings.worksheet_name or 'Absence Requests' }}" />
             </div>
           </div>
 
@@ -155,36 +157,59 @@
             </div>
 
             <div class="form-field">
-              <label>Integration Secret</label>
+              <label>Google Credentials Configured</label>
               <input type="text" readonly
-                value="{% if absence_form_settings.has_secret %}Configured: {{ absence_form_settings.secret_prefix }}...{% else %}No secret generated{% endif %}" />
-              <small>Full secrets are only shown immediately after generation.</small>
+                value="{% if absence_google_sync_settings.credentials_configured %}Yes{% else %}No{% endif %}" />
+              <small>Loaded from <code>STAFF_STATUS_GOOGLE_SERVICE_ACCOUNT_FILE</code>; credential contents are never displayed.</small>
             </div>
           </div>
 
-          {% if generated_absence_secret %}
-          <div class="settings-test-result settings-test-result-success">
-            <strong>New integration secret</strong>
-            <input type="text" readonly value="{{ generated_absence_secret }}" style="margin-top:8px;" />
+          <div class="finance-settings-grid">
+            <div class="form-field">
+              <label for="absence_google_interval_minutes">Polling Interval (minutes)</label>
+              <input type="number" id="absence_google_interval_minutes" name="absence_google_interval_minutes"
+                min="5" max="1440" value="{{ absence_google_sync_settings.interval_minutes }}" />
+            </div>
+            <div class="form-field">
+              <label for="absence_google_processing_timeout_minutes">Stale Processing Timeout (minutes)</label>
+              <input type="number" id="absence_google_processing_timeout_minutes"
+                name="absence_google_processing_timeout_minutes" min="5" max="1440"
+                value="{{ absence_google_sync_settings.processing_timeout_minutes }}" />
+            </div>
           </div>
-          {% endif %}
 
           <div class="finance-settings-actions">
-            <button type="submit" class="btn btn-primary">Save Absence Form Settings</button>
+            <button type="submit" class="btn btn-primary">Save Google Sync Settings</button>
           </div>
         </form>
 
         <form method="post" class="finance-settings-form staff-status-secret-action-form">
           <input type="hidden" name="active_staff_status_tab" value="absence_form" />
-          <input type="hidden" name="action"
-            value="{% if absence_form_settings.has_secret %}rotate_absence_secret{% else %}generate_absence_secret{% endif %}" />
+          <input type="hidden" name="action" value="sync_absence_google_now" />
 
           <div class="finance-settings-actions">
-            <button type="submit" class="btn btn-secondary">
-              {% if absence_form_settings.has_secret %}Rotate Secret{% else %}Generate Secret{% endif %}
-            </button>
+            <button type="submit" class="btn btn-secondary"
+              {% if not absence_google_sync_settings.enabled %}disabled{% endif %}>Sync Now</button>
           </div>
         </form>
+
+        <div class="settings-form-section">
+          <h3>Connection and Last Run</h3>
+          <div class="finance-settings-grid">
+            <div class="form-field"><label>Enabled</label><input type="text" readonly value="{{ 'Yes' if absence_google_sync_settings.enabled else 'No' }}" /></div>
+            <div class="form-field"><label>Spreadsheet Reachable</label><input type="text" readonly value="{% if absence_google_sync_settings.last_success_at %}Yes, at last successful sync{% else %}Not yet verified{% endif %}" /></div>
+            <div class="form-field"><label>Worksheet Reachable</label><input type="text" readonly value="{% if absence_google_sync_settings.last_success_at %}Yes, at last successful sync{% else %}Not yet verified{% endif %}" /></div>
+            <div class="form-field"><label>Last Attempt</label><input type="text" readonly value="{{ absence_google_sync_settings.last_attempt_at or 'Never' }}" /></div>
+            <div class="form-field"><label>Last Successful Sync</label><input type="text" readonly value="{{ absence_google_sync_settings.last_success_at or 'Never' }}" /></div>
+            <div class="form-field"><label>Processed in Last Run</label><input type="text" readonly value="{{ absence_google_sync_settings.last_processed_count }}" /></div>
+            <div class="form-field"><label>Errors in Last Run</label><input type="text" readonly value="{{ absence_google_sync_settings.last_error_count }}" /></div>
+          </div>
+          {% if absence_google_sync_settings.last_error %}
+          <div class="settings-test-result settings-test-result-error">
+            <strong>Last safe error</strong><br />{{ absence_google_sync_settings.last_error }}
+          </div>
+          {% endif %}
+        </div>
       </div>
     </div>
 
