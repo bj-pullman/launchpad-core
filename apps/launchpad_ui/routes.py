@@ -1540,7 +1540,7 @@ def settings_staff_status():
             integration_enabled = request.form.get("absence_google_sync_enabled") == "1"
             spreadsheet_id = (request.form.get("absence_google_spreadsheet_id") or "").strip()
             worksheet_name = (request.form.get("absence_google_worksheet_name") or "Absence Requests").strip()
-            interval_minutes = request.form.get("absence_google_interval_minutes", type=int) or 5
+            interval_seconds = request.form.get("absence_google_interval_seconds", type=int)
             processing_timeout_minutes = request.form.get(
                 "absence_google_processing_timeout_minutes",
                 type=int,
@@ -1551,6 +1551,9 @@ def settings_staff_status():
 
             if integration_enabled and not spreadsheet_id:
                 flash("Spreadsheet ID is required when Google absence synchronization is enabled.", "error")
+                return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
+            if interval_seconds is None or not 30 <= interval_seconds <= 86400:
+                flash("Polling interval must be between 30 and 86400 seconds.", "error")
                 return redirect(url_for("launchpad_ui.settings_staff_status", tab="absence_form"))
             if not worksheet_name:
                 flash("Worksheet name is required.", "error")
@@ -1573,7 +1576,7 @@ def settings_staff_status():
                 enabled=integration_enabled,
                 spreadsheet_id=spreadsheet_id,
                 worksheet_name=worksheet_name,
-                interval_minutes=interval_minutes,
+                interval_seconds=interval_seconds,
                 processing_timeout_minutes=processing_timeout_minutes,
                 review_web_app_url=review_web_app_url,
                 global_reviewer_emails=global_reviewer_emails,

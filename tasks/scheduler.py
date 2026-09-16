@@ -81,6 +81,20 @@ def _parse_interval_minutes(
 
     return max(minimum, min(interval, maximum))
 
+
+def _parse_interval_seconds(
+    value: str | int | None,
+    default: int = 60,
+    minimum: int = 30,
+    maximum: int = 86400,
+) -> int:
+    """Parse and constrain a configurable scheduler interval in seconds."""
+    try:
+        interval = int(value)
+    except (TypeError, ValueError):
+        interval = default
+    return max(minimum, min(interval, maximum))
+
 def _run_job_with_tracking(job_def):
     timezone_value = (
         get_setting(job_def["timezone_setting"], "America/Chicago")
@@ -363,6 +377,26 @@ def configure_jobs():
                 coalesce=True,
                 max_instances=1,
                 misfire_grace_time=3600,
+            )
+
+        elif job_def.get("schedule_type") == "interval_seconds":
+            interval_default = job_def.get("interval_default", 60)
+            interval_seconds = _parse_interval_seconds(
+                get_setting(job_def["interval_setting"], str(interval_default)),
+                default=interval_default,
+                minimum=job_def.get("interval_minimum", 30),
+                maximum=job_def.get("interval_maximum", 86400),
+            )
+            print(f"[tasks] scheduling {job_id} every {interval_seconds} second(s)")
+            scheduler.add_job(
+                _run_interval_job_with_tracking,
+                args=[job_def],
+                trigger=IntervalTrigger(seconds=interval_seconds),
+                id=job_id,
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=max(30, interval_seconds),
             )
 
     scheduler.add_job(

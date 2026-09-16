@@ -24,7 +24,9 @@ SETTING_PREFIX = "staff_status.absence_google_sync"
 CREDENTIAL_ENVIRONMENT_VARIABLE = "STAFF_STATUS_GOOGLE_SERVICE_ACCOUNT_FILE"
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_WORKSHEET_NAME = "Absence Requests"
-DEFAULT_INTERVAL_MINUTES = 5
+DEFAULT_INTERVAL_SECONDS = 60
+MINIMUM_INTERVAL_SECONDS = 30
+MAXIMUM_INTERVAL_SECONDS = 86400
 DEFAULT_PROCESSING_TIMEOUT_MINUTES = 15
 MAX_SAFE_ERROR_LENGTH = 500
 
@@ -71,6 +73,24 @@ def _parse_positive_int(value, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(parsed, maximum))
 
 
+def _get_interval_seconds() -> int:
+    seconds_key = f"{SETTING_PREFIX}.interval_seconds"
+    stored_seconds = get_setting(seconds_key, None)
+    if stored_seconds not in (None, ""):
+        return _parse_positive_int(
+            stored_seconds, DEFAULT_INTERVAL_SECONDS,
+            MINIMUM_INTERVAL_SECONDS, MAXIMUM_INTERVAL_SECONDS,
+        )
+
+    legacy_minutes = get_setting(f"{SETTING_PREFIX}.interval_minutes", None)
+    if legacy_minutes not in (None, ""):
+        migrated_seconds = _parse_positive_int(legacy_minutes, 5, 1, 1440) * 60
+    else:
+        migrated_seconds = DEFAULT_INTERVAL_SECONDS
+    set_setting(seconds_key, str(migrated_seconds))
+    return migrated_seconds
+
+
 def _email_set(value: str | None) -> set[str]:
     return {item.strip().lower() for item in (value or "").split(",") if item.strip()}
 
@@ -84,7 +104,7 @@ def get_google_absence_sync_settings() -> dict:
                            or DEFAULT_WORKSHEET_NAME).strip(),
         "review_web_app_url": (get_setting(f"{SETTING_PREFIX}.review_web_app_url", "") or "").strip(),
         "global_reviewer_emails": (get_setting(f"{SETTING_PREFIX}.global_reviewer_emails", "") or "").strip(),
-        "interval_minutes": _parse_positive_int(get_setting(f"{SETTING_PREFIX}.interval_minutes", "5"), 5, 5, 1440),
+        "interval_seconds": _get_interval_seconds(),
         "processing_timeout_minutes": _parse_positive_int(
             get_setting(f"{SETTING_PREFIX}.processing_timeout_minutes", "15"), 15, 5, 1440),
         "credentials_configured": bool(credential_path and Path(credential_path).is_file()),
@@ -98,7 +118,7 @@ def get_google_absence_sync_settings() -> dict:
 
 
 def update_google_absence_sync_settings(*, enabled: bool, spreadsheet_id: str,
-                                        worksheet_name: str, interval_minutes: int,
+                                        worksheet_name: str, interval_seconds: int,
                                         processing_timeout_minutes: int,
                                         review_web_app_url: str = "",
                                         global_reviewer_emails: str = "") -> None:
@@ -107,8 +127,15 @@ def update_google_absence_sync_settings(*, enabled: bool, spreadsheet_id: str,
     set_setting(f"{SETTING_PREFIX}.worksheet_name", worksheet_name.strip() or DEFAULT_WORKSHEET_NAME)
     set_setting(f"{SETTING_PREFIX}.review_web_app_url", review_web_app_url.strip())
     set_setting(f"{SETTING_PREFIX}.global_reviewer_emails", ",".join(sorted(_email_set(global_reviewer_emails))))
-    set_setting(f"{SETTING_PREFIX}.interval_minutes",
-                str(_parse_positive_int(interval_minutes, DEFAULT_INTERVAL_MINUTES, 5, 1440)))
+    try:
+        normalized_interval = int(interval_seconds)
+    except (TypeError, ValueError) as exc:
+        raise GoogleAbsenceSyncConfigurationError("Polling interval must be a whole number of seconds.") from exc
+    if not MINIMUM_INTERVAL_SECONDS <= normalized_interval <= MAXIMUM_INTERVAL_SECONDS:
+        raise GoogleAbsenceSyncConfigurationError(
+            f"Polling interval must be between {MINIMUM_INTERVAL_SECONDS} and {MAXIMUM_INTERVAL_SECONDS} seconds."
+        )
+    set_setting(f"{SETTING_PREFIX}.interval_seconds", str(normalized_interval))
     set_setting(f"{SETTING_PREFIX}.processing_timeout_minutes",
                 str(_parse_positive_int(processing_timeout_minutes, DEFAULT_PROCESSING_TIMEOUT_MINUTES, 5, 1440)))
 

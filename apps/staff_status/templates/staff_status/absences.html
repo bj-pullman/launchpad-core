@@ -204,17 +204,7 @@
   {% include "staff_status/_subnav.html" %}
 
   <div class="page-header">
-    <div class="staff-status-absence-title-row">
-      <h1>{{ department_name }} Absences</h1>
-      <button type="button" class="staff-status-absence-settings-btn" data-modal-open="leave-balances-modal"
-        aria-label="Absence settings" title="Absence settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-      </button>
-    </div>
+    <h1>{{ department_name }} Absences</h1>
 
     <div class="page-header-actions">
       {% if can_operate %}
@@ -225,6 +215,22 @@
 
       <button type="button" class="btn btn-secondary" data-modal-open="absence-report-modal">
         Reports
+      </button>
+
+      {% if can_operate %}
+      <button type="button" class="btn btn-secondary" data-modal-open="monthly-leave-forms-modal">
+        Monthly Leave Forms
+      </button>
+      {% endif %}
+
+      <button type="button" class="btn btn-secondary staff-status-absence-settings-btn"
+        data-modal-open="leave-balances-modal" aria-label="Open absence settings">
+        <span>Settings</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
       </button>
     </div>
   </div>
@@ -271,6 +277,29 @@
     {% else %}<div class="empty-state"><h3>No requests found</h3><p class="muted">No requests match this status.</p></div>{% endif %}
   </section>
 </div>
+
+{% if can_operate %}
+<div id="monthly-leave-forms-modal" class="modal-backdrop staff-status-modal-backdrop" role="dialog" aria-modal="true"
+  aria-labelledby="monthly-leave-forms-title" hidden>
+  <div class="modal-card staff-status-modal-card">
+    <div class="modal-header">
+      <div><h2 id="monthly-leave-forms-title">Generate Monthly Leave Forms</h2><p class="muted">{{ department_name }}</p></div>
+      <button type="button" class="modal-close" data-modal-close aria-label="Close Monthly Leave Forms">&times;</button>
+    </div>
+    <form method="post" action="{{ url_for('staff_status.monthly_leave_forms', department_name=department_name) }}" class="settings-form">
+      <div class="form-field">
+        <label for="monthly-leave-month">Month</label>
+        <input id="monthly-leave-month" name="month" type="month" value="{{ monthly_leave_default_month }}" required>
+        <small>Creates one private Employee Leave Form per employee with Sick, Personal, or Vacation absences.</small>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Generate Forms</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 
 <div id="leave-balances-modal" class="modal-backdrop staff-status-modal-backdrop" role="dialog" aria-modal="true"
   aria-labelledby="leave-balances-title" hidden>

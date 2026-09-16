@@ -182,9 +182,10 @@
 
           <div class="finance-settings-grid">
             <div class="form-field">
-              <label for="absence_google_interval_minutes">Polling Interval (minutes)</label>
-              <input type="number" id="absence_google_interval_minutes" name="absence_google_interval_minutes"
-                min="5" max="1440" value="{{ absence_google_sync_settings.interval_minutes }}" />
+              <label for="absence_google_interval_seconds">Polling Interval (seconds)</label>
+              <input type="number" id="absence_google_interval_seconds" name="absence_google_interval_seconds"
+                min="30" max="86400" value="{{ absence_google_sync_settings.interval_seconds }}" required />
+              <small>How often Launchpad checks Google for new absence submissions and reviewer decisions.</small>
             </div>
             <div class="form-field">
               <label for="absence_google_processing_timeout_minutes">Stale Processing Timeout (minutes)</label>

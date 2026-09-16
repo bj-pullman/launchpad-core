@@ -1,7 +1,7 @@
 import calendar
 import logging
 import math
-import json, zoneinfo, secrets, csv, io
+import json, zoneinfo, secrets, csv, io, re, zipfile
 import sqlite3
 from pathlib import Path
 from urllib.parse import quote
@@ -23,7 +23,8 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 
-from .leave_form_pdf import LeaveFormTemplateError, fill_employee_leave_form
+from .leave_form_pdf import LeaveFormTemplateError, fill_monthly_employee_leave_form
+from .vacation_personal_form_pdf import fill_vacation_personal_request_form
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +43,8 @@ LEAVE_TYPE_DEFINITIONS = {
 }
 LEAVE_FORM_DIR = Path(__file__).resolve().parents[2] / "instance" / "staff_status" / "generated_leave_forms"
 LEAVE_FORM_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "forms" / "employee_leave_form.pdf"
+VACATION_PERSONAL_FORM_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "forms" / "vacation_personal_request_form.pdf"
+MONTHLY_LEAVE_FORM_DIR = Path(__file__).resolve().parents[2] / "instance" / "staff_status" / "monthly_leave_forms"
 ABSENCE_TABLE_SORT_KEYS = {
     "user",
     "type",
@@ -1313,10 +1316,11 @@ def _leave_form_date_label(start_value: str, end_value: str) -> str:
     return f"{format_friendly_date(start, include_weekday=False)} - {format_friendly_date(end, include_weekday=False)}"
 
 
-def generate_employee_leave_form(absence_id: int, *, force: bool = False) -> dict:
+def generate_vacation_personal_request_form(absence_id: int, *, force: bool = False) -> dict:
     absence = get_absence_by_id(absence_id)
     if not absence:
         raise StaffStatusValidationError("Absence not found.")
+    selected = (absence.get("leave_type") or absence.get("absence_type") or "").lower()
     existing_path = Path(absence["leave_form_path"]) if absence.get("leave_form_path") else None
     safe_existing_path = None
     if existing_path:
@@ -1329,28 +1333,40 @@ def generate_employee_leave_form(absence_id: int, *, force: bool = False) -> dic
             safe_existing_path = None
     if not force and safe_existing_path and safe_existing_path.is_file():
         return {"path": safe_existing_path, "filename": absence["leave_form_filename"], "generated_at": absence["leave_form_generated_at"]}
+    if selected not in {"personal", "vacation"}:
+        raise StaffStatusValidationError("Only Personal and Vacation absences have an individual request form.")
     user = get_user_by_id(absence["user_id"]) or {}
     employee_name = build_display_name(user) if user else f"User {absence['user_id']}"
     LEAVE_FORM_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"employee-leave-form-{absence_id}.pdf"
+    filename = f"vacation-personal-request-form-{absence_id}.pdf"
     path = LEAVE_FORM_DIR / filename
-    selected = absence.get("leave_type") or absence.get("absence_type")
     date_label = _leave_form_date_label(absence["start_date"], absence["end_date"])
+    start_date = parse_iso_date(absence.get("start_date")) or date.today()
+    created_at = absence.get("created_at") or ""
     try:
-        fill_employee_leave_form(
-            template_path=LEAVE_FORM_TEMPLATE_PATH,
+        request_date = datetime.fromisoformat(created_at.replace("Z", "+00:00")).date()
+    except (TypeError, ValueError):
+        request_date = date.today()
+    try:
+        fill_vacation_personal_request_form(
+            template_path=VACATION_PERSONAL_FORM_TEMPLATE_PATH,
             output_path=path,
-            employee_number=absence.get("employee_number_snapshot") or "",
+            leave_type=selected,
+            school_year=get_current_school_year_range(start_date)["label"],
             employee_name=employee_name,
-            total_days_absent=f"{float(absence.get('leave_days_used') or absence.get('days_value') or 0):g}",
-            classification=selected,
-            date_label=date_label,
+            request_date=format_friendly_date(request_date, include_weekday=False),
+            position=user.get("job_title") or "",
+            campus=absence.get("department_name") or user.get("department") or "",
+            requested_dates=date_label,
+            balance_before=f"{float(absence['leave_balance_before']):g}" if absence.get("leave_balance_before") is not None else "",
+            days_requested=f"{float(absence.get('leave_days_used') or absence.get('days_value') or 0):g}",
+            balance_after=f"{float(absence['leave_balance_after']):g}" if absence.get("leave_balance_after") is not None else "",
         )
     except LeaveFormTemplateError:
         LOGGER.exception(
-            "Employee Leave Form generation failed for absence %s using canonical template %s",
+            "Personal/Vacation Request Form generation failed for absence %s using canonical template %s",
             absence_id,
-            LEAVE_FORM_TEMPLATE_PATH,
+            VACATION_PERSONAL_FORM_TEMPLATE_PATH,
         )
         raise
     generated_at = utc_now_iso()
@@ -1370,6 +1386,99 @@ def generate_employee_leave_form(absence_id: int, *, force: bool = False) -> dic
             )
         conn.commit()
     return {"path": path, "filename": filename, "generated_at": generated_at}
+
+
+def _safe_form_filename_part(value: str) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9]+", "-", str(value or "").strip()).strip("-")
+    return normalized[:80] or "Employee"
+
+
+def _monthly_date_label(start_value: str, end_value: str, month_start: date, month_end: date) -> str:
+    start = max(parse_iso_date(start_value) or month_start, month_start)
+    end = min(parse_iso_date(end_value) or start, month_end)
+    if start == end:
+        return f"{start.strftime('%B')} {start.day}"
+    if start.year == end.year and start.month == end.month:
+        return f"{start.strftime('%B')} {start.day}-{end.day}"
+    return f"{start.strftime('%B')} {start.day}-{end.strftime('%B')} {end.day}"
+
+
+def generate_monthly_employee_leave_forms(*, department_name: str, month_value: str) -> dict:
+    try:
+        selected_month = datetime.strptime(str(month_value or ""), "%Y-%m").date()
+    except ValueError as exc:
+        raise StaffStatusValidationError("Choose a valid month for monthly leave forms.") from exc
+    month_start = selected_month.replace(day=1)
+    month_end = selected_month.replace(day=calendar.monthrange(selected_month.year, selected_month.month)[1])
+    with get_connection() as conn:
+        rows = [dict(row) for row in conn.execute(
+            """
+            SELECT * FROM staff_status_absences
+            WHERE department_name = ? AND is_active = 1
+              AND COALESCE(leave_type, absence_type) IN ('sick', 'personal', 'vacation')
+              AND start_date <= ? AND end_date >= ?
+            ORDER BY user_id, start_date, end_date, id
+            """,
+            (department_name, month_end.isoformat(), month_start.isoformat()),
+        ).fetchall()]
+
+    grouped: dict[int, dict] = {}
+    for absence in rows:
+        user_id = int(absence["user_id"])
+        user = get_user_by_id(user_id) or {}
+        group = grouped.setdefault(user_id, {
+            "employee_number": absence.get("employee_number_snapshot") or "",
+            "employee_name": build_display_name(user) if user else f"User {user_id}",
+            "total_days": 0.0,
+            "dates": {"sick": [], "personal": [], "vacation": []},
+        })
+        leave_type = (absence.get("leave_type") or absence.get("absence_type") or "").lower()
+        group["total_days"] += float(
+            absence["leave_days_used"] if absence.get("leave_days_used") is not None
+            else absence.get("days_value") or 0
+        )
+        group["dates"][leave_type].append(
+            _monthly_date_label(absence["start_date"], absence["end_date"], month_start, month_end)
+        )
+
+    if not grouped:
+        return {
+            "path": None, "filename": None, "employee_count": 0,
+            "forms": [], "month": month_start.strftime("%Y-%m"),
+        }
+
+    run_token = secrets.token_hex(8)
+    run_dir = MONTHLY_LEAVE_FORM_DIR / month_start.strftime("%Y-%m") / run_token
+    run_dir.mkdir(parents=True, exist_ok=True)
+    generated_forms = []
+    for group in grouped.values():
+        filename = (
+            f"{month_start.strftime('%Y-%m')}_"
+            f"{_safe_form_filename_part(group['employee_name'])}_Employee-Leave-Form.pdf"
+        )
+        output_path = run_dir / filename
+        fill_monthly_employee_leave_form(
+            template_path=LEAVE_FORM_TEMPLATE_PATH,
+            output_path=output_path,
+            employee_number=group["employee_number"],
+            employee_name=group["employee_name"],
+            total_days_absent=f"{group['total_days']:g}",
+            classification_dates={
+                leave_type: ", ".join(group["dates"][leave_type])
+                for leave_type in ("sick", "personal", "vacation")
+            },
+        )
+        generated_forms.append({"path": output_path, "filename": filename})
+
+    zip_filename = f"{month_start.strftime('%Y-%m')}_{_safe_form_filename_part(department_name)}_Employee-Leave-Forms.zip"
+    zip_path = run_dir / zip_filename
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for form in generated_forms:
+            archive.write(form["path"], arcname=form["filename"])
+    return {
+        "path": zip_path, "filename": zip_filename, "employee_count": len(generated_forms),
+        "forms": generated_forms, "month": month_start.strftime("%Y-%m"),
+    }
 
 
 def send_approved_absence_email_once(absence_id: int, *, pending_request_id: int | None = None) -> bool:
@@ -1395,27 +1504,32 @@ def send_approved_absence_email_once(absence_id: int, *, pending_request_id: int
     recipient = (user.get("email") or "").strip()
     settings = get_absence_form_integration_settings()
     sender = (settings.get("notification_sender_email") or "").strip()
-    form = generate_employee_leave_form(absence_id)
+    form = generate_vacation_personal_request_form(absence_id) if absence.get("absence_type") in {"personal", "vacation"} else None
     leave_type = LEAVE_TYPE_DEFINITIONS.get(absence.get("leave_type"), {"label": str(absence.get("absence_type") or "Leave").title()})["label"]
     date_label = format_friendly_date_range(absence["start_date"], absence["end_date"])
     used_label = _format_leave_days(absence.get("leave_days_used") or absence.get("days_value"))
     balance_lines = ""
     balance_html = ""
     if absence.get("leave_balance_before") is not None:
-        balance_lines = f"\n{leave_type} Used: {used_label}\nRemaining {leave_type} Balance: {_format_leave_days(absence['leave_balance_after'])}"
+        balance_lines = f"\nBalance Before: {_format_leave_days(absence['leave_balance_before'])}\nRemaining {leave_type} Balance: {_format_leave_days(absence['leave_balance_after'])}"
         balance_html = f"<p><strong>{escape(leave_type)} Used:</strong> {escape(used_label)}<br><strong>Balance Before:</strong> {escape(_format_leave_days(absence['leave_balance_before']))}<br><strong>Remaining {escape(leave_type)} Balance:</strong> {escape(_format_leave_days(absence['leave_balance_after']))}</p>"
     warning_html = f"<p style='padding:12px;background:#fff7ed;color:#9a3412;border-radius:8px;'><strong>Balance warning:</strong> {escape(absence['leave_balance_warning'])}</p>" if absence.get("leave_balance_warning") else ""
-    text_body = f"Your absence request for {date_label} has been approved.\n\n{leave_type}: {used_label}{balance_lines}\n\nYour completed Employee Leave Form is attached. Please print the form, sign it, and return it for supervisor signature."
+    form_instruction = ""
+    if form:
+        form_instruction = "\n\nYour completed Personal/Vacation Request Form is attached. Please print and sign the form and return it for the required supervisor signatures."
+        if absence.get("absence_type") == "vacation":
+            form_instruction += " Vacation requests also require superintendent approval."
+    text_body = f"Your {leave_type} request has been approved.\n\nRequested dates: {date_label}\n{leave_type} Used: {used_label}{balance_lines}{form_instruction}"
     html_body = _email_shell(
-        eyebrow="Approved", title="Your Absence Is Approved",
+        eyebrow="Approved", title=f"Your {leave_type} Request Is Approved",
         intro_html=f"Your absence for <strong>{escape(date_label)}</strong> has been approved.",
-        body_html=f"{_email_summary_html(absence)}{balance_html}{warning_html}<p>Your completed Employee Leave Form is attached. Please print the form, sign it, and return it for supervisor signature.</p>",
-        footer_html="The signature fields were intentionally left blank.",
+        body_html=f"{_email_summary_html(absence)}{balance_html}{warning_html}" + ("<p>Your completed Personal/Vacation Request Form is attached. Please print and sign the form and return it for the required supervisor signatures.</p>" + ("<p>Vacation requests also require superintendent approval.</p>" if absence.get("absence_type") == "vacation" else "") if form else ""),
+        footer_html=("The signature and approval fields were intentionally left blank." if form else "This message confirms the approved Staff Status absence."),
     )
     try:
         send_mail(sender_email=sender, recipient_email=recipient,
                   subject=f"Absence Approved - {date_label}", text_body=text_body,
-                  html_body=html_body, attachments=[{"path": form["path"], "filename": form["filename"], "mime_type": "application/pdf"}])
+                  html_body=html_body, attachments=([{"path": form["path"], "filename": form["filename"], "mime_type": "application/pdf"}] if form else None))
     except Exception as exc:
         with get_connection() as conn:
             conn.execute("UPDATE staff_status_absences SET leave_result_email_status = 'error', leave_result_email_error = ? WHERE id = ?", (str(exc)[:500], absence_id))
@@ -1436,8 +1550,11 @@ def _complete_approved_absence_artifacts(
     absence_id: int, pending_request_id: int | None = None, *, deliver_email: bool = True
 ) -> None:
     try:
-        form = generate_employee_leave_form(absence_id)
-        if pending_request_id:
+        absence = get_absence_by_id(absence_id) or {}
+        form = None
+        if absence.get("absence_type") in {"personal", "vacation"}:
+            form = generate_vacation_personal_request_form(absence_id)
+        if pending_request_id and form:
             with get_connection() as conn:
                 conn.execute(
                     "UPDATE staff_status_pending_absence_requests SET leave_form_filename = ?, leave_form_generated_at = ?, updated_at = ? WHERE id = ?",

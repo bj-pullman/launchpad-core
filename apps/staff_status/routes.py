@@ -60,7 +60,8 @@ from .service import (
     StaffStatusValidationError,
     PendingAbsenceRequestStateError,
     get_absence_by_id,
-    generate_employee_leave_form,
+    generate_vacation_personal_request_form,
+    generate_monthly_employee_leave_forms,
     list_employee_leave_profiles_for_department,
     save_employee_leave_profile,
 )
@@ -934,6 +935,7 @@ def absences(department_name: str):
         leave_profiles=list_employee_leave_profiles_for_department(department_name),
         open_leave_balances=request.args.get("leave_balances") == "open",
         manual_absence_idempotency_key=secrets.token_urlsafe(24),
+        monthly_leave_default_month=date.today().strftime("%Y-%m"),
     )
 
 
@@ -948,15 +950,45 @@ def absence_leave_form(absence_id: int):
     if force and not can_operate_department(user_id, absence["department_name"]):
         abort(403)
     try:
-        form = generate_employee_leave_form(absence_id, force=force)
+        form = generate_vacation_personal_request_form(absence_id, force=force)
+    except StaffStatusValidationError as exc:
+        abort(400, description=str(exc))
     except LeaveFormTemplateError:
         current_app.logger.exception(
-            "The canonical Employee Leave Form could not be generated for absence %s.",
+            "The canonical Personal/Vacation Request Form could not be generated for absence %s.",
             absence_id,
         )
-        abort(503, description="The canonical Employee Leave Form is unavailable. Verify the server template and try again.")
+        abort(503, description="The canonical Personal/Vacation Request Form is unavailable. Verify the server template and try again.")
     return send_file(form["path"], mimetype="application/pdf", as_attachment=False,
                      download_name=form["filename"], conditional=True)
+
+
+@bp.post("/<path:department_name>/absences/monthly-leave-forms")
+@login_required
+def monthly_leave_forms(department_name: str):
+    user_id = session.get("user_id")
+    if not user_id or not can_operate_department(user_id, department_name):
+        abort(403)
+    try:
+        result = generate_monthly_employee_leave_forms(
+            department_name=department_name,
+            month_value=(request.form.get("month") or "").strip(),
+        )
+    except StaffStatusValidationError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("staff_status.absences", department_name=department_name))
+    except LeaveFormTemplateError:
+        current_app.logger.exception(
+            "Monthly Employee Leave Forms could not be generated for %s.", department_name
+        )
+        abort(503, description="The canonical monthly Employee Leave Form is unavailable. Verify the server template and try again.")
+    if result["employee_count"] == 0:
+        flash("No Sick, Personal, or Vacation absences were found for the selected month.", "warning")
+        return redirect(url_for("staff_status.absences", department_name=department_name))
+    return send_file(
+        result["path"], mimetype="application/zip", as_attachment=True,
+        download_name=result["filename"], conditional=True,
+    )
 
 
 @bp.route("/absence-requests/<int:request_id>", methods=["GET", "POST"])

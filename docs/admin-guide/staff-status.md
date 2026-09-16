@@ -12,13 +12,22 @@ Every changed balance creates a `manual_balance_set` ledger transaction containi
 
 Deleting an active absence reverses a prior tracked deduction once and appends an `absence_reversal`; the original ledger entry remains. Repeated approval, delivery, PDF generation, and reversal calls use persisted state and unique ledger constraints to prevent duplicate deductions, forms, emails, or reversals. Denied requests do none of these approved-only actions.
 
-The canonical district Employee Leave Form must be deployed at `static/forms/employee_leave_form.pdf`. Launchpad does not recreate or redesign the form: it preserves the original PDF as the background and overlays only the employee number, employee name, total approved days, and date/date range on the applicable printed district classification line. Employee and supervisor signature/date lines remain blank.
+Two canonical district templates must be deployed:
 
-Generated employee-specific PDFs are stored outside public static assets under `instance/staff_status/generated_leave_forms/` and are available only through the authenticated, department-authorized download route. Replacing the canonical template may require recalibrating the named coordinates in `apps/staff_status/leave_form_pdf.py`. Existing historical generated forms are not automatically regenerated.
+- `static/forms/vacation_personal_request_form.pdf` is used only for approved individual Personal and Vacation requests. Launchpad overlays the school year, employee details available from Identity, requested dates, persisted balance-before, days-used, balance-after values, and a Vacation/Personal selection mark. Sick and Other absences do not generate an individual PDF. Signature and approval areas remain blank.
+- `static/forms/employee_leave_form.pdf` is used only by **Monthly Leave Forms** on the Absences page. An authorized department operator chooses a month and downloads a ZIP containing one Employee Leave Form per employee with Sick, Personal, or Vacation absences. The monthly report groups dates on the existing 110, 115, and 120 lines and does not alter balances, ledger entries, absences, request status, or email state.
 
-After every server update, verify that `static/forms/employee_leave_form.pdf` exists and is readable by the Launchpad process. If the template is absent or invalid, Launchpad logs a clear generation error and does not create a substitute form or send a recreated PDF.
+Launchpad does not recreate either form. Each original PDF remains the visual background and receives a transparent dynamic-value overlay.
 
-Approved-result email uses the configured Staff Status notification sender and existing SMTP integration. It attaches the PDF and includes leave used, balance before, remaining balance, and any negative-balance warning. If delivery fails, the persisted error state allows the normal sync/retry path to retry without repeating accounting work.
+Generated Personal/Vacation request PDFs are stored privately under `instance/staff_status/generated_leave_forms/`. Monthly PDFs and ZIPs are stored privately under `instance/staff_status/monthly_leave_forms/` and are served only by the authorized generation route. Replacing either template may require recalibrating `apps/staff_status/vacation_personal_form_pdf.py` or `apps/staff_status/leave_form_pdf.py`. Existing historical generated forms are not automatically regenerated.
+
+After every server update, verify that both PDFs exist and are readable by the Launchpad process. If a required template is absent or invalid, Launchpad logs a clear operational error and never creates a substitute form.
+
+Approved-result email uses the configured Staff Status notification sender and existing SMTP integration. It includes leave used, balance before, remaining balance, and any negative-balance warning. Personal and Vacation emails attach their generated request form; Sick and Other approval emails have no individual form attachment. If delivery fails, the persisted error state allows the normal sync/retry path to retry without repeating accounting work.
+
+Google absence synchronization polling is configured in seconds at **Settings > Staff Status > Absence Form**. The default and recommended interval is 60 seconds; the minimum is 30 seconds. Existing `interval_minutes` values migrate once to `interval_seconds` by multiplying by 60, so a prior five-minute interval becomes 300 seconds. The scheduler remains coalesced and limited to one running sync instance.
+
+The Absences page groups **Add Absence**, **Reports**, **Monthly Leave Forms**, and the labeled gear **Settings** action on the right. Settings continues to open the existing Leave Balances modal.
 
 ## Core concepts
 
