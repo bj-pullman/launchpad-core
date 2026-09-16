@@ -1,6 +1,9 @@
 import calendar
+import logging
+import math
 import json, zoneinfo, secrets, csv, io
 import sqlite3
+from pathlib import Path
 from urllib.parse import quote
 from collections import Counter
 from datetime import date, datetime, time, timezone, timedelta
@@ -19,6 +22,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.pdfgen import canvas
+
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_PUBLIC_ABSENCE_LABEL = "Out of Office"
 DEFAULT_ABSENCE_APPROVAL_MANAGER_EMAIL = "bjpullman@sheridanschools.org"
@@ -26,6 +32,15 @@ ABSENCE_FORM_SETTING_PREFIX = "staff_status.absence_form"
 ABSENCE_NOTIFICATION_SETTING_PREFIX = "staff_status.notifications"
 VALID_PENDING_ABSENCE_STATUSES = {"pending", "approved", "rejected"}
 ABSENCE_TYPES = ["sick", "vacation", "personal", "other"]
+TRACKED_LEAVE_TYPES = ("sick", "personal", "vacation")
+LEAVE_TYPE_DEFINITIONS = {
+    "sick": {"label": "Sick Leave", "code": "110", "tracked": True},
+    "personal": {"label": "Personal Leave", "code": "115", "tracked": True},
+    "vacation": {"label": "Vacation", "code": "120", "tracked": True},
+    "other": {"label": "Other", "code": "", "tracked": False},
+}
+LEAVE_FORM_DIR = Path(__file__).resolve().parents[2] / "instance" / "staff_status" / "generated_leave_forms"
+LEAVE_FORM_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "employee_leave_form.pdf"
 ABSENCE_TABLE_SORT_KEYS = {
     "user",
     "type",
@@ -985,6 +1000,7 @@ def _insert_absence(
     created_by_user_id: int,
     created_by_display_name: str,
     now: str,
+    activation_key: str | None = None,
 ) -> int:
     cursor = conn.execute(
         """
@@ -1005,9 +1021,10 @@ def _insert_absence(
             updated_by_user_id,
             updated_by_display_name,
             updated_at,
-            is_active
+            is_active,
+            activation_key
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 1, ?)
         """,
         (
             user_id,
@@ -1023,6 +1040,7 @@ def _insert_absence(
             created_by_user_id,
             created_by_display_name,
             now,
+            activation_key,
         ),
     )
 
@@ -1073,6 +1091,395 @@ def get_absence_by_id(absence_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def _normalize_leave_balance(value, label: str = "Leave balance") -> float:
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        raise StaffStatusValidationError(f"{label} must be a number of days.")
+    if not math.isfinite(normalized) or not (-10000 <= normalized <= 10000):
+        raise StaffStatusValidationError(f"{label} must be between -10,000 and 10,000 days.")
+    return round(normalized, 4)
+
+
+def get_employee_leave_profile(user_id: int) -> dict:
+    user = get_user_by_id(int(user_id))
+    if not user:
+        raise StaffStatusValidationError("Staff member not found.")
+    with get_connection() as conn:
+        profile_row = conn.execute(
+            "SELECT * FROM staff_status_employee_leave_profiles WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        balance_rows = conn.execute(
+            "SELECT leave_type, current_balance_days FROM staff_status_employee_leave_balances WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+    balances = {leave_type: 0.0 for leave_type in TRACKED_LEAVE_TYPES}
+    balances.update({row["leave_type"]: float(row["current_balance_days"]) for row in balance_rows})
+    profile = dict(profile_row) if profile_row else {}
+    return {
+        "user_id": int(user_id),
+        "employee_number": profile.get("employee_number") or "",
+        "department_name": user.get("department") or profile.get("department_name") or "",
+        "balances": balances,
+    }
+
+
+def list_employee_leave_profiles_for_department(department_name: str) -> list[dict]:
+    result = []
+    for user in list_active_users_for_department(department_name):
+        profile = get_employee_leave_profile(user["id"])
+        result.append({
+            "user_id": user["id"],
+            "display_name": user["resolved_display_name"],
+            "email": user.get("email") or "",
+            "employee_number": profile["employee_number"],
+            "balances": profile["balances"],
+        })
+    return result
+
+
+def save_employee_leave_profile(
+    *, user_id: int, department_name: str, employee_number: str | None,
+    balances: dict, actor_user_id: int | None, actor_display_name: str | None,
+) -> dict:
+    user = get_active_user_for_department(user_id, department_name)
+    if not user:
+        raise StaffStatusValidationError("Selected staff member does not belong to this department.")
+    employee_number = normalize_text(employee_number)
+    if employee_number and len(employee_number) > 80:
+        raise StaffStatusValidationError("Employee number cannot exceed 80 characters.")
+    normalized_balances = {
+        leave_type: _normalize_leave_balance(balances.get(leave_type, 0), LEAVE_TYPE_DEFINITIONS[leave_type]["label"])
+        for leave_type in TRACKED_LEAVE_TYPES
+    }
+    now = utc_now_iso()
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """
+            INSERT INTO staff_status_employee_leave_profiles
+                (user_id, employee_number, department_name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                employee_number = excluded.employee_number,
+                department_name = excluded.department_name,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, employee_number, department_name, now, now),
+        )
+        for leave_type, new_balance in normalized_balances.items():
+            existing = conn.execute(
+                "SELECT current_balance_days FROM staff_status_employee_leave_balances WHERE user_id = ? AND leave_type = ?",
+                (user_id, leave_type),
+            ).fetchone()
+            old_balance = float(existing["current_balance_days"]) if existing else 0.0
+            conn.execute(
+                """
+                INSERT INTO staff_status_employee_leave_balances
+                    (user_id, leave_type, current_balance_days, updated_at, updated_by_user_id)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, leave_type) DO UPDATE SET
+                    current_balance_days = excluded.current_balance_days,
+                    updated_at = excluded.updated_at,
+                    updated_by_user_id = excluded.updated_by_user_id
+                """,
+                (user_id, leave_type, new_balance, now, actor_user_id),
+            )
+            if existing is None or old_balance != new_balance:
+                conn.execute(
+                    """
+                    INSERT INTO staff_status_leave_ledger
+                        (user_id, leave_type, transaction_type, amount_days, balance_before,
+                         balance_after, note, actor_user_id, actor_display_name, source, created_at)
+                    VALUES (?, ?, 'manual_balance_set', ?, ?, ?, ?, ?, ?, 'leave_balances_modal', ?)
+                    """,
+                    (user_id, leave_type, new_balance - old_balance, old_balance, new_balance,
+                     "Balance set by administrator", actor_user_id, normalize_text(actor_display_name), now),
+                )
+        conn.commit()
+    return get_employee_leave_profile(user_id)
+
+
+def list_leave_ledger_for_user(user_id: int) -> list[dict]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM staff_status_leave_ledger WHERE user_id = ? ORDER BY created_at DESC, id DESC",
+            (user_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _apply_leave_deduction(conn, *, absence_id: int, pending_request_id: int | None,
+                           user_id: int, absence_type: str, days_value: float,
+                           actor_user_id: int | None, actor_display_name: str,
+                           source: str, now: str) -> dict:
+    definition = LEAVE_TYPE_DEFINITIONS.get(absence_type, {"tracked": False, "label": absence_type.title(), "code": ""})
+    if not definition.get("tracked"):
+        return {"leave_type": absence_type, "days": float(days_value), "before": None, "after": None, "warning": None}
+    row = conn.execute(
+        "SELECT current_balance_days FROM staff_status_employee_leave_balances WHERE user_id = ? AND leave_type = ?",
+        (user_id, absence_type),
+    ).fetchone()
+    before = float(row["current_balance_days"]) if row else 0.0
+    used = round(float(days_value), 4)
+    after = round(before - used, 4)
+    if row:
+        conn.execute(
+            "UPDATE staff_status_employee_leave_balances SET current_balance_days = ?, updated_at = ?, updated_by_user_id = ? WHERE user_id = ? AND leave_type = ?",
+            (after, now, actor_user_id, user_id, absence_type),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO staff_status_employee_leave_balances (user_id, leave_type, current_balance_days, updated_at, updated_by_user_id) VALUES (?, ?, ?, ?, ?)",
+            (user_id, absence_type, after, now, actor_user_id),
+        )
+    warning = f"{definition['label']} balance is negative ({after:g} days)." if after < 0 else None
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO staff_status_leave_ledger
+            (user_id, leave_type, transaction_type, amount_days, balance_before, balance_after,
+             related_absence_id, related_pending_request_id, note, actor_user_id,
+             actor_display_name, source, created_at)
+        VALUES (?, ?, 'absence_deduction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (user_id, absence_type, -used, before, after, absence_id, pending_request_id,
+         warning or "Approved absence leave deduction", actor_user_id,
+         normalize_text(actor_display_name), source, now),
+    )
+    return {"leave_type": absence_type, "days": used, "before": before, "after": after, "warning": warning}
+
+
+def _create_approved_absence_record(
+    conn, *, normalized: dict, note: str | None, actor_user_id: int | None,
+    actor_display_name: str, pending_request_id: int | None, source: str, now: str,
+    activation_key: str | None = None,
+) -> int:
+    absence_id = _insert_absence(
+        conn, user_id=normalized["user_id"], department_name=normalized["department_name"],
+        absence_type=normalized["absence_type"], start_date=normalized["start_date"],
+        end_date=normalized["end_date"], duration_mode=normalized["duration_mode"],
+        days_value=normalized["days_value"], start_time=normalized["start_time"], note=note,
+        created_by_user_id=actor_user_id or 0, created_by_display_name=actor_display_name, now=now,
+        activation_key=activation_key,
+    )
+    profile = conn.execute(
+        "SELECT employee_number FROM staff_status_employee_leave_profiles WHERE user_id = ?",
+        (normalized["user_id"],),
+    ).fetchone()
+    employee_number = profile["employee_number"] if profile else None
+    leave = _apply_leave_deduction(
+        conn, absence_id=absence_id, pending_request_id=pending_request_id,
+        user_id=normalized["user_id"], absence_type=normalized["absence_type"],
+        days_value=normalized["days_value"], actor_user_id=actor_user_id,
+        actor_display_name=actor_display_name, source=source, now=now,
+    )
+    conn.execute(
+        """
+        UPDATE staff_status_absences SET leave_type = ?, leave_days_used = ?,
+            leave_balance_before = ?, leave_balance_after = ?, leave_balance_warning = ?,
+            leave_deducted_at = ?, employee_number_snapshot = ? WHERE id = ?
+        """,
+        (leave["leave_type"], leave["days"], leave["before"], leave["after"],
+         leave["warning"], now if leave["before"] is not None else None, employee_number, absence_id),
+    )
+    if pending_request_id:
+        conn.execute(
+            """
+            UPDATE staff_status_pending_absence_requests SET leave_type = ?, leave_days_used = ?,
+                leave_balance_before = ?, leave_balance_after = ?, leave_balance_warning = ?,
+                employee_number_snapshot = ?, updated_at = ? WHERE id = ?
+            """,
+            (leave["leave_type"], leave["days"], leave["before"], leave["after"],
+             leave["warning"], employee_number, now, pending_request_id),
+        )
+    return absence_id
+
+
+def _format_leave_days(value) -> str:
+    number = float(value or 0)
+    label = f"{number:g}"
+    return f"{label} day" if number == 1 else f"{label} days"
+
+
+def _leave_form_date_label(start_value: str, end_value: str) -> str:
+    start, end = parse_iso_date(start_value), parse_iso_date(end_value)
+    if not start:
+        return ""
+    if not end or end == start:
+        return format_friendly_date(start, include_weekday=False)
+    if start.year == end.year and start.month == end.month:
+        return f"{start.strftime('%B')} {start.day}-{end.day}, {start.year}"
+    return f"{format_friendly_date(start, include_weekday=False)} - {format_friendly_date(end, include_weekday=False)}"
+
+
+def generate_employee_leave_form(absence_id: int, *, force: bool = False) -> dict:
+    absence = get_absence_by_id(absence_id)
+    if not absence:
+        raise StaffStatusValidationError("Absence not found.")
+    existing_path = Path(absence["leave_form_path"]) if absence.get("leave_form_path") else None
+    safe_existing_path = None
+    if existing_path:
+        try:
+            resolved_dir = LEAVE_FORM_DIR.resolve()
+            resolved_path = existing_path.resolve()
+            if resolved_path.is_relative_to(resolved_dir):
+                safe_existing_path = resolved_path
+        except (OSError, ValueError):
+            safe_existing_path = None
+    if not force and safe_existing_path and safe_existing_path.is_file():
+        return {"path": safe_existing_path, "filename": absence["leave_form_filename"], "generated_at": absence["leave_form_generated_at"]}
+    user = get_user_by_id(absence["user_id"]) or {}
+    employee_name = build_display_name(user) if user else f"User {absence['user_id']}"
+    definition = LEAVE_TYPE_DEFINITIONS.get(absence.get("leave_type") or absence["absence_type"], {"code": "", "label": str(absence["absence_type"]).title()})
+    LEAVE_FORM_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"employee-leave-form-{absence_id}.pdf"
+    path = LEAVE_FORM_DIR / filename
+    pdf = canvas.Canvas(str(path), pagesize=letter, pageCompression=0)
+    width, height = letter
+    pdf.setTitle("Employee Leave Form")
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawCentredString(width / 2, height - 54, "EMPLOYEE LEAVE FORM")
+    pdf.setFont("Helvetica", 10)
+    pdf.drawCentredString(width / 2, height - 72, "Sheridan School District")
+    y = height - 112
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(54, y, "EMPLOYEE NUMBER")
+    pdf.drawString(310, y, "EMPLOYEE NAME")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(54, y - 20, absence.get("employee_number_snapshot") or "")
+    pdf.drawString(310, y - 20, employee_name)
+    pdf.line(54, y - 25, 260, y - 25)
+    pdf.line(310, y - 25, width - 54, y - 25)
+    y -= 64
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(54, y, "TOTAL DAYS ABSENT")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(180, y, f"{float(absence.get('leave_days_used') or absence.get('days_value') or 0):g}")
+    y -= 48
+    classifications = [
+        ("110", "SICK LEAVE", "sick"), ("115", "PERSONAL LEAVE", "personal"),
+        ("120", "VACATION", "vacation"), ("125", "SCHOOL BUSINESS", "school_business"),
+        ("130", "PROFESSIONAL DEVELOPMENT", "professional_development"),
+        ("135", "LEAVE WITHOUT PAY", "leave_without_pay"), ("140", "JURY DUTY", "jury_duty"),
+        ("145", "MATERNITY LEAVE", "maternity"), ("150", "SICK LEAVE BANK", "sick_bank"),
+        ("155", "FAMILY LEAVE BANK", "family_bank"), ("160", "SHARED LEAVE", "shared_leave"),
+        ("165", "MILITARY", "military"), ("", "OTHER", "other"),
+    ]
+    selected = absence.get("leave_type") or absence.get("absence_type")
+    date_label = _leave_form_date_label(absence["start_date"], absence["end_date"])
+    pdf.setFont("Helvetica", 10)
+    for code, label, key in classifications:
+        prefix = f"{code} " if code else ""
+        value = date_label if key == selected else ""
+        pdf.drawString(64, y, f"{prefix}{label}: {value}")
+        pdf.line(54, y - 7, width - 54, y - 7)
+        y -= 27
+    y -= 18
+    for label, x in (("Employee Signature", 54), ("Employee Date", 330)):
+        pdf.line(x, y, x + 190, y)
+        pdf.setFont("Helvetica", 9); pdf.drawString(x, y - 14, label)
+    y -= 64
+    for label, x in (("Principal/Supervisor Signature", 54), ("Supervisor Date", 330)):
+        pdf.line(x, y, x + 190, y)
+        pdf.setFont("Helvetica", 9); pdf.drawString(x, y - 14, label)
+    pdf.save()
+    generated_at = utc_now_iso()
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE staff_status_absences SET leave_form_filename = ?, leave_form_path = ?, leave_form_generated_at = ? WHERE id = ?",
+            (filename, str(path), generated_at, absence_id),
+        )
+        pending = conn.execute(
+            "SELECT related_pending_request_id FROM staff_status_leave_ledger WHERE related_absence_id = ? AND transaction_type = 'absence_deduction'",
+            (absence_id,),
+        ).fetchone()
+        if pending and pending["related_pending_request_id"]:
+            conn.execute(
+                "UPDATE staff_status_pending_absence_requests SET leave_form_filename = ?, leave_form_generated_at = ?, updated_at = ? WHERE id = ?",
+                (filename, generated_at, generated_at, pending["related_pending_request_id"]),
+            )
+        conn.commit()
+    return {"path": path, "filename": filename, "generated_at": generated_at}
+
+
+def send_approved_absence_email_once(absence_id: int, *, pending_request_id: int | None = None) -> bool:
+    attempted_at = utc_now_iso()
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM staff_status_absences WHERE id = ?", (absence_id,)).fetchone()
+        if not row or row["leave_result_email_sent_at"]:
+            conn.rollback(); return False
+        previous = None
+        if row["leave_result_email_attempted_at"]:
+            try: previous = datetime.fromisoformat(row["leave_result_email_attempted_at"].replace("Z", "+00:00"))
+            except ValueError: previous = None
+        if row["leave_result_email_status"] == "sending" and previous and previous > datetime.now(timezone.utc) - timedelta(minutes=15):
+            conn.rollback(); return False
+        conn.execute(
+            "UPDATE staff_status_absences SET leave_result_email_status = 'sending', leave_result_email_attempted_at = ?, leave_result_email_error = NULL WHERE id = ?",
+            (attempted_at, absence_id),
+        )
+        conn.commit()
+    absence = get_absence_by_id(absence_id)
+    user = get_user_by_id(absence["user_id"]) or {}
+    recipient = (user.get("email") or "").strip()
+    settings = get_absence_form_integration_settings()
+    sender = (settings.get("notification_sender_email") or "").strip()
+    form = generate_employee_leave_form(absence_id)
+    leave_type = LEAVE_TYPE_DEFINITIONS.get(absence.get("leave_type"), {"label": str(absence.get("absence_type") or "Leave").title()})["label"]
+    date_label = format_friendly_date_range(absence["start_date"], absence["end_date"])
+    used_label = _format_leave_days(absence.get("leave_days_used") or absence.get("days_value"))
+    balance_lines = ""
+    balance_html = ""
+    if absence.get("leave_balance_before") is not None:
+        balance_lines = f"\n{leave_type} Used: {used_label}\nRemaining {leave_type} Balance: {_format_leave_days(absence['leave_balance_after'])}"
+        balance_html = f"<p><strong>{escape(leave_type)} Used:</strong> {escape(used_label)}<br><strong>Balance Before:</strong> {escape(_format_leave_days(absence['leave_balance_before']))}<br><strong>Remaining {escape(leave_type)} Balance:</strong> {escape(_format_leave_days(absence['leave_balance_after']))}</p>"
+    warning_html = f"<p style='padding:12px;background:#fff7ed;color:#9a3412;border-radius:8px;'><strong>Balance warning:</strong> {escape(absence['leave_balance_warning'])}</p>" if absence.get("leave_balance_warning") else ""
+    text_body = f"Your absence request for {date_label} has been approved.\n\n{leave_type}: {used_label}{balance_lines}\n\nYour completed Employee Leave Form is attached. Please print the form, sign it, and return it for supervisor signature."
+    html_body = _email_shell(
+        eyebrow="Approved", title="Your Absence Is Approved",
+        intro_html=f"Your absence for <strong>{escape(date_label)}</strong> has been approved.",
+        body_html=f"{_email_summary_html(absence)}{balance_html}{warning_html}<p>Your completed Employee Leave Form is attached. Please print the form, sign it, and return it for supervisor signature.</p>",
+        footer_html="The signature fields were intentionally left blank.",
+    )
+    try:
+        send_mail(sender_email=sender, recipient_email=recipient,
+                  subject=f"Absence Approved - {date_label}", text_body=text_body,
+                  html_body=html_body, attachments=[{"path": form["path"], "filename": form["filename"], "mime_type": "application/pdf"}])
+    except Exception as exc:
+        with get_connection() as conn:
+            conn.execute("UPDATE staff_status_absences SET leave_result_email_status = 'error', leave_result_email_error = ? WHERE id = ?", (str(exc)[:500], absence_id))
+            if pending_request_id:
+                conn.execute("UPDATE staff_status_pending_absence_requests SET result_notification_status = 'error', result_notification_error = ?, result_notification_attempted_at = ?, updated_at = ? WHERE id = ?", (str(exc)[:500], attempted_at, utc_now_iso(), pending_request_id))
+            conn.commit()
+        raise
+    sent_at = utc_now_iso()
+    with get_connection() as conn:
+        conn.execute("UPDATE staff_status_absences SET leave_result_email_status = 'sent', leave_result_email_sent_at = ?, leave_result_email_error = NULL WHERE id = ?", (sent_at, absence_id))
+        if pending_request_id:
+            conn.execute("UPDATE staff_status_pending_absence_requests SET result_notification_status = 'sent', result_notification_attempted_at = ?, result_notification_sent_at = ?, result_notification_error = NULL, updated_at = ? WHERE id = ?", (attempted_at, sent_at, sent_at, pending_request_id))
+        conn.commit()
+    return True
+
+
+def _complete_approved_absence_artifacts(
+    absence_id: int, pending_request_id: int | None = None, *, deliver_email: bool = True
+) -> None:
+    try:
+        form = generate_employee_leave_form(absence_id)
+        if pending_request_id:
+            with get_connection() as conn:
+                conn.execute(
+                    "UPDATE staff_status_pending_absence_requests SET leave_form_filename = ?, leave_form_generated_at = ?, updated_at = ? WHERE id = ?",
+                    (form["filename"], form["generated_at"], utc_now_iso(), pending_request_id),
+                )
+                conn.commit()
+        if deliver_email:
+            send_approved_absence_email_once(absence_id, pending_request_id=pending_request_id)
+    except Exception as exc:
+        LOGGER.warning("Approved absence %s was saved; delivery remains retryable: %s", absence_id, exc)
+
+
 def create_absence(
     *,
     user_id: int,
@@ -1086,6 +1493,7 @@ def create_absence(
     created_by_user_id: int,
     created_by_display_name: str,
     start_time: str | None = None,
+    idempotency_key: str | None = None,
 ):
     now = utc_now_iso()
     normalized = validate_absence_payload(
@@ -1105,23 +1513,34 @@ def create_absence(
     ):
         raise StaffStatusValidationError("Selected staff member does not belong to this department.")
 
+    normalized_key = normalize_text(idempotency_key)
+    if normalized_key and len(normalized_key) > 200:
+        raise StaffStatusValidationError("The absence submission id is invalid.")
+    if normalized_key:
+        with get_connection() as conn:
+            existing = conn.execute(
+                "SELECT id FROM staff_status_absences WHERE activation_key = ?", (normalized_key,)
+            ).fetchone()
+        if existing:
+            return get_absence_by_id(existing["id"])
+
     with get_connection() as conn:
-        absence_id = _insert_absence(
-            conn,
-            user_id=normalized["user_id"],
-            department_name=normalized["department_name"],
-            absence_type=normalized["absence_type"],
-            start_date=normalized["start_date"],
-            end_date=normalized["end_date"],
-            duration_mode=normalized["duration_mode"],
-            days_value=normalized["days_value"],
-            start_time=normalized["start_time"],
-            note=note,
-            created_by_user_id=created_by_user_id,
-            created_by_display_name=created_by_display_name,
-            now=now,
+        conn.execute("BEGIN IMMEDIATE")
+        if normalized_key:
+            existing = conn.execute(
+                "SELECT id FROM staff_status_absences WHERE activation_key = ?", (normalized_key,)
+            ).fetchone()
+            if existing:
+                conn.rollback()
+                return get_absence_by_id(existing["id"])
+        absence_id = _create_approved_absence_record(
+            conn, normalized=normalized, note=note, actor_user_id=created_by_user_id,
+            actor_display_name=created_by_display_name, pending_request_id=None,
+            source="manual_absence", now=now,
+            activation_key=normalized_key,
         )
         conn.commit()
+    _complete_approved_absence_artifacts(absence_id)
     return get_absence_by_id(absence_id)
         
 def update_absence(
@@ -1212,6 +1631,48 @@ def delete_absence(
     now = utc_now_iso()
 
     with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        absence = conn.execute(
+            "SELECT * FROM staff_status_absences WHERE id = ?", (absence_id,)
+        ).fetchone()
+        if not absence or int(absence["is_active"] or 0) != 1:
+            conn.rollback()
+            return False
+        deduction = conn.execute(
+            "SELECT * FROM staff_status_leave_ledger WHERE related_absence_id = ? AND transaction_type = 'absence_deduction'",
+            (absence_id,),
+        ).fetchone()
+        if deduction and not absence["leave_reversed_at"]:
+            balance_row = conn.execute(
+                "SELECT current_balance_days FROM staff_status_employee_leave_balances WHERE user_id = ? AND leave_type = ?",
+                (absence["user_id"], deduction["leave_type"]),
+            ).fetchone()
+            before = float(balance_row["current_balance_days"]) if balance_row else float(deduction["balance_after"])
+            restored = round(before + abs(float(deduction["amount_days"])), 4)
+            conn.execute(
+                """
+                INSERT INTO staff_status_employee_leave_balances
+                    (user_id, leave_type, current_balance_days, updated_at, updated_by_user_id)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, leave_type) DO UPDATE SET
+                    current_balance_days = excluded.current_balance_days,
+                    updated_at = excluded.updated_at,
+                    updated_by_user_id = excluded.updated_by_user_id
+                """,
+                (absence["user_id"], deduction["leave_type"], restored, now, updated_by_user_id),
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO staff_status_leave_ledger
+                    (user_id, leave_type, transaction_type, amount_days, balance_before, balance_after,
+                     related_absence_id, related_pending_request_id, note, actor_user_id,
+                     actor_display_name, source, created_at)
+                VALUES (?, ?, 'absence_reversal', ?, ?, ?, ?, ?, 'Absence deleted/cancelled', ?, ?, 'absence_delete', ?)
+                """,
+                (absence["user_id"], deduction["leave_type"], abs(float(deduction["amount_days"])),
+                 before, restored, absence_id, deduction["related_pending_request_id"],
+                 updated_by_user_id, updated_by_display_name, now),
+            )
         conn.execute(
             """
             UPDATE staff_status_absences
@@ -1219,17 +1680,20 @@ def delete_absence(
                 is_active = 0,
                 updated_by_user_id = ?,
                 updated_by_display_name = ?,
-                updated_at = ?
+                updated_at = ?,
+                leave_reversed_at = CASE WHEN leave_deducted_at IS NOT NULL THEN ? ELSE leave_reversed_at END
             WHERE id = ?
             """,
             (
                 updated_by_user_id,
                 updated_by_display_name,
                 now,
+                now,
                 absence_id,
             ),
         )
         conn.commit()
+    return True
 
 def upsert_department_settings(
     department_name: str,
@@ -2872,20 +3336,17 @@ def approve_pending_absence_request(
             conn.rollback()
             raise StaffStatusValidationError("Staff Status is not available for this department.")
 
-        absence_id = _insert_absence(
-            conn,
-            user_id=request_record["user_id"],
-            department_name=request_record["department_name"],
-            absence_type=request_record["absence_type"],
-            start_date=request_record["start_date"],
-            end_date=request_record["end_date"],
-            duration_mode=request_record["duration_mode"],
-            days_value=request_record["days_value"],
-            start_time=request_record["start_time"],
-            note=request_record.get("note"),
-            created_by_user_id=reviewed_by_user_id or 0,
-            created_by_display_name=reviewed_by_display_name,
-            now=now,
+        normalized = validate_absence_payload(
+            user_id=request_record["user_id"], department_name=request_record["department_name"],
+            absence_type=request_record["absence_type"], start_date=request_record["start_date"],
+            end_date=request_record["end_date"], duration_mode=request_record["duration_mode"],
+            days_value=request_record["days_value"], start_time=request_record["start_time"],
+        )
+        absence_id = _create_approved_absence_record(
+            conn, normalized=normalized, note=request_record.get("note"),
+            actor_user_id=reviewed_by_user_id, actor_display_name=reviewed_by_display_name,
+            pending_request_id=request_id, source=review_source, now=now,
+            activation_key=f"pending-request:{request_id}",
         )
 
         conn.execute(
@@ -2916,6 +3377,9 @@ def approve_pending_absence_request(
         )
         conn.commit()
 
+    # Existing Launchpad/Google decision handlers call the shared idempotent delivery
+    # function immediately after approval; avoid a second SMTP attempt in that request.
+    _complete_approved_absence_artifacts(absence_id, request_id, deliver_email=False)
     return get_pending_absence_request_by_id(request_id)
 
 
@@ -3106,6 +3570,12 @@ def send_pending_absence_request_email(request_record: dict) -> bool:
 
 
 def send_absence_decision_result_email_once(request_record: dict) -> bool:
+    current_request = get_pending_absence_request_by_id(request_record["id"])
+    if (current_request and current_request.get("status") == "approved"
+            and current_request.get("created_absence_id")):
+        return send_approved_absence_email_once(
+            current_request["created_absence_id"], pending_request_id=current_request["id"]
+        )
     attempted_at = utc_now_iso()
     with get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")

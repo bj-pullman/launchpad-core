@@ -751,6 +751,13 @@ function initStaffStatusModals() {
   function closeModal(modal, restoreFocus = true) {
     if (!modal) return;
 
+    const beforeClose = new CustomEvent("staff-status:before-modal-close", {
+      bubbles: false,
+      cancelable: true,
+      detail: { restoreFocus }
+    });
+    if (!modal.dispatchEvent(beforeClose)) return;
+
     modal.hidden = true;
 
     if (activeModal === modal) {

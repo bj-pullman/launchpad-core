@@ -1347,6 +1347,21 @@ MODALS
   width: min(880px, 100%);
 }
 
+.staff-status-leave-modal-card { width: min(960px, 100%); }
+.staff-status-leave-table small { display: block; margin-top: 3px; color: var(--ss-muted); font-weight: 400; }
+.staff-status-leave-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.staff-status-leave-summary span { padding: 4px 8px; border-radius: 999px; background: var(--panel2); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.staff-status-leave-edit { font-size: 20px; line-height: 1; }
+.staff-status-leave-edit-form { display: grid; gap: 20px; }
+.staff-status-leave-edit-form[hidden] { display: none !important; }
+.staff-status-leave-edit-form fieldset { margin: 0; padding: 18px; border: 1px solid var(--ss-border); border-radius: 12px; }
+.staff-status-leave-edit-form legend { padding: 0 6px; font-weight: 800; }
+.staff-status-leave-edit-heading { display: flex; align-items: flex-start; gap: 16px; }
+.staff-status-leave-edit-heading h3, .staff-status-leave-edit-heading p { margin: 0 0 4px; }
+.staff-status-confirm-layer { z-index: 10001; }
+.staff-status-confirm-layer .modal-card { width: min(440px, 100%); }
+.staff-status-confirm-layer .form-actions { justify-content: flex-end; }
+
 .staff-status-modal-actions {
   flex-wrap: wrap;
   gap: 10px;
@@ -1717,6 +1732,12 @@ RESPONSIVE
   .staff-status-url-btn {
     width: 100%;
   }
+
+  .staff-status-leave-table thead { display: none; }
+  .staff-status-leave-table table, .staff-status-leave-table tbody, .staff-status-leave-table tr, .staff-status-leave-table td { display: block; width: 100%; }
+  .staff-status-leave-table tr { padding: 14px 0; border-bottom: 1px solid var(--ss-border); }
+  .staff-status-leave-table td { padding: 5px 0; border: 0; }
+  .staff-status-leave-edit-form .form-grid-equal { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {

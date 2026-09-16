@@ -2,6 +2,20 @@
 
 Staff Status provides department-based staff location and absence visibility.
 
+## Leave balances and Employee Leave Forms
+
+The Absences page includes a department-scoped **Leave Balances** modal. It lists active employees in the selected department with their employee number and Sick, Personal, and Vacation balances. Department operators and Staff Status administrators can edit these values; view-only users can see the list without edit controls. Balances are days and may contain decimals such as `8.5`, `1.25`, or `0.5`.
+
+Initial balances are entered by an administrator. Launchpad does not infer or back-calculate them from historical absences. Sick, Personal, and Vacation are balance-tracked and map to district classifications 110, 115, and 120. Other absence classifications can still produce forms without requiring a numeric balance.
+
+Every changed balance creates a `manual_balance_set` ledger transaction containing the old and new values and the available actor metadata. When either a public request is approved or a manager manually adds an absence, the same approved-absence service creates the absence, uses the existing Staff Status day value, deducts tracked leave, records an `absence_deduction`, snapshots the before/after balances, generates the Employee Leave Form, and sends it to the employee. A negative balance is allowed so a legitimate absence is not blocked, but the negative result and warning are persisted and displayed.
+
+Deleting an active absence reverses a prior tracked deduction once and appends an `absence_reversal`; the original ledger entry remains. Repeated approval, delivery, PDF generation, and reversal calls use persisted state and unique ledger constraints to prevent duplicate deductions, forms, emails, or reversals. Denied requests do none of these approved-only actions.
+
+Generated PDFs are stored outside public static assets under `instance/staff_status/generated_leave_forms/` and are available only through the authenticated, department-authorized download route. The generated form leaves employee and supervisor signature/date lines blank. See `apps/staff_status/assets/README.md` for the reserved district source-template path and replacement procedure. The current implementation recreates the form server-side because the source PDF binary was not included with the approved request.
+
+Approved-result email uses the configured Staff Status notification sender and existing SMTP integration. It attaches the PDF and includes leave used, balance before, remaining balance, and any negative-balance warning. If delivery fails, the persisted error state allows the normal sync/retry path to retry without repeating accounting work.
+
 ## Core concepts
 
 - Departments are usually derived from active users.

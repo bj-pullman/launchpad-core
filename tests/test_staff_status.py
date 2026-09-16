@@ -51,10 +51,12 @@ class StaffStatusServiceTests(unittest.TestCase):
             "settings_db_path": settings_db.SETTINGS_DB_PATH,
             "rbac_data_dir": rbac_db.DATA_DIR,
             "rbac_db_path": rbac_db.RBAC_DB_PATH,
+            "leave_form_dir": staff_status_service.LEAVE_FORM_DIR,
         }
 
         staff_status_db.DATA_DIR = self.tmp_path
         staff_status_db.DB_PATH = self.tmp_path / "staff_status.db"
+        staff_status_service.LEAVE_FORM_DIR = self.tmp_path / "generated_leave_forms"
         identity_db.DATA_DIR = self.tmp_path
         identity_db.IDENTITY_DB_PATH = self.tmp_path / "identity.db"
         settings_db.DATA_DIR = self.tmp_path
@@ -106,6 +108,7 @@ class StaffStatusServiceTests(unittest.TestCase):
         settings_db.SETTINGS_DB_PATH = self.original_paths["settings_db_path"]
         rbac_db.DATA_DIR = self.original_paths["rbac_data_dir"]
         rbac_db.RBAC_DB_PATH = self.original_paths["rbac_db_path"]
+        staff_status_service.LEAVE_FORM_DIR = self.original_paths["leave_form_dir"]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ResourceWarning)
             gc.collect()
@@ -475,6 +478,7 @@ class StaffStatusServiceTests(unittest.TestCase):
             self.assertTrue(staff_status_service.send_absence_decision_result_email_once(approved))
             self.assertFalse(staff_status_service.send_absence_decision_result_email_once(approved))
         send_mail.assert_called_once()
+        self.assertEqual(send_mail.call_args.kwargs["attachments"][0]["mime_type"], "application/pdf")
         saved = staff_status_service.get_pending_absence_request_by_id(approved["id"])
         self.assertEqual(saved["result_notification_status"], "sent")
         self.assertTrue(saved["result_notification_sent_at"])
@@ -841,6 +845,139 @@ class StaffStatusServiceTests(unittest.TestCase):
         for template_path in template_paths:
             with self.subTest(template=template_path.name):
                 environment.parse(template_path.read_text(encoding="utf-8"))
+
+    def test_leave_profile_decimal_balances_and_manual_audit(self):
+        profile = staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="E-1007",
+            balances={"sick": "10", "personal": "8.5", "vacation": "1.25"},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        self.assertEqual(profile["employee_number"], "E-1007")
+        self.assertEqual(profile["balances"], {"sick": 10.0, "personal": 8.5, "vacation": 1.25})
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="E-1007",
+            balances={"sick": "9.5", "personal": "8.5", "vacation": "1.25"},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
+        sick = next(row for row in ledger if row["leave_type"] == "sick")
+        self.assertEqual(sick["balance_before"], 10.0)
+        self.assertEqual(sick["balance_after"], 9.5)
+        self.assertEqual(sick["transaction_type"], "manual_balance_set")
+        for invalid in ("not-a-number", "nan"):
+            with self.subTest(invalid=invalid), self.assertRaises(staff_status_service.StaffStatusValidationError):
+                staff_status_service.save_employee_leave_profile(
+                    user_id=self.tech_user["id"], department_name="Technology", employee_number="E-1007",
+                    balances={"sick": invalid, "personal": 8.5, "vacation": 1.25},
+                    actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+                )
+
+    def test_manual_absence_uses_shared_leave_pipeline_pdf_email_and_reversal(self):
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="EMP-42",
+            balances={"sick": 2, "personal": 0, "vacation": 0},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        staff_status_service.update_absence_form_integration_settings(
+            approval_manager_email="manager@example.test", notification_sender_email="sender@example.test")
+        with patch.object(staff_status_service, "send_mail") as send_mail:
+            absence = staff_status_service.create_absence(
+                user_id=self.tech_user["id"], department_name="Technology", absence_type="sick",
+                start_date="2026-09-27", end_date="2026-09-27", duration_mode="full_day",
+                days_value=99, note="", created_by_user_id=self.admin_user["id"],
+                created_by_display_name="Manager User",
+                idempotency_key="manual-test-absence",
+            )
+            duplicate = staff_status_service.create_absence(
+                user_id=self.tech_user["id"], department_name="Technology", absence_type="sick",
+                start_date="2026-09-27", end_date="2026-09-27", duration_mode="full_day",
+                days_value=1, note="", created_by_user_id=self.admin_user["id"],
+                created_by_display_name="Manager User", idempotency_key="manual-test-absence",
+            )
+            self.assertEqual(duplicate["id"], absence["id"])
+            self.assertFalse(staff_status_service.send_approved_absence_email_once(absence["id"]))
+        send_mail.assert_called_once()
+        attachment = send_mail.call_args.kwargs["attachments"][0]
+        pdf_bytes = Path(attachment["path"]).read_bytes()
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn(b"EMP-42", pdf_bytes)
+        self.assertIn(b"Tech User", pdf_bytes)
+        self.assertIn(b"110 SICK LEAVE", pdf_bytes)
+        saved = staff_status_service.get_absence_by_id(absence["id"])
+        self.assertEqual(saved["leave_days_used"], 1.0)
+        self.assertEqual(saved["leave_balance_before"], 2.0)
+        self.assertEqual(saved["leave_balance_after"], 1.0)
+        ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
+        self.assertEqual(sum(row["transaction_type"] == "absence_deduction" for row in ledger), 1)
+        self.assertTrue(staff_status_service.delete_absence(
+            absence_id=absence["id"], updated_by_user_id=self.admin_user["id"],
+            updated_by_display_name="Manager User"))
+        self.assertFalse(staff_status_service.delete_absence(
+            absence_id=absence["id"], updated_by_user_id=self.admin_user["id"],
+            updated_by_display_name="Manager User"))
+        profile = staff_status_service.get_employee_leave_profile(self.tech_user["id"])
+        self.assertEqual(profile["balances"]["sick"], 2.0)
+        ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
+        self.assertEqual(sum(row["transaction_type"] == "absence_reversal" for row in ledger), 1)
+
+    def test_approved_request_negative_balance_is_snapshotted_and_idempotent(self):
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="EMP-9",
+            balances={"sick": .5, "personal": 0, "vacation": 0},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        request_record, _ = staff_status_service.create_pending_absence_request_from_public_submission(payload={
+            "submission_uuid": "negative-balance-request", "staff_email": "tech@example.test",
+            "absence_type": "sick", "duration_mode": "full_day", "start_date": "2026-09-28"})
+        with patch.object(staff_status_service, "send_mail"):
+            approved = staff_status_service.approve_pending_absence_request(
+                request_id=request_record["id"], reviewed_by_user_id=self.admin_user["id"],
+                reviewed_by_display_name="Manager User")
+        self.assertEqual(approved["leave_balance_before"], .5)
+        self.assertEqual(approved["leave_balance_after"], -.5)
+        self.assertIn("negative", approved["leave_balance_warning"].lower())
+        ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
+        self.assertEqual(sum(row["transaction_type"] == "absence_deduction" for row in ledger), 1)
+
+    def test_denied_request_has_no_leave_side_effects(self):
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="EMP-10",
+            balances={"sick": 3, "personal": 2, "vacation": 1},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        request_record, _ = staff_status_service.create_pending_absence_request_from_public_submission(payload={
+            "submission_uuid": "denied-leave-request", "staff_email": "tech@example.test",
+            "absence_type": "sick", "duration_mode": "full_day", "start_date": "2026-09-29"})
+        denied = staff_status_service.reject_pending_absence_request(
+            request_id=request_record["id"], reviewed_by_user_id=self.admin_user["id"],
+            reviewed_by_display_name="Manager User")
+        self.assertEqual(denied["status"], "rejected")
+        self.assertIsNone(denied["created_absence_id"])
+        self.assertIsNone(denied["leave_form_generated_at"])
+        profile = staff_status_service.get_employee_leave_profile(self.tech_user["id"])
+        self.assertEqual(profile["balances"]["sick"], 3.0)
+        ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
+        self.assertFalse(any(row["transaction_type"] == "absence_deduction" for row in ledger))
+
+    def test_leave_balance_route_enforces_department_operator_permission(self):
+        app = self.make_route_app()
+        with app.test_client() as client:
+            with client.session_transaction() as session:
+                session["is_authenticated"] = True
+                session["user_id"] = self.tech_user["id"]
+                session["user_permissions"] = ["staff_status.view"]
+            denied = client.post("/staff-status/Technology/absences", data={
+                "action": "save_leave_profile", "user_id": self.tech_user["id"],
+                "employee_number": "NO", "balance_sick": "1", "balance_personal": "1", "balance_vacation": "1"})
+        self.assertEqual(denied.status_code, 403)
+
+    def test_leave_balances_modal_uses_custom_unsaved_change_confirmation(self):
+        template = (PROJECT_ROOT / "apps" / "staff_status" / "templates" / "staff_status" / "absences.html").read_text(encoding="utf-8")
+        self.assertIn("Leave Balances", template)
+        self.assertIn("You have unsaved changes. Discard them?", template)
+        self.assertIn("Keep Editing", template)
+        self.assertIn("Discard Changes", template)
+        self.assertNotIn("confirm(", template)
 
 
 if __name__ == "__main__":

@@ -128,6 +128,40 @@ def init_staff_status_db():
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS staff_status_employee_leave_profiles (
+                user_id INTEGER PRIMARY KEY,
+                employee_number TEXT NULL,
+                department_name TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS staff_status_employee_leave_balances (
+                user_id INTEGER NOT NULL,
+                leave_type TEXT NOT NULL,
+                current_balance_days REAL NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                updated_by_user_id INTEGER NULL,
+                PRIMARY KEY (user_id, leave_type)
+            );
+
+            CREATE TABLE IF NOT EXISTS staff_status_leave_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                leave_type TEXT NOT NULL,
+                transaction_type TEXT NOT NULL,
+                amount_days REAL NOT NULL,
+                balance_before REAL NOT NULL,
+                balance_after REAL NOT NULL,
+                related_absence_id INTEGER NULL,
+                related_pending_request_id INTEGER NULL,
+                note TEXT NULL,
+                actor_user_id INTEGER NULL,
+                actor_display_name TEXT NULL,
+                source TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             
             CREATE TABLE IF NOT EXISTS staff_status_department_access (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,6 +192,13 @@ def init_staff_status_db():
 
             CREATE INDEX IF NOT EXISTS idx_staff_status_pending_absence_requests_user
             ON staff_status_pending_absence_requests(user_id, department_name, submitted_at);
+
+            CREATE INDEX IF NOT EXISTS idx_staff_status_leave_ledger_user
+            ON staff_status_leave_ledger(user_id, created_at);
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_status_leave_ledger_absence_event
+            ON staff_status_leave_ledger(related_absence_id, leave_type, transaction_type)
+            WHERE related_absence_id IS NOT NULL;
             """
         )
         
@@ -197,6 +238,39 @@ def init_staff_status_db():
         if "start_time" not in absence_columns:
             conn.execute("ALTER TABLE staff_status_absences ADD COLUMN start_time TEXT NULL")
 
+        absence_additions = {
+            "activation_key": "TEXT NULL",
+            "leave_type": "TEXT NULL",
+            "leave_days_used": "REAL NULL",
+            "leave_balance_before": "REAL NULL",
+            "leave_balance_after": "REAL NULL",
+            "leave_balance_warning": "TEXT NULL",
+            "leave_deducted_at": "TEXT NULL",
+            "leave_reversed_at": "TEXT NULL",
+            "leave_form_filename": "TEXT NULL",
+            "leave_form_path": "TEXT NULL",
+            "leave_form_generated_at": "TEXT NULL",
+            "leave_result_email_status": "TEXT NULL",
+            "leave_result_email_attempted_at": "TEXT NULL",
+            "leave_result_email_sent_at": "TEXT NULL",
+            "leave_result_email_error": "TEXT NULL",
+            "employee_number_snapshot": "TEXT NULL",
+        }
+        for column_name, column_definition in absence_additions.items():
+            if column_name not in absence_columns:
+                conn.execute(
+                    "ALTER TABLE staff_status_absences "
+                    f"ADD COLUMN {column_name} {column_definition}"
+                )
+
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_status_absences_activation_key
+            ON staff_status_absences(activation_key)
+            WHERE activation_key IS NOT NULL
+            """
+        )
+
         pending_request_columns = {
             row["name"]
             for row in conn.execute(
@@ -212,6 +286,14 @@ def init_staff_status_db():
             "result_notification_attempted_at": "TEXT NULL",
             "result_notification_sent_at": "TEXT NULL",
             "result_notification_error": "TEXT NULL",
+            "leave_type": "TEXT NULL",
+            "leave_days_used": "REAL NULL",
+            "leave_balance_before": "REAL NULL",
+            "leave_balance_after": "REAL NULL",
+            "leave_balance_warning": "TEXT NULL",
+            "leave_form_filename": "TEXT NULL",
+            "leave_form_generated_at": "TEXT NULL",
+            "employee_number_snapshot": "TEXT NULL",
         }
         for column_name, column_definition in pending_request_additions.items():
             if column_name not in pending_request_columns:

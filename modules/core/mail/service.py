@@ -27,6 +27,7 @@ def send_mail(
     text_body: str,
     html_body: str | None = None,
     inline_images: list[dict] | None = None,
+    attachments: list[dict] | None = None,
 ):
     settings = _mail_settings()
 
@@ -85,6 +86,19 @@ def send_mail(
                     filename=filename or Path(path).name,
                     disposition="inline",
                 )
+
+    for attachment in attachments or []:
+        filename = attachment.get("filename")
+        content = attachment.get("content")
+        path = attachment.get("path")
+        if content is None and path:
+            content = Path(path).read_bytes()
+            filename = filename or Path(path).name
+        if content is None or not filename:
+            continue
+        mime_type = attachment.get("mime_type") or mimetypes.guess_type(filename)[0]
+        maintype, subtype = (mime_type or "application/octet-stream").split("/", 1)
+        message.add_attachment(content, maintype=maintype, subtype=subtype, filename=filename)
 
     with smtplib.SMTP(settings["smtp_host"], settings["smtp_port"], timeout=20) as server:
         if settings["smtp_use_tls"]:

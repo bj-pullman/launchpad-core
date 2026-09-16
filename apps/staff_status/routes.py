@@ -1,7 +1,8 @@
 from datetime import date, timedelta
 from urllib.parse import urlencode
+import secrets
 
-from flask import abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for, Response
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for, Response, send_file
 import time, queue
 from modules.core.settings.settings_service import get_setting
 
@@ -57,6 +58,10 @@ from .service import (
     send_absence_decision_result_email_once,
     StaffStatusValidationError,
     PendingAbsenceRequestStateError,
+    get_absence_by_id,
+    generate_employee_leave_form,
+    list_employee_leave_profiles_for_department,
+    save_employee_leave_profile,
 )
 from modules.core.auth.decorators import login_required, require_permission
 from modules.core.identity.user_service import get_user_by_id
@@ -393,6 +398,25 @@ def locations(department_name: str):
 
         action = (request.form.get("action") or "").strip()
 
+        if action == "save_leave_profile":
+            try:
+                save_employee_leave_profile(
+                    user_id=request.form.get("user_id", type=int),
+                    department_name=department_name,
+                    employee_number=request.form.get("employee_number"),
+                    balances={
+                        "sick": request.form.get("balance_sick"),
+                        "personal": request.form.get("balance_personal"),
+                        "vacation": request.form.get("balance_vacation"),
+                    },
+                    actor_user_id=actor["id"],
+                    actor_display_name=_actor_display_name(actor),
+                )
+                flash("Leave details updated", "success")
+            except StaffStatusValidationError as exc:
+                flash(str(exc), "error")
+            return redirect(url_for("staff_status.absences", department_name=department_name, leave_balances="open"))
+
         if action == "create":
             create_location(
                 department_name=department_name,
@@ -714,7 +738,7 @@ def absences(department_name: str):
         duration_mode, days_value, end_date = resolve_absence_duration(request.form)
 
         try:
-            create_absence(
+            created_absence = create_absence(
                 user_id=request.form.get("user_id", type=int),
                 department_name=department_name,
                 absence_type=(request.form.get("absence_type") or "").strip().lower(),
@@ -726,7 +750,12 @@ def absences(department_name: str):
                 note=(request.form.get("note") or "").strip(),
                 created_by_user_id=actor["id"],
                 created_by_display_name=actor.get("display_name") or actor.get("email") or f"User {actor['id']}",
+                idempotency_key=(request.form.get("idempotency_key") or "").strip() or None,
             )
+            if created_absence.get("leave_balance_warning"):
+                flash(created_absence["leave_balance_warning"], "warning")
+            if created_absence.get("leave_result_email_status") == "error":
+                flash("The absence was saved and the leave form was generated, but the employee email could not be sent.", "warning")
         except StaffStatusValidationError as exc:
             flash(str(exc), "error")
             return redirect(url_for("staff_status.absences", department_name=department_name))
@@ -899,7 +928,25 @@ def absences(department_name: str):
             department_name, None if request_status == "all" else request_status),
         current_request_status=request_status,
         request_status_urls=request_status_urls,
+        leave_profiles=list_employee_leave_profiles_for_department(department_name),
+        open_leave_balances=request.args.get("leave_balances") == "open",
+        manual_absence_idempotency_key=secrets.token_urlsafe(24),
     )
+
+
+@bp.route("/absences/<int:absence_id>/leave-form", methods=["GET", "POST"])
+@login_required
+def absence_leave_form(absence_id: int):
+    user_id = session.get("user_id")
+    absence = get_absence_by_id(absence_id)
+    if not user_id or not absence or not can_access_department(user_id, absence["department_name"]):
+        abort(403 if absence else 404)
+    force = request.method == "POST"
+    if force and not can_operate_department(user_id, absence["department_name"]):
+        abort(403)
+    form = generate_employee_leave_form(absence_id, force=force)
+    return send_file(form["path"], mimetype="application/pdf", as_attachment=False,
+                     download_name=form["filename"], conditional=True)
 
 
 @bp.route("/absence-requests/<int:request_id>", methods=["GET", "POST"])
@@ -936,6 +983,8 @@ def review_absence_request(request_id: int):
                 )
                 publish_department_update(request_record["department_name"])
                 flash("Absence request approved.", "success")
+                if request_record.get("leave_balance_warning"):
+                    flash(request_record["leave_balance_warning"], "warning")
             elif action == "reject":
                 request_record = reject_pending_absence_request(
                     request_id=request_id,
