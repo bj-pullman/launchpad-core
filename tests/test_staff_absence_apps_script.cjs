@@ -4,6 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'staff-absence-public-form', 'Code.gs'), 'utf8');
+const reviewHtml = fs.readFileSync(path.join(__dirname, '..', 'staff-absence-public-form', 'Review.html'), 'utf8');
 const UUID = '164a70c6-73d5-4e61-a312-cb9019f7f451';
 const headers = [
   'submission_uuid','submitted_at','staff_email','absence_type','duration_mode','start_date','end_date',
@@ -155,4 +156,13 @@ assert.equal(rows.length, beforeSubmitCount + 1, 'anonymous intake still appends
 assert.equal(rows[1][workflowColumn], 'pending');
 assert.equal(context.submitReviewDecision.length, 3, 'decision API accepts no reviewer identity argument');
 assert.doesNotMatch(source, /input\.reviewer|reviewer_email.*input|input.*reviewer_email/);
+assert.doesNotMatch(reviewHtml, /\b(confirm|alert|prompt)\s*\(/, 'native browser dialogs are not used');
+assert.match(reviewHtml, /id="decision-modal"/);
+assert.match(reviewHtml, /data-decision="approved"/);
+assert.match(reviewHtml, /data-decision="denied"/);
+assert.match(reviewHtml, /openDecisionModal\(button\.dataset\.decision\)/);
+assert.match(reviewHtml, /modal-confirm'\)\.addEventListener\('click',submitConfirmedDecision\)/);
+assert.match(reviewHtml, /if\(decisionSubmitting \|\| !pendingDecision\) return;/);
+assert.match(reviewHtml, /decisionSubmitting=false;[\s\S]*decision-error/);
+assert.match(reviewHtml, /const requestId = <\?!= JSON\.stringify\(requestId\) \?>;/);
 console.log('Staff absence unified Apps Script tests passed.');

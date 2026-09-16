@@ -36,9 +36,23 @@
     button:disabled { opacity:.65; cursor:wait; }
     .loading,.result { padding:44px 20px; text-align:center; }
     .message { padding:13px; border:1px solid #efb1ac; border-radius:10px; background:#fff1f0; color:#8f1d16; font-weight:700; }
+    .decision-feedback { margin-top:14px; }
+    .decision-progress { color:var(--muted); font-weight:800; text-align:center; }
     .meta { font-size:.8rem; color:var(--muted); overflow-wrap:anywhere; }
+    .modal-backdrop { position:fixed; inset:0; z-index:50; display:grid; place-items:end center; padding:14px; background:rgba(10,23,42,.62); backdrop-filter:blur(3px); }
+    .modal-card { width:min(100%,480px); padding:24px 20px calc(20px + env(safe-area-inset-bottom)); border-radius:20px; background:#fff; box-shadow:0 24px 70px rgba(10,23,42,.34); }
+    .modal-card h2 { margin:0 0 18px; font-size:1.45rem; }
+    .modal-summary { padding:16px; border:1px solid var(--line); border-radius:13px; background:#f8fafc; }
+    .modal-summary strong,.modal-summary span { display:block; }
+    .modal-summary strong { margin-bottom:7px; font-size:1.1rem; }
+    .modal-summary span { margin-top:4px; color:var(--muted); }
+    .modal-copy { margin:17px 0; color:var(--muted); }
+    .modal-actions { display:grid; gap:10px; }
+    .modal-cancel { border:1px solid #cbd5e1; background:#fff; color:var(--ink); }
+    .modal-confirm.approved { background:var(--green); }
+    .modal-confirm.denied { background:var(--red); }
     [hidden] { display:none!important; }
-    @media(min-width:560px) { main{padding-top:36px} header,.hero,.section,.actions,.meta{padding-left:30px;padding-right:30px} .buttons{grid-template-columns:1fr 1fr} .deny{order:-1} }
+    @media(min-width:560px) { main{padding-top:36px} header,.hero,.section,.actions,.meta{padding-left:30px;padding-right:30px} .buttons,.modal-actions{grid-template-columns:1fr 1fr} .deny{order:-1} .modal-backdrop{place-items:center} .modal-card{padding:28px} }
   </style>
 </head>
 <body>
@@ -50,22 +64,35 @@
     <section class="hero"><div class="hero-head"><div><h1 id="staff-name"></h1><p id="department"></p><p id="staff-email" class="muted"></p></div><span id="status" class="badge"></span></div></section>
     <section class="section summary"><div class="eyebrow">Request Summary</div><h2 id="absence-type"></h2><strong id="dates"></strong><p id="duration" class="muted"></p></section>
     <section class="section"><div class="eyebrow">Staff Note</div><p id="staff-note" class="note"></p></section>
-    <section id="decision" class="actions"><label for="decision-note">Decision Note <span class="muted">(optional)</span></label><textarea id="decision-note" maxlength="1000" placeholder="Add context for the staff member"></textarea><div class="buttons"><button class="deny" data-decision="denied">Deny Request</button><button class="approve" data-decision="approved">Approve Request</button></div></section>
+    <section id="decision" class="actions"><label for="decision-note">Decision Note <span class="muted">(optional)</span></label><textarea id="decision-note" maxlength="1000" placeholder="Add context for the staff member"></textarea><div id="decision-error" class="message decision-feedback" role="alert" hidden></div><div id="decision-progress" class="decision-progress decision-feedback" role="status" hidden></div><div class="buttons"><button class="deny" data-decision="denied">Deny Request</button><button class="approve" data-decision="approved">Approve Request</button></div></section>
     <section id="final" class="result" hidden><h2 id="final-title"></h2><p id="final-copy"></p><p class="muted">Launchpad will synchronize this decision shortly.</p></section>
     <footer class="meta">Signed in as <span id="reviewer"></span><br>Submission ID: <?= requestId ?></footer>
   </div>
 </section></main>
+<div id="decision-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="decision-modal-title" hidden>
+  <div class="modal-card">
+    <h2 id="decision-modal-title">Confirm decision</h2>
+    <div class="modal-summary"><strong id="modal-staff-name"></strong><span id="modal-absence-type"></span><span id="modal-date"></span></div>
+    <p class="modal-copy">This decision will be sent to Launchpad.</p>
+    <div class="modal-actions"><button id="modal-cancel" type="button" class="modal-cancel">Cancel</button><button id="modal-confirm" type="button" class="modal-confirm">Confirm</button></div>
+  </div>
+</div>
 <script>
-  const requestId = <?= JSON.stringify(requestId) ?>;
+  const requestId = <?!= JSON.stringify(requestId) ?>;
   const loading = document.getElementById('loading');
   const content = document.getElementById('content');
   const errorBox = document.getElementById('error');
+  let currentRequest = null;
+  let pendingDecision = null;
+  let decisionSubmitting = false;
   function element(id) { return document.getElementById(id); }
   function showError(error) {
     loading.hidden=true; content.hidden=true; errorBox.hidden=false;
     errorBox.querySelector('.message').textContent=error&&error.message?error.message:'The request could not be loaded.';
   }
   function render(request) {
+    currentRequest=request;
+    decisionSubmitting=false;
     loading.hidden=true; errorBox.hidden=true; content.hidden=false;
     element('staff-name').textContent=request.staffName;
     element('department').textContent=request.department;
@@ -77,19 +104,61 @@
     element('duration').textContent=request.duration+(request.days?' · '+request.days+' days':'')+' · '+request.startTime;
     element('staff-note').textContent=request.note;
     element('reviewer').textContent=request.reviewer;
+    element('decision-error').hidden=true;
+    element('decision-progress').hidden=true;
+    setDecisionButtonsDisabled(false);
     if(request.status!=='pending') {
       element('decision').hidden=true; element('final').hidden=false;
       element('final-title').textContent=request.status==='approved'?'Approved':'Denied';
       element('final-copy').textContent=request.staffName+"'s absence request has been "+request.status+'.';
     }
   }
-  function decide(value) {
-    if(!confirm((value==='approved'?'Approve':'Deny')+' this request? This decision is final.')) return;
-    document.querySelectorAll('button').forEach(function(button){button.disabled=true;});
-    google.script.run.withSuccessHandler(render).withFailureHandler(showError)
-      .submitReviewDecision(requestId,value,element('decision-note').value);
+  function setDecisionButtonsDisabled(disabled) {
+    document.querySelectorAll('[data-decision]').forEach(function(button){button.disabled=disabled;});
+    element('modal-confirm').disabled=disabled;
   }
-  document.querySelectorAll('[data-decision]').forEach(function(button){button.addEventListener('click',function(){decide(button.dataset.decision);});});
+  function openDecisionModal(value) {
+    if(decisionSubmitting || !currentRequest || currentRequest.status!=='pending') return;
+    pendingDecision=value;
+    const approving=value==='approved';
+    element('decision-modal-title').textContent=approving?'Approve this request?':'Deny this request?';
+    element('modal-staff-name').textContent=currentRequest.staffName;
+    element('modal-absence-type').textContent=currentRequest.absenceType;
+    element('modal-date').textContent=currentRequest.endDate?currentRequest.startDate+' – '+currentRequest.endDate:currentRequest.startDate;
+    const confirmButton=element('modal-confirm');
+    confirmButton.textContent=approving?'Approve Request':'Deny Request';
+    confirmButton.className='modal-confirm '+value;
+    element('decision-modal').hidden=false;
+    element('modal-cancel').focus();
+  }
+  function closeDecisionModal() {
+    if(decisionSubmitting) return;
+    pendingDecision=null;
+    element('decision-modal').hidden=true;
+  }
+  function submitConfirmedDecision() {
+    if(decisionSubmitting || !pendingDecision) return;
+    decisionSubmitting=true;
+    const decision=pendingDecision;
+    element('decision-modal').hidden=true;
+    element('decision-error').hidden=true;
+    element('decision-progress').textContent=decision==='approved'?'Approving request…':'Denying request…';
+    element('decision-progress').hidden=false;
+    setDecisionButtonsDisabled(true);
+    google.script.run.withSuccessHandler(render).withFailureHandler(function(error){
+      decisionSubmitting=false;
+      pendingDecision=null;
+      element('decision-progress').hidden=true;
+      setDecisionButtonsDisabled(false);
+      element('decision-error').textContent=error&&error.message?error.message:'The decision could not be submitted. Please try again.';
+      element('decision-error').hidden=false;
+    }).submitReviewDecision(requestId,decision,element('decision-note').value);
+  }
+  document.querySelectorAll('[data-decision]').forEach(function(button){button.addEventListener('click',function(){openDecisionModal(button.dataset.decision);});});
+  element('modal-cancel').addEventListener('click',closeDecisionModal);
+  element('modal-confirm').addEventListener('click',submitConfirmedDecision);
+  element('decision-modal').addEventListener('click',function(event){if(event.target===element('decision-modal'))closeDecisionModal();});
+  document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!element('decision-modal').hidden)closeDecisionModal();});
   google.script.run.withSuccessHandler(render).withFailureHandler(showError).getReviewRequest(requestId);
 </script>
 </body></html>

@@ -663,9 +663,9 @@ def absences(department_name: str):
     can_operate = can_operate_department(user_id, department_name)
     users = list_active_users_for_department(department_name)
     absence_types = ["sick", "vacation", "personal", "other"]
-    request_status = (request.args.get("request_status") or "all").strip().lower()
+    request_status = (request.args.get("request_status") or "pending").strip().lower()
     if request_status not in {"all", "pending", "approved", "denied"}:
-        request_status = "all"
+        request_status = "pending"
 
     if request.method == "POST":
         if not can_operate:
@@ -748,11 +748,16 @@ def absences(department_name: str):
     table_date_range_options = _build_absence_date_range_options(include_all=True)
     report_date_range_options = _build_absence_date_range_options(include_all=False)
     valid_table_date_range_keys = {option["key"] for option in table_date_range_options}
-    current_table_date_range_key = (
-        request.args.get("table_date_range") or ABSENCE_TABLE_DEFAULT_DATE_RANGE_KEY
-    ).strip().lower()
+    raw_table_date_range_key = (request.args.get("table_date_range") or "").strip().lower()
+    current_table_date_range_key = raw_table_date_range_key or ABSENCE_TABLE_DEFAULT_DATE_RANGE_KEY
     if current_table_date_range_key not in valid_table_date_range_keys:
         current_table_date_range_key = ABSENCE_TABLE_DEFAULT_DATE_RANGE_KEY
+
+    past_absence_filters_applied = bool(
+        table_absence_type_filter
+        or current_table_user_ids
+        or (raw_table_date_range_key and raw_table_date_range_key in valid_table_date_range_keys)
+    )
 
     current_table_custom_start_date = (request.args.get("table_start_date") or "").strip()
     current_table_custom_end_date = (request.args.get("table_end_date") or "").strip()
@@ -773,6 +778,7 @@ def absences(department_name: str):
             )
     except StaffStatusValidationError as exc:
         flash(str(exc), "error")
+        past_absence_filters_applied = False
         table_range = {
             "key": "all",
             "label": "All Dates",
@@ -795,16 +801,18 @@ def absences(department_name: str):
         sort_direction=current_table_sort_direction,
     )
 
-    past_absences = list_absences_for_department(
-        department_name=department_name,
-        timing="past",
-        absence_types=current_table_absence_types,
-        user_ids=current_table_user_ids,
-        start_date=current_start_date,
-        end_date=current_end_date,
-        sort_key=current_table_sort_key,
-        sort_direction=current_table_sort_direction,
-    )
+    past_absences = []
+    if past_absence_filters_applied:
+        past_absences = list_absences_for_department(
+            department_name=department_name,
+            timing="past",
+            absence_types=current_table_absence_types,
+            user_ids=current_table_user_ids,
+            start_date=current_start_date,
+            end_date=current_end_date,
+            sort_key=current_table_sort_key,
+            sort_direction=current_table_sort_direction,
+        )
 
     table_filter_params = _build_absence_table_filter_params(
         date_range_key=table_range["key"],
@@ -813,6 +821,9 @@ def absences(department_name: str):
         absence_type_filter=table_absence_type_filter,
         user_ids=current_table_user_ids,
     )
+    if raw_table_date_range_key == "all" and past_absence_filters_applied:
+        table_filter_params["table_date_range"] = "all"
+    table_filter_params["request_status"] = request_status
     table_sort_urls = {
         "upcoming": _build_absence_table_sort_urls(
             department_name=department_name,
@@ -831,10 +842,19 @@ def absences(department_name: str):
             default_sort_direction="desc",
         ),
     }
-    clear_table_params = {}
+    clear_table_params = {"request_status": request_status}
     if current_table_sort_key:
         clear_table_params["table_sort"] = current_table_sort_key
         clear_table_params["table_direction"] = current_table_sort_direction
+
+    request_status_urls = {}
+    for status_value in ("all", "pending", "approved", "denied"):
+        status_params = dict(table_filter_params)
+        if current_table_sort_key:
+            status_params["table_sort"] = current_table_sort_key
+            status_params["table_direction"] = current_table_sort_direction
+        status_params["request_status"] = status_value
+        request_status_urls[status_value] = _build_absence_table_url(department_name, status_params)
 
     report_range = resolve_absence_report_date_range(range_key="this_month")
 
@@ -846,6 +866,7 @@ def absences(department_name: str):
         duration_options=ABSENCE_DURATION_OPTIONS,
         upcoming_absences=upcoming_absences,
         past_absences=past_absences,
+        past_absence_filters_applied=past_absence_filters_applied,
         active_tab="absences",
         current_table_absence_types=current_table_absence_types,
         current_table_user_ids=current_table_user_ids,
@@ -877,6 +898,7 @@ def absences(department_name: str):
         absence_requests=list_absence_requests_for_department(
             department_name, None if request_status == "all" else request_status),
         current_request_status=request_status,
+        request_status_urls=request_status_urls,
     )
 
 

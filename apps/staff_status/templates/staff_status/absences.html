@@ -21,7 +21,7 @@
   </th>
 {% endmacro %}
 
-{% macro absence_table(title, rows, default_sort_key, default_sort_direction, current_sort_key, current_sort_direction, sort_urls, subtitle="", active_table_filters=[], clear_table_filters_url="", show_table_filters=false) %}
+{% macro absence_table(title, rows, default_sort_key, default_sort_direction, current_sort_key, current_sort_direction, sort_urls, subtitle="", active_table_filters=[], clear_table_filters_url="", show_table_filters=false, criteria_applied=true) %}
   <div class="content-card" style="margin-bottom: 16px;">
     <div class="staff-status-table-header-row">
       <div>
@@ -57,7 +57,13 @@
       </div>
     {% endif %}
 
-    {% if rows %}
+    {% if show_table_filters and not criteria_applied %}
+      <div class="empty-state staff-status-filter-prompt">
+        <h3>Choose what to view</h3>
+        <p class="muted">Choose a time range or filter to view past absences.</p>
+        <button type="button" class="btn btn-secondary" data-modal-open="absence-filter-modal">Choose Filters</button>
+      </div>
+    {% elif rows %}
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -182,7 +188,7 @@
       </div>
     {% else %}
       <div class="empty-state">
-        <h3>No {{ title|lower }} found</h3>
+        <h3>{% if show_table_filters %}No absences found{% else %}No {{ title|lower }} found{% endif %}</h3>
         {% if show_table_filters %}
           <p class="muted">Adjust your filters or add a new absence.</p>
         {% else %}
@@ -222,7 +228,7 @@
   {% endif %}
 
   {{ absence_table("Upcoming Absences", upcoming_absences, "start", "asc", current_table_sort_key, current_table_sort_direction, table_sort_urls.upcoming, "Scheduled future absences") }}
-  {{ absence_table("Past Absences", past_absences, "end", "desc", current_table_sort_key, current_table_sort_direction, table_sort_urls.past, table_period_summary, active_table_filters, clear_table_filters_url, true) }}
+  {{ absence_table("Past Absences", past_absences, "end", "desc", current_table_sort_key, current_table_sort_direction, table_sort_urls.past, table_period_summary, active_table_filters, clear_table_filters_url, true, past_absence_filters_applied) }}
 
   <section class="content-card staff-status-requests-card" aria-labelledby="absence-requests-title">
     <div class="staff-status-table-header-row">
@@ -230,7 +236,7 @@
     </div>
     <nav class="staff-status-request-filters" aria-label="Absence request status">
       {% for value, label in [('all','All'),('pending','Pending'),('approved','Approved'),('denied','Denied')] %}
-        <a href="{{ url_for('staff_status.absences', department_name=department_name, request_status=value) }}"
+        <a href="{{ request_status_urls[value] }}"
           class="{% if current_request_status == value %}is-active{% endif %}" {% if current_request_status == value %}aria-current="page"{% endif %}>{{ label }}</a>
       {% endfor %}
     </nav>
@@ -346,6 +352,7 @@
 
     <form method="get" action="{{ url_for('staff_status.absences', department_name=department_name) }}"
       class="staff-status-table-filters staff-status-modal-form" id="absence-table-filter-form">
+      <input type="hidden" name="request_status" value="{{ current_request_status }}">
       {% if current_table_sort_key %}
         <input type="hidden" name="table_sort" value="{{ current_table_sort_key }}">
         <input type="hidden" name="table_direction" value="{{ current_table_sort_direction }}">

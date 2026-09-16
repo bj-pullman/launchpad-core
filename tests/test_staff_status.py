@@ -596,6 +596,82 @@ class StaffStatusServiceTests(unittest.TestCase):
         self.assertEqual([row["absence_type"] for row in rows], ["sick", "sick"])
         self.assertEqual([row["user_display_name"] for row in rows], ["Manager User", "Tech User"])
 
+    def test_absence_dashboard_defaults_requests_to_pending_and_skips_past_query(self):
+        captured = {}
+
+        def fake_render_template(template_name, **kwargs):
+            captured.update(kwargs)
+            return "ok"
+
+        app = self.make_route_app()
+        with app.test_client() as client:
+            with client.session_transaction() as session:
+                session["is_authenticated"] = True
+                session["user_id"] = self.admin_user["id"]
+                session["user_permissions"] = ["staff_status.view", "staff_status.operator", "staff_status.admin"]
+            with (
+                patch.object(staff_status_routes, "render_template", side_effect=fake_render_template),
+                patch.object(staff_status_routes, "list_absences_for_department", return_value=[]) as list_absences,
+                patch.object(staff_status_routes, "list_absence_requests_for_department", return_value=[]) as list_requests,
+            ):
+                response = client.get("/staff-status/Technology/absences")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(captured["current_request_status"], "pending")
+        self.assertFalse(captured["past_absence_filters_applied"])
+        self.assertEqual(captured["past_absences"], [])
+        list_requests.assert_called_once_with("Technology", "pending")
+        self.assertEqual([call.kwargs["timing"] for call in list_absences.call_args_list], ["upcoming"])
+
+    def test_absence_request_status_filters_remain_available(self):
+        app = self.make_route_app()
+        expected_service_status = {"all": None, "pending": "pending", "approved": "approved", "denied": "denied"}
+        with app.test_client() as client:
+            with client.session_transaction() as session:
+                session["is_authenticated"] = True
+                session["user_id"] = self.admin_user["id"]
+                session["user_permissions"] = ["staff_status.view", "staff_status.operator", "staff_status.admin"]
+            for requested_status, service_status in expected_service_status.items():
+                captured = {}
+                with (
+                    patch.object(staff_status_routes, "render_template", side_effect=lambda _name, **kwargs: captured.update(kwargs) or "ok"),
+                    patch.object(staff_status_routes, "list_absences_for_department", return_value=[]),
+                    patch.object(staff_status_routes, "list_absence_requests_for_department", return_value=[]) as list_requests,
+                ):
+                    response = client.get(
+                        "/staff-status/Technology/absences",
+                        query_string={"request_status": requested_status},
+                    )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(captured["current_request_status"], requested_status)
+                list_requests.assert_called_once_with("Technology", service_status)
+
+    def test_past_absence_query_runs_after_explicit_range_and_supports_no_results(self):
+        captured = {}
+
+        def fake_list_absences_for_department(**kwargs):
+            return []
+
+        app = self.make_route_app()
+        with app.test_client() as client:
+            with client.session_transaction() as session:
+                session["is_authenticated"] = True
+                session["user_id"] = self.admin_user["id"]
+                session["user_permissions"] = ["staff_status.view", "staff_status.operator", "staff_status.admin"]
+            with (
+                patch.object(staff_status_routes, "render_template", side_effect=lambda _name, **kwargs: captured.update(kwargs) or "ok"),
+                patch.object(staff_status_routes, "list_absences_for_department", side_effect=fake_list_absences_for_department) as list_absences,
+            ):
+                response = client.get(
+                    "/staff-status/Technology/absences",
+                    query_string={"table_date_range": "this_month"},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(captured["past_absence_filters_applied"])
+        self.assertEqual(captured["past_absences"], [])
+        self.assertEqual([call.kwargs["timing"] for call in list_absences.call_args_list], ["upcoming", "past"])
+
     def test_absence_dashboard_uses_table_params_independent_of_report_params(self):
         staff_status_service.create_absence(
             user_id=self.tech_user["id"],
