@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from flask import Flask
 from jinja2 import Environment
+from pypdf import PdfReader
 
 warnings.simplefilter("ignore", ResourceWarning)
 
@@ -28,6 +29,7 @@ for package_name, package_path in {
 
 from apps.staff_status import db as staff_status_db
 from apps.staff_status import google_absence_sync
+from apps.staff_status import leave_form_pdf
 from apps.staff_status import routes as staff_status_routes
 from apps.staff_status import service as staff_status_service
 from apps.staff_status.blueprint import bp as staff_status_bp
@@ -52,6 +54,7 @@ class StaffStatusServiceTests(unittest.TestCase):
             "rbac_data_dir": rbac_db.DATA_DIR,
             "rbac_db_path": rbac_db.RBAC_DB_PATH,
             "leave_form_dir": staff_status_service.LEAVE_FORM_DIR,
+            "leave_form_template_path": staff_status_service.LEAVE_FORM_TEMPLATE_PATH,
         }
 
         staff_status_db.DATA_DIR = self.tmp_path
@@ -109,6 +112,7 @@ class StaffStatusServiceTests(unittest.TestCase):
         rbac_db.DATA_DIR = self.original_paths["rbac_data_dir"]
         rbac_db.RBAC_DB_PATH = self.original_paths["rbac_db_path"]
         staff_status_service.LEAVE_FORM_DIR = self.original_paths["leave_form_dir"]
+        staff_status_service.LEAVE_FORM_TEMPLATE_PATH = self.original_paths["leave_form_template_path"]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ResourceWarning)
             gc.collect()
@@ -872,6 +876,117 @@ class StaffStatusServiceTests(unittest.TestCase):
                     actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
                 )
 
+    def test_canonical_leave_form_template_overlay_and_district_mapping(self):
+        template_path = PROJECT_ROOT / "static" / "forms" / "employee_leave_form.pdf"
+        self.assertEqual(staff_status_service.LEAVE_FORM_TEMPLATE_PATH, template_path)
+
+        template = PdfReader(str(template_path))
+        self.assertIsNone(template.get_fields())
+        template_page = template.pages[0]
+        template_text = template_page.extract_text()
+        expected_classifications = {
+            "sick": ("110", "SICK LEAVE"),
+            "personal": ("115", "PERSONAL LEAVE"),
+            "vacation": ("120", "VACATION"),
+            "school_business": ("145", "SCHOOL BUSINESS"),
+            "professional_development": ("146", "PROFESSIONAL DEVELOPMENT"),
+            "leave_without_pay": ("147", "LEAVE WITHOUT PAY"),
+            "jury_duty": ("130", "JURY DUTY"),
+            "maternity_leave": ("980", "MATERNITY LEAVE"),
+            "sick_leave_bank": ("117", "SICK LEAVE BANK"),
+            "family_leave_bank": ("113", "FAMILY LEAVE BANK"),
+            "shared_leave": ("108", "SHARED LEAVE"),
+            "military": ("135", "MILITARY"),
+        }
+        actual_classifications = {
+            key: (item.code, item.label)
+            for key, item in leave_form_pdf.DISTRICT_CLASSIFICATION_POSITIONS.items()
+        }
+        self.assertEqual(actual_classifications, expected_classifications)
+
+        cases = {
+            "sick": "September 17, 2026",
+            "personal": "September 18, 2026",
+            "vacation": "September 19-21, 2026",
+        }
+        for classification, date_label in cases.items():
+            with self.subTest(classification=classification):
+                output_path = self.tmp_path / f"{classification}.pdf"
+                leave_form_pdf.fill_employee_leave_form(
+                    template_path=template_path,
+                    output_path=output_path,
+                    employee_number="EMP-42",
+                    employee_name="Tech User",
+                    total_days_absent="1.5",
+                    classification=classification,
+                    date_label=date_label,
+                )
+                output = PdfReader(str(output_path))
+                output_page = output.pages[0]
+                output_text = output_page.extract_text()
+                self.assertEqual(len(output.pages), len(template.pages))
+                self.assertEqual(output_page.mediabox, template_page.mediabox)
+                self.assertIn("EMPLOYEE LEAVE", output_text)
+                self.assertIn("EMPLOYEE SIGNATURE", output_text)
+                self.assertIn("PRINCIPAL/SUPERVISOR", output_text)
+                self.assertIn("980 MATERNITY LEAVE", " ".join(output_text.split()))
+                self.assertIn("EMP-42", output_text)
+                self.assertIn("Tech User", output_text)
+                self.assertIn("1.5", output_text)
+                self.assertIn(date_label, output_text)
+                self.assertTrue(set(template_text.splitlines()).issubset(set(output_text.splitlines())))
+
+                dynamic_positions = []
+                output_page.extract_text(
+                    visitor_text=lambda text, cm, tm, font, size: dynamic_positions.append(
+                        (text.strip(), round(float(tm[5]), 1))
+                    ) if text.strip() in {"EMP-42", "Tech User", "1.5", date_label} else None
+                )
+                position_map = dict(dynamic_positions)
+                self.assertAlmostEqual(
+                    position_map[date_label],
+                    leave_form_pdf.DISTRICT_CLASSIFICATION_POSITIONS[classification].position.y,
+                    delta=0.5,
+                )
+                self.assertTrue(all(y > 200 for _, y in dynamic_positions))
+
+    def test_missing_canonical_leave_form_template_fails_without_substitute(self):
+        output_path = self.tmp_path / "must-not-exist.pdf"
+        missing_path = self.tmp_path / "missing-employee-leave-form.pdf"
+        with self.assertRaises(leave_form_pdf.LeaveFormTemplateError) as error:
+            leave_form_pdf.fill_employee_leave_form(
+                template_path=missing_path,
+                output_path=output_path,
+                employee_number="EMP-42",
+                employee_name="Tech User",
+                total_days_absent="1",
+                classification="sick",
+                date_label="September 17, 2026",
+            )
+        self.assertIn(str(missing_path), str(error.exception))
+        self.assertFalse(output_path.exists())
+
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="EMP-42",
+            balances={"sick": 2, "personal": 0, "vacation": 0},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        staff_status_service.LEAVE_FORM_TEMPLATE_PATH = missing_path
+        with patch.object(staff_status_service, "send_mail") as send_mail:
+            absence = staff_status_service.create_absence(
+                user_id=self.tech_user["id"], department_name="Technology", absence_type="sick",
+                start_date="2026-09-17", end_date="2026-09-17", duration_mode="full_day",
+                days_value=1, note="", created_by_user_id=self.admin_user["id"],
+                created_by_display_name="Manager User", idempotency_key="missing-template-test",
+            )
+        send_mail.assert_not_called()
+        self.assertEqual(absence["leave_result_email_status"], "error")
+        self.assertIn(str(missing_path), absence["leave_result_email_error"])
+        self.assertIsNone(absence["leave_form_generated_at"])
+        self.assertFalse((staff_status_service.LEAVE_FORM_DIR / f"employee-leave-form-{absence['id']}.pdf").exists())
+        ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
+        self.assertEqual(sum(row["transaction_type"] == "absence_deduction" for row in ledger), 1)
+
     def test_manual_absence_uses_shared_leave_pipeline_pdf_email_and_reversal(self):
         staff_status_service.save_employee_leave_profile(
             user_id=self.tech_user["id"], department_name="Technology", employee_number="EMP-42",
@@ -898,15 +1013,26 @@ class StaffStatusServiceTests(unittest.TestCase):
             self.assertFalse(staff_status_service.send_approved_absence_email_once(absence["id"]))
         send_mail.assert_called_once()
         attachment = send_mail.call_args.kwargs["attachments"][0]
-        pdf_bytes = Path(attachment["path"]).read_bytes()
+        attachment_path = Path(attachment["path"])
+        pdf_bytes = attachment_path.read_bytes()
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
-        self.assertIn(b"EMP-42", pdf_bytes)
-        self.assertIn(b"Tech User", pdf_bytes)
-        self.assertIn(b"110 SICK LEAVE", pdf_bytes)
+        self.assertTrue(attachment_path.resolve().is_relative_to(staff_status_service.LEAVE_FORM_DIR.resolve()))
+        pdf_text = PdfReader(str(attachment_path)).pages[0].extract_text()
+        self.assertIn("EMP-42", pdf_text)
+        self.assertIn("Tech User", pdf_text)
+        self.assertIn("110 SICK LEAVE", " ".join(pdf_text.split()))
+        self.assertIn("September 27, 2026", pdf_text)
         saved = staff_status_service.get_absence_by_id(absence["id"])
         self.assertEqual(saved["leave_days_used"], 1.0)
         self.assertEqual(saved["leave_balance_before"], 2.0)
         self.assertEqual(saved["leave_balance_after"], 1.0)
+        ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
+        self.assertEqual(sum(row["transaction_type"] == "absence_deduction" for row in ledger), 1)
+        send_mail.reset_mock()
+        regenerated = staff_status_service.generate_employee_leave_form(absence["id"], force=True)
+        self.assertEqual(regenerated["path"].name, attachment_path.name)
+        self.assertTrue(regenerated["path"].resolve().is_relative_to(staff_status_service.LEAVE_FORM_DIR.resolve()))
+        send_mail.assert_not_called()
         ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
         self.assertEqual(sum(row["transaction_type"] == "absence_deduction" for row in ledger), 1)
         self.assertTrue(staff_status_service.delete_absence(

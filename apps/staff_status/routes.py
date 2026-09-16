@@ -14,6 +14,7 @@ from .access_service import (
 )
 
 from .blueprint import bp
+from .leave_form_pdf import LeaveFormTemplateError
 from .service import (
     create_absence,
     create_location,
@@ -757,7 +758,7 @@ def absences(department_name: str):
             if created_absence.get("leave_balance_warning"):
                 flash(created_absence["leave_balance_warning"], "warning")
             if created_absence.get("leave_result_email_status") == "error":
-                flash("The absence was saved and the leave form was generated, but the employee email could not be sent.", "warning")
+                flash("The absence was saved, but leave form delivery could not be completed. Review the server logs and retry.", "warning")
         except StaffStatusValidationError as exc:
             flash(str(exc), "error")
             return redirect(url_for("staff_status.absences", department_name=department_name))
@@ -946,7 +947,14 @@ def absence_leave_form(absence_id: int):
     force = request.method == "POST"
     if force and not can_operate_department(user_id, absence["department_name"]):
         abort(403)
-    form = generate_employee_leave_form(absence_id, force=force)
+    try:
+        form = generate_employee_leave_form(absence_id, force=force)
+    except LeaveFormTemplateError:
+        current_app.logger.exception(
+            "The canonical Employee Leave Form could not be generated for absence %s.",
+            absence_id,
+        )
+        abort(503, description="The canonical Employee Leave Form is unavailable. Verify the server template and try again.")
     return send_file(form["path"], mimetype="application/pdf", as_attachment=False,
                      download_name=form["filename"], conditional=True)
 

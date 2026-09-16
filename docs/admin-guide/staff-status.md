@@ -12,7 +12,11 @@ Every changed balance creates a `manual_balance_set` ledger transaction containi
 
 Deleting an active absence reverses a prior tracked deduction once and appends an `absence_reversal`; the original ledger entry remains. Repeated approval, delivery, PDF generation, and reversal calls use persisted state and unique ledger constraints to prevent duplicate deductions, forms, emails, or reversals. Denied requests do none of these approved-only actions.
 
-Generated PDFs are stored outside public static assets under `instance/staff_status/generated_leave_forms/` and are available only through the authenticated, department-authorized download route. The generated form leaves employee and supervisor signature/date lines blank. See `apps/staff_status/assets/README.md` for the reserved district source-template path and replacement procedure. The current implementation recreates the form server-side because the source PDF binary was not included with the approved request.
+The canonical district Employee Leave Form must be deployed at `static/forms/employee_leave_form.pdf`. Launchpad does not recreate or redesign the form: it preserves the original PDF as the background and overlays only the employee number, employee name, total approved days, and date/date range on the applicable printed district classification line. Employee and supervisor signature/date lines remain blank.
+
+Generated employee-specific PDFs are stored outside public static assets under `instance/staff_status/generated_leave_forms/` and are available only through the authenticated, department-authorized download route. Replacing the canonical template may require recalibrating the named coordinates in `apps/staff_status/leave_form_pdf.py`. Existing historical generated forms are not automatically regenerated.
+
+After every server update, verify that `static/forms/employee_leave_form.pdf` exists and is readable by the Launchpad process. If the template is absent or invalid, Launchpad logs a clear generation error and does not create a substitute form or send a recreated PDF.
 
 Approved-result email uses the configured Staff Status notification sender and existing SMTP integration. It attaches the PDF and includes leave used, balance before, remaining balance, and any negative-balance warning. If delivery fails, the persisted error state allows the normal sync/retry path to retry without repeating accounting work.
 

@@ -22,7 +22,8 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-from reportlab.pdfgen import canvas
+
+from .leave_form_pdf import LeaveFormTemplateError, fill_employee_leave_form
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ LEAVE_TYPE_DEFINITIONS = {
     "other": {"label": "Other", "code": "", "tracked": False},
 }
 LEAVE_FORM_DIR = Path(__file__).resolve().parents[2] / "instance" / "staff_status" / "generated_leave_forms"
-LEAVE_FORM_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "employee_leave_form.pdf"
+LEAVE_FORM_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "forms" / "employee_leave_form.pdf"
 ABSENCE_TABLE_SORT_KEYS = {
     "user",
     "type",
@@ -1330,59 +1331,28 @@ def generate_employee_leave_form(absence_id: int, *, force: bool = False) -> dic
         return {"path": safe_existing_path, "filename": absence["leave_form_filename"], "generated_at": absence["leave_form_generated_at"]}
     user = get_user_by_id(absence["user_id"]) or {}
     employee_name = build_display_name(user) if user else f"User {absence['user_id']}"
-    definition = LEAVE_TYPE_DEFINITIONS.get(absence.get("leave_type") or absence["absence_type"], {"code": "", "label": str(absence["absence_type"]).title()})
     LEAVE_FORM_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"employee-leave-form-{absence_id}.pdf"
     path = LEAVE_FORM_DIR / filename
-    pdf = canvas.Canvas(str(path), pagesize=letter, pageCompression=0)
-    width, height = letter
-    pdf.setTitle("Employee Leave Form")
-    pdf.setFont("Helvetica-Bold", 18)
-    pdf.drawCentredString(width / 2, height - 54, "EMPLOYEE LEAVE FORM")
-    pdf.setFont("Helvetica", 10)
-    pdf.drawCentredString(width / 2, height - 72, "Sheridan School District")
-    y = height - 112
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(54, y, "EMPLOYEE NUMBER")
-    pdf.drawString(310, y, "EMPLOYEE NAME")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(54, y - 20, absence.get("employee_number_snapshot") or "")
-    pdf.drawString(310, y - 20, employee_name)
-    pdf.line(54, y - 25, 260, y - 25)
-    pdf.line(310, y - 25, width - 54, y - 25)
-    y -= 64
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(54, y, "TOTAL DAYS ABSENT")
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(180, y, f"{float(absence.get('leave_days_used') or absence.get('days_value') or 0):g}")
-    y -= 48
-    classifications = [
-        ("110", "SICK LEAVE", "sick"), ("115", "PERSONAL LEAVE", "personal"),
-        ("120", "VACATION", "vacation"), ("125", "SCHOOL BUSINESS", "school_business"),
-        ("130", "PROFESSIONAL DEVELOPMENT", "professional_development"),
-        ("135", "LEAVE WITHOUT PAY", "leave_without_pay"), ("140", "JURY DUTY", "jury_duty"),
-        ("145", "MATERNITY LEAVE", "maternity"), ("150", "SICK LEAVE BANK", "sick_bank"),
-        ("155", "FAMILY LEAVE BANK", "family_bank"), ("160", "SHARED LEAVE", "shared_leave"),
-        ("165", "MILITARY", "military"), ("", "OTHER", "other"),
-    ]
     selected = absence.get("leave_type") or absence.get("absence_type")
     date_label = _leave_form_date_label(absence["start_date"], absence["end_date"])
-    pdf.setFont("Helvetica", 10)
-    for code, label, key in classifications:
-        prefix = f"{code} " if code else ""
-        value = date_label if key == selected else ""
-        pdf.drawString(64, y, f"{prefix}{label}: {value}")
-        pdf.line(54, y - 7, width - 54, y - 7)
-        y -= 27
-    y -= 18
-    for label, x in (("Employee Signature", 54), ("Employee Date", 330)):
-        pdf.line(x, y, x + 190, y)
-        pdf.setFont("Helvetica", 9); pdf.drawString(x, y - 14, label)
-    y -= 64
-    for label, x in (("Principal/Supervisor Signature", 54), ("Supervisor Date", 330)):
-        pdf.line(x, y, x + 190, y)
-        pdf.setFont("Helvetica", 9); pdf.drawString(x, y - 14, label)
-    pdf.save()
+    try:
+        fill_employee_leave_form(
+            template_path=LEAVE_FORM_TEMPLATE_PATH,
+            output_path=path,
+            employee_number=absence.get("employee_number_snapshot") or "",
+            employee_name=employee_name,
+            total_days_absent=f"{float(absence.get('leave_days_used') or absence.get('days_value') or 0):g}",
+            classification=selected,
+            date_label=date_label,
+        )
+    except LeaveFormTemplateError:
+        LOGGER.exception(
+            "Employee Leave Form generation failed for absence %s using canonical template %s",
+            absence_id,
+            LEAVE_FORM_TEMPLATE_PATH,
+        )
+        raise
     generated_at = utc_now_iso()
     with get_connection() as conn:
         conn.execute(
@@ -1478,6 +1448,29 @@ def _complete_approved_absence_artifacts(
             send_approved_absence_email_once(absence_id, pending_request_id=pending_request_id)
     except Exception as exc:
         LOGGER.warning("Approved absence %s was saved; delivery remains retryable: %s", absence_id, exc)
+        failed_at = utc_now_iso()
+        error_message = str(exc)[:500]
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE staff_status_absences
+                SET leave_result_email_status = 'error', leave_result_email_error = ?,
+                    leave_result_email_attempted_at = ?
+                WHERE id = ? AND leave_result_email_sent_at IS NULL
+                """,
+                (error_message, failed_at, absence_id),
+            )
+            if pending_request_id:
+                conn.execute(
+                    """
+                    UPDATE staff_status_pending_absence_requests
+                    SET result_notification_status = 'error', result_notification_error = ?,
+                        result_notification_attempted_at = ?, updated_at = ?
+                    WHERE id = ? AND result_notification_sent_at IS NULL
+                    """,
+                    (error_message, failed_at, failed_at, pending_request_id),
+                )
+            conn.commit()
 
 
 def create_absence(
