@@ -26,22 +26,22 @@ class TextPosition:
     min_font_size: float = 7.0
 
 
-# Calibrate these named positions against the exact district source PDF after replacement.
+# Calibrated to the blank lines in static/forms/vacation_personal_request_form.pdf (612 x 792 points).
 REQUEST_FORM_FIELD_POSITIONS = {
-    "school_year": TextPosition(458, 730, 110),
-    "employee_name": TextPosition(152, 690, 260),
-    "request_date": TextPosition(455, 690, 112),
-    "position": TextPosition(132, 665, 235),
-    "campus": TextPosition(420, 665, 148),
-    "requested_dates": TextPosition(185, 580, 380),
-    "balance_before": TextPosition(438, 530, 130),
-    "days_requested": TextPosition(438, 500, 130),
-    "balance_after": TextPosition(438, 470, 130),
+    "school_year": TextPosition(289, 691, 95),
+    "employee_name": TextPosition(132, 578, 245),
+    "request_date": TextPosition(415, 578, 150),
+    "position": TextPosition(82, 545, 295),
+    "campus": TextPosition(432, 545, 135),
+    "requested_dates": TextPosition(317, 483, 245),
+    "balance_before": TextPosition(286, 453, 70),
+    "days_requested": TextPosition(285, 424, 70),
+    "balance_after": TextPosition(285, 396, 70),
 }
 
 REQUEST_TYPE_MARKS = {
-    "vacation": (256, 625, 72, 18),
-    "personal": (367, 625, 70, 18),
+    "vacation": (151, 512, 51, 19),
+    "personal": (226, 512, 52, 19),
 }
 
 

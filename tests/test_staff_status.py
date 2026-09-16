@@ -1122,7 +1122,60 @@ class StaffStatusServiceTests(unittest.TestCase):
             ) if text.strip() in {"Tech User", "September 28, 2026", "4", "1", "3"} else None
         )
         self.assertTrue(dynamic_positions)
-        self.assertTrue(all(y >= 470 for _, y in dynamic_positions))
+        self.assertTrue(all(y > 349 for _, y in dynamic_positions))
+
+    def test_request_form_coordinates_match_canonical_pdf(self):
+        expected_positions = {
+            "school_year": (289, 691, 95),
+            "employee_name": (132, 578, 245),
+            "request_date": (415, 578, 150),
+            "position": (82, 545, 295),
+            "campus": (432, 545, 135),
+            "requested_dates": (317, 483, 245),
+            "balance_before": (286, 453, 70),
+            "days_requested": (285, 424, 70),
+            "balance_after": (285, 396, 70),
+        }
+        actual_positions = {
+            name: (position.x, position.y, position.max_width)
+            for name, position in vacation_personal_form_pdf.REQUEST_FORM_FIELD_POSITIONS.items()
+        }
+        self.assertEqual(actual_positions, expected_positions)
+        self.assertEqual(vacation_personal_form_pdf.REQUEST_TYPE_MARKS["vacation"], (151, 512, 51, 19))
+        self.assertEqual(vacation_personal_form_pdf.REQUEST_TYPE_MARKS["personal"], (226, 512, 52, 19))
+
+        template_path = PROJECT_ROOT / "static" / "forms" / "vacation_personal_request_form.pdf"
+        output_path = self.tmp_path / "calibrated-request-form.pdf"
+        source = PdfReader(str(template_path))
+        vacation_personal_form_pdf.fill_vacation_personal_request_form(
+            template_path=template_path, output_path=output_path, leave_type="personal",
+            school_year="2026-2027", employee_name="Tech User",
+            request_date="September 16, 2026", position="Teacher", campus="Technology",
+            requested_dates="September 17-19, 2026", balance_before="4",
+            days_requested="2.5", balance_after="1.5",
+        )
+        page = PdfReader(str(output_path)).pages[0]
+        self.assertEqual(page.mediabox, source.pages[0].mediabox)
+        text = page.extract_text()
+        self.assertIn("Request for Personal or Vacation Form", " ".join(text.split()))
+        self.assertIn("Tech User", text)
+        self.assertIn("September 17-19, 2026", text)
+        self.assertIn("Employee's Signature", " ".join(text.split()))
+        observed = {}
+        expected_values = {
+            "2026-2027": "school_year", "Tech User": "employee_name",
+            "September 16, 2026": "request_date", "Teacher": "position",
+            "Technology": "campus", "September 17-19, 2026": "requested_dates",
+            "4": "balance_before", "2.5": "days_requested", "1.5": "balance_after",
+        }
+        page.extract_text(
+            visitor_text=lambda value, cm, tm, font, size: observed.update(
+                {expected_values[value.strip()]: round(float(tm[5]), 1)}
+            ) if value.strip() in expected_values else None
+        )
+        self.assertEqual(set(observed), set(expected_positions))
+        for name, y in observed.items():
+            self.assertAlmostEqual(y, expected_positions[name][1], delta=.5)
 
     def test_monthly_leave_forms_group_employees_and_do_not_mutate_accounting(self):
         staff_status_service.save_employee_leave_profile(
