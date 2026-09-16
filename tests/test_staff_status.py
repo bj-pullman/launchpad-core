@@ -1391,6 +1391,15 @@ class StaffStatusServiceTests(unittest.TestCase):
         self.assertIn(':root[data-theme="dark"]', styles)
         self.assertIn('--ss-input-bg:', styles)
         self.assertIn('.staff-status-public-theme-option[aria-pressed="true"]', styles)
+        self.assertIn('PUBLIC BOARD RESPONSIVE', styles)
+        self.assertIn('@media (max-width: 1100px), (max-width: 1300px) and (max-height: 700px)', styles)
+        self.assertIn('grid-template-columns: repeat(2, minmax(0, 1fr));', styles)
+        self.assertIn('@media (max-width: 560px)', styles)
+        self.assertIn('.staff-status-board-empty {', styles)
+        for attribute in (
+            'data-data-url=', 'data-refresh-seconds=', 'data-timezone=', 'data-stream-url='
+        ):
+            self.assertIn(attribute, board)
 
         kiosk_token = staff_status_service.rotate_kiosk_token("Technology")["kiosk_token"]
         board_token = staff_status_service.rotate_board_token("Technology")["board_token"]
