@@ -6,11 +6,11 @@
   <meta name="robots" content="noindex, nofollow">
   <title>{{ department_name }} Status Board</title>
 
+  {% include "staff_status/_public_theme_head.html" %}
   <link
     rel="stylesheet"
     href="{{ url_for('staff_status.static', filename='staff_status.css') }}"
   >
-  {% include "layouts/_theme_head.html" %}
 </head>
 <body class="staff-status-board-body">
   <main class="staff-status-board-shell">
@@ -22,6 +22,7 @@
       </div>
 
       <div class="staff-status-board-meta">
+        {% include "staff_status/_public_theme_control.html" %}
         <div class="staff-status-board-datetime">
           <div id="staff-status-board-date" class="staff-status-board-date">—</div>
           <div id="staff-status-board-time" class="staff-status-board-time">—</div>
@@ -50,6 +51,8 @@
             {{ row.updated_at or "No updates yet" }}
           </div>
         </article>
+      {% else %}
+        <div class="staff-status-board-empty">No staff status information is available.</div>
       {% endfor %}
     </section>
   </main>

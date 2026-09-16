@@ -6,11 +6,11 @@
   <meta name="robots" content="noindex, nofollow">
   <title>{{ department_name }} Kiosk</title>
 
+  {% include "staff_status/_public_theme_head.html" %}
   <link
     rel="stylesheet"
     href="{{ url_for('staff_status.static', filename='staff_status.css') }}"
   >
-  {% include "layouts/_theme_head.html" %}
 </head>
 <body class="staff-status-kiosk-body">
   <main class="staff-status-kiosk-shell">
@@ -34,6 +34,7 @@
 
         <div class="staff-status-kiosk-header-right">
           <div class="staff-status-kiosk-actions">
+            {% include "staff_status/_public_theme_control.html" %}
             <button
               type="button"
               class="kiosk-refresh-btn"

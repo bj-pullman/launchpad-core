@@ -1,0 +1,22 @@
+<script>
+  (() => {
+    const key = "staff_status_public_theme";
+    const allowed = new Set(["light", "dark", "system"]);
+    let preference = "system";
+
+    try {
+      const stored = window.localStorage.getItem(key);
+      if (allowed.has(stored)) preference = stored;
+    } catch (_) {
+      // Storage can be unavailable in privacy-restricted browser contexts.
+    }
+
+    const systemIsDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.themePreference = preference;
+    document.documentElement.dataset.theme =
+      preference === "dark" || (preference === "system" && systemIsDark)
+        ? "dark"
+        : "light";
+  })();
+</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='launchpad-theme.css') }}">

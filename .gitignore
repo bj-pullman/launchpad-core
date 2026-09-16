@@ -118,6 +118,7 @@ tests/*
 !tests/test_launchpad_shell.cjs
 !tests/test_finance_record_workflow.cjs
 !tests/test_staff_absence_apps_script.cjs
+!tests/test_staff_status_public_theme.cjs
 !tests/test_media_catalog_student_checkouts.py
 !tests/test_media_catalog_asset_catalog.py
 !tests/launchpad_visual_preview.py

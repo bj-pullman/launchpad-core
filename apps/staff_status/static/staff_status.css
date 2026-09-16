@@ -4,18 +4,64 @@
   --ss-bg: #eef3f8;
   --ss-panel: #ffffff;
   --ss-panel-soft: #f8fafc;
+  --ss-surface-hover: #eff6ff;
+  --ss-input-bg: #ffffff;
   --ss-text: #1f2937;
   --ss-muted: #64748b;
+  --ss-disabled: #8794a7;
   --ss-border: #dbe3ec;
   --ss-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   --ss-radius: 18px;
   --ss-radius-sm: 14px;
   --ss-accent: #2563eb;
+  --ss-accent-hover: #1d4ed8;
+  --ss-accent-text: #ffffff;
+  --ss-info-bg: #eff6ff;
+  --ss-info-text: #1d4ed8;
+  --ss-info-border: #93c5fd;
   --ss-success-bg: #ecfdf3;
   --ss-success-text: #166534;
+  --ss-success-border: #bbf7d0;
   --ss-error-bg: #fef2f2;
   --ss-error-text: #991b1b;
+  --ss-error-border: #fecaca;
+  --ss-warning-bg: #fffbeb;
   --ss-warning-text: #92400e;
+  --ss-warning-border: #fcd34d;
+  --ss-focus: #2563eb;
+  --ss-focus-ring: rgba(37, 99, 235, 0.22);
+}
+
+:root[data-theme] {
+  --ss-bg: var(--lp-bg-page);
+  --ss-panel: var(--lp-surface-card);
+  --ss-panel-soft: var(--lp-surface-subtle);
+  --ss-surface-hover: var(--lp-surface-hover);
+  --ss-input-bg: var(--lp-surface-input);
+  --ss-text: var(--lp-text);
+  --ss-muted: var(--lp-text-muted);
+  --ss-disabled: var(--lp-text-disabled);
+  --ss-border: var(--lp-border);
+  --ss-shadow: var(--lp-shadow);
+  --ss-info-bg: var(--lp-info-bg);
+  --ss-info-text: var(--lp-info-text);
+  --ss-success-bg: var(--lp-success-bg);
+  --ss-success-text: var(--lp-success-text);
+  --ss-error-bg: var(--lp-error-bg);
+  --ss-error-text: var(--lp-error-text);
+  --ss-warning-bg: var(--lp-warning-bg);
+  --ss-warning-text: var(--lp-warning-text);
+  --ss-focus: var(--lp-focus);
+}
+
+:root[data-theme="dark"] {
+  --ss-accent: #8eb6ff;
+  --ss-accent-hover: #a9c8ff;
+  --ss-info-border: #31598b;
+  --ss-success-border: #2f6a50;
+  --ss-error-border: #854052;
+  --ss-warning-border: #785f27;
+  --ss-focus-ring: rgba(122, 162, 255, 0.3);
 }
 
 * {
@@ -163,7 +209,64 @@ KIOSK HEADER
 
 .staff-status-kiosk-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
   justify-content: flex-end;
+}
+
+.staff-status-public-theme {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 3px;
+  border: 1px solid var(--ss-border);
+  border-radius: 999px;
+  background: var(--ss-panel-soft);
+  color: var(--ss-muted);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.staff-status-public-theme-label {
+  padding: 0 8px 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.staff-status-public-theme-option {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ss-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.staff-status-public-theme-option:hover {
+  background: var(--ss-surface-hover);
+  color: var(--ss-text);
+}
+
+.staff-status-public-theme-option[aria-pressed="true"] {
+  background: var(--ss-panel);
+  color: var(--ss-info-text);
+  box-shadow: 0 1px 5px rgba(15, 23, 42, .14);
+}
+
+.staff-status-public-theme-option:focus-visible,
+.kiosk-refresh-btn:focus-visible,
+.staff-status-kiosk-form input:focus-visible,
+.staff-status-kiosk-form select:focus-visible,
+.staff-status-kiosk-form summary:focus-visible,
+.staff-status-kiosk-form button:focus-visible {
+  outline: 3px solid var(--ss-focus);
+  outline-offset: 2px;
 }
 
 .kiosk-refresh-btn {
@@ -175,8 +278,8 @@ KIOSK HEADER
   padding: 0 16px;
   border: 1px solid rgba(37, 99, 235, 0.22);
   border-radius: 999px;
-  background: var(--info-bg);
-  color: #1d4ed8;
+  background: var(--ss-info-bg);
+  color: var(--ss-info-text);
   font: inherit;
   font-size: 15px;
   font-weight: 800;
@@ -187,10 +290,9 @@ KIOSK HEADER
 
 .kiosk-refresh-btn:hover,
 .kiosk-refresh-btn:focus-visible {
-  background: var(--info-bg);
-  border-color: rgba(37, 99, 235, 0.35);
-  outline: none;
-  color: #1e40af;
+  background: var(--ss-info-bg);
+  border-color: var(--ss-info-border);
+  color: var(--ss-info-text);
 }
 
 .kiosk-refresh-btn:active {
@@ -213,7 +315,7 @@ KIOSK SUCCESS OVERLAY
   display: flex;
   align-items: center;
   justify-content: center;
-  background:var(--panel);
+  background: var(--ss-panel);
   border-radius: var(--ss-radius);
   z-index: 20;
 }
@@ -228,7 +330,7 @@ KIOSK SUCCESS OVERLAY
   padding: 28px 24px;
   border: 1px solid var(--ss-border);
   border-radius: 18px;
-  background: var(--panel);
+  background: var(--ss-panel);
   box-shadow: var(--ss-shadow);
   text-align: center;
 }
@@ -295,7 +397,7 @@ KIOSK FORM
 .staff-status-kiosk-form select {
   width: 100%;
   border: 1px solid var(--ss-border);
-  background: var(--panel);
+  background: var(--ss-input-bg);
   color: var(--ss-text);
   border-radius: 12px;
   padding: 14px 16px;
@@ -305,8 +407,8 @@ KIOSK FORM
 
 .staff-status-kiosk-form select:focus {
   outline: none;
-  border-color: #93c5fd;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--ss-focus);
+  box-shadow: 0 0 0 3px var(--ss-focus-ring);
 }
 
 .staff-status-kiosk-location-grid {
@@ -323,14 +425,14 @@ KIOSK FORM
   padding: 14px 16px;
   border: 1px solid var(--ss-border);
   border-radius: 14px;
-  background: var(--panel);
+  background: var(--ss-panel);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .staff-status-kiosk-location-card:hover {
-  border-color: #93c5fd;
-  background: var(--panel2);
+  border-color: var(--ss-info-border);
+  background: var(--ss-surface-hover);
 }
 
 .staff-status-kiosk-location-card input {
@@ -358,9 +460,9 @@ KIOSK USER PICKER
   min-height: 44px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: var(--panel2);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  color: var(--muted);
+  background: var(--ss-panel-soft);
+  border: 1px solid var(--ss-border);
+  color: var(--ss-muted);
   font-size: 15px;
   font-weight: 700;
 }
@@ -373,8 +475,8 @@ KIOSK USER PICKER
   height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  background: #2563eb;
-  color:var(--on-accent);
+  background: var(--ss-accent);
+  color: var(--ss-accent-text);
   font-size: 14px;
   font-weight: 800;
 }
@@ -382,8 +484,8 @@ KIOSK USER PICKER
 .staff-status-kiosk-user-picker {
   margin-top: 10px;
   border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  background: var(--panel);
+  border: 1px solid var(--ss-border);
+  background: var(--ss-panel);
   overflow: hidden;
 }
 
@@ -397,8 +499,8 @@ KIOSK USER PICKER
   cursor: pointer;
   list-style: none;
   font-weight: 800;
-  color: var(--text);
-  background: linear-gradient(to bottom, var(--panel), var(--panel2));
+  color: var(--ss-text);
+  background: linear-gradient(to bottom, var(--ss-panel), var(--ss-panel-soft));
 }
 
 .staff-status-kiosk-user-picker summary::-webkit-details-marker {
@@ -407,7 +509,7 @@ KIOSK USER PICKER
 
 .staff-status-kiosk-user-picker summary::after {
   content: "▾";
-  color: var(--muted);
+  color: var(--ss-muted);
   transition: transform 0.16s ease;
 }
 
@@ -418,14 +520,14 @@ KIOSK USER PICKER
 .staff-status-kiosk-picker-hint {
   font-size: 13px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--ss-muted);
   margin-left: auto;
 }
 
 .staff-status-kiosk-user-picker-body {
   padding: 12px;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
-  background: var(--panel2);
+  border-top: 1px solid var(--ss-border);
+  background: var(--ss-panel-soft);
 }
 
 .staff-status-kiosk-user-tools {
@@ -437,19 +539,19 @@ KIOSK USER PICKER
 
 .staff-status-kiosk-user-tools input[type="search"] {
   width: 100%;
-  border: 1px solid rgba(15, 23, 42, 0.14);
+  border: 1px solid var(--ss-border);
   border-radius: 12px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--ss-input-bg);
+  color: var(--ss-text);
   padding: 12px 14px;
   font: inherit;
 }
 
 .staff-status-kiosk-clear-users-btn {
   appearance: none;
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  background: var(--panel);
-  color: var(--text);
+  border: 1px solid var(--ss-border);
+  background: var(--ss-panel);
+  color: var(--ss-text);
   border-radius: 12px;
   padding: 12px 14px;
   font: inherit;
@@ -458,7 +560,7 @@ KIOSK USER PICKER
 }
 
 .staff-status-kiosk-clear-users-btn:hover {
-  background: var(--panel2);
+  background: var(--ss-surface-hover);
 }
 
 .staff-status-kiosk-user-list {
@@ -470,8 +572,8 @@ KIOSK USER PICKER
   padding: 6px;
   margin-top: 10px;
   border-radius: 16px;
-  background: var(--panel);
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: var(--ss-panel);
+  border: 1px solid var(--ss-border);
 }
 
 .staff-status-kiosk-user-option {
@@ -481,9 +583,9 @@ KIOSK USER PICKER
   min-height: 46px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  background: var(--panel);
-  color: var(--text);
+  border: 1px solid var(--ss-border);
+  background: var(--ss-panel);
+  color: var(--ss-text);
   font-weight: 700;
   cursor: pointer;
   line-height: 1.25;
@@ -496,9 +598,9 @@ KIOSK USER PICKER
 }
 
 .staff-status-kiosk-user-option:has(input[type="checkbox"]:checked) {
-  background: var(--info-bg);
-  border-color: rgba(37, 99, 235, 0.35);
-  color: #1d4ed8;
+  background: var(--ss-info-bg);
+  border-color: var(--ss-info-border);
+  color: var(--ss-info-text);
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
 }
 
@@ -511,8 +613,8 @@ BUTTONS / RESULTS
   min-height: 50px;
   border: 1px solid transparent;
   border-radius: 14px;
-  background: #2563eb;
-  color:var(--on-accent);
+  background: var(--ss-accent);
+  color: var(--ss-accent-text);
   font: inherit;
   font-size: 15px;
   font-weight: 700;
@@ -520,12 +622,13 @@ BUTTONS / RESULTS
 }
 
 .staff-status-primary-btn:hover {
-  background: #1d4ed8;
+  background: var(--ss-accent-hover);
 }
 
 .staff-status-primary-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+  color: var(--ss-accent-text);
 }
 
 .staff-status-result {
@@ -539,13 +642,13 @@ BUTTONS / RESULTS
 .staff-status-result-success {
   background: var(--ss-success-bg);
   color: var(--ss-success-text);
-  border-color: #bbf7d0;
+  border-color: var(--ss-success-border);
 }
 
 .staff-status-result-error {
   background: var(--ss-error-bg);
   color: var(--ss-error-text);
-  border-color: #fecaca;
+  border-color: var(--ss-error-border);
 }
 
 .btn-success {
@@ -601,6 +704,17 @@ BOARD VIEW
   gap: 12px;
 }
 
+.staff-status-board-empty {
+  padding: 40px 28px;
+  border: 1px dashed var(--ss-border);
+  border-radius: 16px;
+  background: var(--ss-panel-soft);
+  color: var(--ss-muted);
+  font-size: 1.15rem;
+  font-weight: 650;
+  text-align: center;
+}
+
 .staff-status-board-row {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 180px;
@@ -620,12 +734,19 @@ BOARD VIEW
 }
 
 .staff-status-board-status {
+  justify-self: start;
+  padding: 8px 12px;
+  border: 1px solid var(--ss-info-border);
+  border-radius: 999px;
+  background: var(--ss-info-bg);
   font-size: 1.5rem;
   font-weight: 700;
-  color: #1d4ed8;
+  color: var(--ss-info-text);
 }
 
 .staff-status-board-status.out {
+  border-color: var(--ss-warning-border);
+  background: var(--ss-warning-bg);
   color: var(--ss-warning-text);
 }
 
@@ -895,7 +1016,7 @@ ABSENCE FILTER PANEL
 .staff-status-table-filters input[type="url"] {
   width: 100%;
   border: 1px solid var(--ss-border);
-  background: var(--panel);
+  background: var(--ss-panel);
   color: var(--ss-text);
   border-radius: 12px;
   padding: 12px 14px;
@@ -911,8 +1032,8 @@ ABSENCE FILTER PANEL
 .staff-status-table-filters input[type="time"]:focus,
 .staff-status-table-filters input[type="url"]:focus {
   outline: none;
-  border-color: #93c5fd;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--ss-focus);
+  box-shadow: 0 0 0 3px var(--ss-focus-ring);
   background: var(--panel);
 }
 
@@ -1569,7 +1690,7 @@ ABSENCE REQUEST REVIEW
   padding: 14px;
   border: 1px solid var(--ss-border);
   border-radius: 12px;
-  background: var(--panel);
+  background: var(--ss-input-bg);
 }
 
 .staff-status-review-note p {
@@ -1699,6 +1820,7 @@ RESPONSIVE
 
   .staff-status-kiosk-header {
     display: block;
+    padding-top: 54px;
     text-align: center;
   }
 
@@ -1795,6 +1917,13 @@ RESPONSIVE
     margin-left: 0;
   }
 
+  .staff-status-board-meta {
+    width: 100%;
+    min-width: 0;
+    align-items: flex-start;
+    text-align: left;
+  }
+
   .staff-status-table-header-row {
     flex-direction: column;
     align-items: stretch;
@@ -1861,6 +1990,7 @@ RESPONSIVE
 @media (max-width: 600px) {
   .staff-status-kiosk-header {
     gap: 10px;
+    padding-top: 0;
   }
 
   .staff-status-kiosk-header-center h1 {
@@ -1872,12 +2002,23 @@ RESPONSIVE
   }
 
   .staff-status-kiosk-actions {
-    top: 12px;
-    right: 12px;
+    position: static;
+    justify-content: center;
+    margin: 12px 0 8px;
   }
 
   .kiosk-refresh-btn {
     padding: 8px 10px;
     font-size: 14px;
+  }
+
+  .staff-status-public-theme-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 }

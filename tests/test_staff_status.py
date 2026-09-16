@@ -1363,6 +1363,53 @@ class StaffStatusServiceTests(unittest.TestCase):
         self.assertIn('name="absence_google_interval_seconds"', settings_template)
         self.assertNotIn("absence_google_interval_minutes", settings_template)
 
+    def test_public_kiosk_and_board_include_local_theme_controls(self):
+        template_root = PROJECT_ROOT / "apps" / "staff_status" / "templates" / "staff_status"
+        kiosk = (template_root / "kiosk.html").read_text(encoding="utf-8")
+        board = (template_root / "board_public.html").read_text(encoding="utf-8")
+        theme_head = (template_root / "_public_theme_head.html").read_text(encoding="utf-8")
+        theme_control = (template_root / "_public_theme_control.html").read_text(encoding="utf-8")
+        script = (PROJECT_ROOT / "apps" / "staff_status" / "static" / "staff_status.js").read_text(encoding="utf-8")
+        styles = (PROJECT_ROOT / "apps" / "staff_status" / "static" / "staff_status.css").read_text(encoding="utf-8")
+
+        for template in (kiosk, board):
+            self.assertIn('staff_status/_public_theme_head.html', template)
+            self.assertIn('staff_status/_public_theme_control.html', template)
+            self.assertNotIn('layouts/_theme_head.html', template)
+
+        self.assertIn('staff_status_public_theme', theme_head)
+        self.assertIn('window.localStorage.getItem(key)', theme_head)
+        self.assertIn('prefers-color-scheme: dark', theme_head)
+        for preference in ("light", "dark", "system"):
+            self.assertIn(f'data-public-theme-choice="{preference}"', theme_control)
+
+        self.assertIn('initPublicThemeControl();', script)
+        self.assertIn('initStaffStatusKiosk();', script)
+        self.assertIn('initStaffStatusBoard();', script)
+        self.assertIn('window.localStorage.setItem(STAFF_STATUS_PUBLIC_THEME_KEY, normalized)', script)
+        self.assertIn('currentStaffStatusPublicTheme === "system"', script)
+        self.assertIn(':root[data-theme="dark"]', styles)
+        self.assertIn('--ss-input-bg:', styles)
+        self.assertIn('.staff-status-public-theme-option[aria-pressed="true"]', styles)
+
+        kiosk_token = staff_status_service.rotate_kiosk_token("Technology")["kiosk_token"]
+        board_token = staff_status_service.rotate_board_token("Technology")["board_token"]
+        app = self.make_route_app()
+        with app.test_client() as client:
+            responses = (
+                client.get(f"/staff-status/kiosk/{kiosk_token}"),
+                client.get(f"/staff-status/board/{board_token}"),
+            )
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            html = response.get_data(as_text=True)
+            self.assertIn('data-public-theme-control', html)
+            self.assertIn('staff_status_public_theme', html)
+            self.assertIn('data-public-theme-choice="system"', html)
+            self.assertNotIn('launchpad-theme-url', html)
+            self.assertLess(html.index('staff_status_public_theme'), html.index('staff_status.css'))
+
 
 if __name__ == "__main__":
     unittest.main()

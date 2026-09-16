@@ -50,6 +50,8 @@ Administrators can manage locations for each department. Locations support:
 
 The kiosk allows selected staff to update their status. It supports selecting one or more staff members and one or more locations.
 
+The public kiosk includes **Light**, **Dark**, and **System** display themes. The selected preference is stored only in that browser or kiosk device using local storage. New devices default to **System**, which follows the operating system color preference and updates if it changes while the kiosk is open. This public-device setting is independent of any signed-in Launchpad user's theme preference.
+
 ### Tablet behavior
 
 For iPads and tablets, the staff selector should be collapsible so locations remain easy to access. Users can open the staff picker, search/select staff, then choose locations and submit.
@@ -57,6 +59,8 @@ For iPads and tablets, the staff selector should be collapsible so locations rem
 ## Boards
 
 The department board displays staff statuses and updates on an interval. It should avoid full-page refreshes and use lightweight data refreshes where possible.
+
+Public boards provide the same **Light**, **Dark**, and **System** control. The choice persists on the display device without authentication or cookies, defaults to **System**, and does not interrupt board polling or live refresh behavior.
 
 ## Public URLs
 

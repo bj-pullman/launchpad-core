@@ -1,6 +1,87 @@
 document.addEventListener("DOMContentLoaded", initStaffStatusScripts);
 
+const STAFF_STATUS_PUBLIC_THEME_KEY = "staff_status_public_theme";
+const STAFF_STATUS_PUBLIC_THEMES = new Set(["light", "dark", "system"]);
+const staffStatusPublicThemeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+let currentStaffStatusPublicTheme = "system";
+let staffStatusPublicThemeListenerInstalled = false;
+
+function normalizeStaffStatusPublicTheme(preference) {
+  return STAFF_STATUS_PUBLIC_THEMES.has(preference) ? preference : "system";
+}
+
+function getStoredTheme() {
+  try {
+    return normalizeStaffStatusPublicTheme(
+      window.localStorage.getItem(STAFF_STATUS_PUBLIC_THEME_KEY)
+    );
+  } catch (_) {
+    return "system";
+  }
+}
+
+function resolveTheme(preference) {
+  const normalized = normalizeStaffStatusPublicTheme(preference);
+  return normalized === "dark" ||
+    (normalized === "system" && staffStatusPublicThemeMedia.matches)
+    ? "dark"
+    : "light";
+}
+
+function applyTheme(preference) {
+  currentStaffStatusPublicTheme = normalizeStaffStatusPublicTheme(preference);
+  const resolved = resolveTheme(currentStaffStatusPublicTheme);
+  document.documentElement.dataset.themePreference = currentStaffStatusPublicTheme;
+  document.documentElement.dataset.theme = resolved;
+  if (document.body) document.body.dataset.theme = resolved;
+
+  document.querySelectorAll("[data-public-theme-choice]").forEach((button) => {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.publicThemeChoice === currentStaffStatusPublicTheme)
+    );
+  });
+
+  return resolved;
+}
+
+function setTheme(preference) {
+  const normalized = normalizeStaffStatusPublicTheme(preference);
+  try {
+    window.localStorage.setItem(STAFF_STATUS_PUBLIC_THEME_KEY, normalized);
+  } catch (_) {
+    // Apply the choice for this page even when storage is unavailable.
+  }
+  return applyTheme(normalized);
+}
+
+function initPublicThemeControl() {
+  const controls = document.querySelectorAll("[data-public-theme-control]");
+  if (!controls.length) return;
+
+  applyTheme(getStoredTheme());
+  document.querySelectorAll("[data-public-theme-choice]").forEach((button) => {
+    button.addEventListener("click", () => setTheme(button.dataset.publicThemeChoice));
+  });
+
+  if (!staffStatusPublicThemeListenerInstalled) {
+    staffStatusPublicThemeMedia.addEventListener("change", () => {
+      if (currentStaffStatusPublicTheme === "system") applyTheme("system");
+    });
+    staffStatusPublicThemeListenerInstalled = true;
+  }
+}
+
+window.StaffStatusPublicTheme = {
+  getStoredTheme,
+  resolveTheme,
+  applyTheme,
+  setTheme,
+  initPublicThemeControl
+};
+
 function initStaffStatusScripts() {
+  initPublicThemeControl();
   initStaffStatusKiosk();
   initStaffStatusBoard();
   initAbsenceDurationForm();
@@ -193,6 +274,14 @@ function initStaffStatusBoard() {
 
   function renderRows(rows) {
     grid.innerHTML = "";
+
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "staff-status-board-empty";
+      empty.textContent = "No staff status information is available.";
+      grid.appendChild(empty);
+      return;
+    }
 
     rows.forEach((row) => {
       const article = document.createElement("article");
