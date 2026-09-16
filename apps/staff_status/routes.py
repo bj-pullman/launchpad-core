@@ -398,25 +398,6 @@ def locations(department_name: str):
 
         action = (request.form.get("action") or "").strip()
 
-        if action == "save_leave_profile":
-            try:
-                save_employee_leave_profile(
-                    user_id=request.form.get("user_id", type=int),
-                    department_name=department_name,
-                    employee_number=request.form.get("employee_number"),
-                    balances={
-                        "sick": request.form.get("balance_sick"),
-                        "personal": request.form.get("balance_personal"),
-                        "vacation": request.form.get("balance_vacation"),
-                    },
-                    actor_user_id=actor["id"],
-                    actor_display_name=_actor_display_name(actor),
-                )
-                flash("Leave details updated", "success")
-            except StaffStatusValidationError as exc:
-                flash(str(exc), "error")
-            return redirect(url_for("staff_status.absences", department_name=department_name, leave_balances="open"))
-
         if action == "create":
             create_location(
                 department_name=department_name,
@@ -700,6 +681,27 @@ def absences(department_name: str):
             abort(403)
 
         action = (request.form.get("action") or "").strip()
+
+        if action == "save_leave_profile":
+            try:
+                save_employee_leave_profile(
+                    user_id=request.form.get("user_id", type=int),
+                    department_name=department_name,
+                    employee_number=request.form.get("employee_number"),
+                    balances={
+                        "sick": request.form.get("balance_sick"),
+                        "personal": request.form.get("balance_personal"),
+                        "vacation": request.form.get("balance_vacation"),
+                    },
+                    actor_user_id=actor["id"],
+                    actor_display_name=_actor_display_name(actor),
+                )
+                flash("Leave details updated", "success")
+            except StaffStatusValidationError as exc:
+                flash(str(exc), "error")
+            return redirect(url_for(
+                "staff_status.absences", department_name=department_name, leave_balances="open"
+            ))
 
         if action == "update_absence":
             duration_mode, days_value, end_date = resolve_absence_duration(request.form)

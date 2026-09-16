@@ -745,6 +745,10 @@ function initStaffStatusModals() {
     activeModal = modal;
     modal.hidden = false;
     document.body.classList.add("staff-status-modal-open");
+    modal.dispatchEvent(new CustomEvent("staff-status:modal-opened", {
+      bubbles: false,
+      detail: { trigger: trigger || null }
+    }));
     focusFirstControl(modal);
   }
 
@@ -759,6 +763,10 @@ function initStaffStatusModals() {
     if (!modal.dispatchEvent(beforeClose)) return;
 
     modal.hidden = true;
+    modal.dispatchEvent(new CustomEvent("staff-status:modal-closed", {
+      bubbles: false,
+      detail: { restoreFocus }
+    }));
 
     if (activeModal === modal) {
       activeModal = null;

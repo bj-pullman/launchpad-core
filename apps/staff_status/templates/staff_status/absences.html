@@ -204,14 +204,19 @@
   {% include "staff_status/_subnav.html" %}
 
   <div class="page-header">
-    <div>
+    <div class="staff-status-absence-title-row">
       <h1>{{ department_name }} Absences</h1>
+      <button type="button" class="staff-status-absence-settings-btn" data-modal-open="leave-balances-modal"
+        aria-label="Absence settings" title="Absence settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
     </div>
 
     <div class="page-header-actions">
-      <button type="button" class="btn btn-secondary" data-modal-open="leave-balances-modal">
-        Leave Balances
-      </button>
       {% if can_operate %}
       <button type="button" class="btn btn-primary" data-modal-open="absence-add-modal">
         Add Absence
@@ -270,26 +275,29 @@
 <div id="leave-balances-modal" class="modal-backdrop staff-status-modal-backdrop" role="dialog" aria-modal="true"
   aria-labelledby="leave-balances-title" hidden>
   <div class="modal-card staff-status-modal-card staff-status-leave-modal-card">
-    <div class="modal-header">
+    <div class="modal-header staff-status-leave-modal-header">
       <div><h2 id="leave-balances-title">Leave Balances</h2><p class="muted">{{ department_name }}</p></div>
       <button type="button" class="modal-close" data-modal-close aria-label="Close Leave Balances">&times;</button>
     </div>
     <div data-leave-list>
       <p class="muted">Balances are stored in days. Initial balances are entered by an authorized manager.</p>
-      <div class="table-wrap staff-status-leave-table">
-        <table class="data-table">
-          <thead><tr><th>Employee</th><th>Employee ID</th><th>Balances</th>{% if can_operate %}<th><span class="sr-only">Actions</span></th>{% endif %}</tr></thead>
-          <tbody>
+      <div class="staff-status-leave-table" role="table" aria-label="Employee leave balances">
+        <div class="staff-status-leave-header" role="row">
+          <div role="columnheader">Employee</div>
+          <div role="columnheader">Employee ID</div>
+          <div role="columnheader">Balances</div>
+          <div role="columnheader"><span class="sr-only">Actions</span></div>
+        </div>
+        <div class="staff-status-leave-rows" role="rowgroup">
           {% for employee in leave_profiles %}
-            <tr>
-              <td class="table-primary">{{ employee.display_name }}<small>{{ employee.email }}</small></td>
-              <td>{{ employee.employee_number or 'Not set' }}</td>
-              <td class="staff-status-leave-summary"><span>Sick {{ '%g'|format(employee.balances.sick) }}</span><span>Personal {{ '%g'|format(employee.balances.personal) }}</span><span>Vacation {{ '%g'|format(employee.balances.vacation) }}</span></td>
-              {% if can_operate %}<td><button type="button" class="table-link staff-status-leave-edit" data-leave-edit="{{ employee.user_id }}" aria-label="Edit leave details for {{ employee.display_name }}">&#9998;</button></td>{% endif %}
-            </tr>
+            <div class="staff-status-leave-row" role="row">
+              <div class="table-primary staff-status-leave-employee" role="cell"><span>{{ employee.display_name }}</span><small>{{ employee.email }}</small></div>
+              <div class="staff-status-leave-employee-id" role="cell">{{ employee.employee_number or 'Not set' }}</div>
+              <div class="staff-status-leave-summary" role="cell"><span>Sick {{ '%g'|format(employee.balances.sick) }}</span><span>Personal {{ '%g'|format(employee.balances.personal) }}</span><span>Vacation {{ '%g'|format(employee.balances.vacation) }}</span></div>
+              <div class="staff-status-leave-actions" role="cell">{% if can_operate %}<button type="button" class="staff-status-leave-edit" data-leave-edit="{{ employee.user_id }}" aria-label="Edit leave details for {{ employee.display_name }}" title="Edit leave details"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4z"></path></svg></button>{% endif %}</div>
+            </div>
           {% endfor %}
-          </tbody>
-        </table>
+        </div>
       </div>
       {% if not can_operate %}<p class="muted">You have view-only access. Leave details can only be changed by a department operator or Staff Status administrator.</p>{% endif %}
     </div>
@@ -571,7 +579,23 @@
   let allowClose = false;
   const snapshot = form => new URLSearchParams(new FormData(form)).toString();
   const dirty = () => !!activeForm && snapshot(activeForm) !== original;
+  function resetForm(form) {
+    form.reset();
+    form.querySelectorAll('input, select, textarea').forEach(control => {
+      control.setCustomValidity('');
+      control.removeAttribute('aria-invalid');
+      control.classList.remove('is-invalid');
+    });
+    form.querySelectorAll('[data-validation-message]').forEach(item => { item.textContent = ''; item.hidden = true; });
+  }
   function showList() { forms.forEach(form => form.hidden = true); list.hidden = false; activeForm = null; original = ''; }
+  function resetState() {
+    forms.forEach(resetForm);
+    discardModal.hidden = true;
+    pendingAction = null;
+    allowClose = false;
+    showList();
+  }
   function edit(userId) {
     const target = modal.querySelector('[data-leave-form="' + userId + '"]');
     if (!target) return;
@@ -584,15 +608,17 @@
   }
   modal.querySelectorAll('[data-leave-edit]').forEach(button => button.addEventListener('click', () => edit(button.dataset.leaveEdit)));
   modal.querySelectorAll('[data-leave-cancel]').forEach(button => button.addEventListener('click', () => requestDiscard(showList)));
-  discardModal.querySelector('[data-leave-keep]').addEventListener('click', () => { discardModal.hidden = true; pendingAction = null; activeForm && activeForm.focus(); });
-  discardModal.querySelector('[data-leave-discard]').addEventListener('click', () => { const action = pendingAction; discardModal.hidden = true; pendingAction = null; if (action) action(); });
+  discardModal.querySelector('[data-leave-keep]').addEventListener('click', () => { discardModal.hidden = true; pendingAction = null; const control = activeForm && activeForm.querySelector('input:not([type="hidden"]), select, textarea'); if (control) control.focus(); });
+  discardModal.querySelector('[data-leave-discard]').addEventListener('click', () => { const action = pendingAction; if (activeForm) resetForm(activeForm); discardModal.hidden = true; pendingAction = null; if (action) action(); });
   modal.addEventListener('staff-status:before-modal-close', function (event) {
     if (allowClose) return;
     if (!dirty()) return;
     event.preventDefault();
     requestDiscard(() => { showList(); allowClose = true; modal.querySelector('[data-modal-close]').click(); allowClose = false; });
   });
-  {% if open_leave_balances %}document.querySelector('[data-modal-open="leave-balances-modal"]').click();{% endif %}
+  modal.addEventListener('staff-status:modal-opened', resetState);
+  modal.addEventListener('staff-status:modal-closed', resetState);
+  {% if open_leave_balances %}window.addEventListener('DOMContentLoaded', () => document.querySelector('[data-modal-open="leave-balances-modal"]').click());{% endif %}
 })();
 </script>
 {% endblock %}

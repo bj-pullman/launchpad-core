@@ -971,13 +971,44 @@ class StaffStatusServiceTests(unittest.TestCase):
                 "employee_number": "NO", "balance_sick": "1", "balance_personal": "1", "balance_vacation": "1"})
         self.assertEqual(denied.status_code, 403)
 
+        with app.test_client() as client:
+            with client.session_transaction() as session:
+                session["is_authenticated"] = True
+                session["user_id"] = self.admin_user["id"]
+                session["user_permissions"] = [
+                    "staff_status.view", "staff_status.operator", "staff_status.admin"
+                ]
+            saved = client.post("/staff-status/Technology/absences", data={
+                "action": "save_leave_profile", "user_id": self.tech_user["id"],
+                "employee_number": "UI-100", "balance_sick": "8.5",
+                "balance_personal": "2", "balance_vacation": "1.25"})
+        self.assertEqual(saved.status_code, 302)
+        self.assertIn("leave_balances=open", saved.headers["Location"])
+
     def test_leave_balances_modal_uses_custom_unsaved_change_confirmation(self):
         template = (PROJECT_ROOT / "apps" / "staff_status" / "templates" / "staff_status" / "absences.html").read_text(encoding="utf-8")
+        script = (PROJECT_ROOT / "apps" / "staff_status" / "static" / "staff_status.js").read_text(encoding="utf-8")
+        styles = (PROJECT_ROOT / "apps" / "staff_status" / "static" / "staff_status.css").read_text(encoding="utf-8")
         self.assertIn("Leave Balances", template)
         self.assertIn("You have unsaved changes. Discard them?", template)
         self.assertIn("Keep Editing", template)
         self.assertIn("Discard Changes", template)
         self.assertNotIn("confirm(", template)
+        self.assertIn('aria-label="Absence settings"', template)
+        self.assertIn('class="staff-status-absence-settings-btn"', template)
+        self.assertNotIn('class="btn btn-secondary" data-modal-open="leave-balances-modal"', template)
+        self.assertIn("function resetState()", template)
+        self.assertIn("forms.forEach(resetForm)", template)
+        self.assertIn("staff-status:modal-opened", template)
+        self.assertIn("staff-status:modal-closed", template)
+        self.assertIn("staff-status:modal-opened", script)
+        self.assertIn("staff-status:modal-closed", script)
+        self.assertIn(':root[data-theme="dark"] .staff-status-leave-modal-card', styles)
+        self.assertIn("--leave-list-columns: minmax(280px, 1.4fr) minmax(160px, .8fr) minmax(360px, 1.6fr) 72px", styles)
+        self.assertIn("grid-template-columns: var(--leave-list-columns)", styles)
+        self.assertIn("align-items: start", styles)
+        self.assertIn(".staff-status-leave-summary { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }", styles)
+        self.assertIn(".staff-status-leave-actions { margin: 0; padding: 0; text-align: right; }", styles)
 
 
 if __name__ == "__main__":

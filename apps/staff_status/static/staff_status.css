@@ -1347,17 +1347,154 @@ MODALS
   width: min(880px, 100%);
 }
 
-.staff-status-leave-modal-card { width: min(960px, 100%); }
-.staff-status-leave-table small { display: block; margin-top: 3px; color: var(--ss-muted); font-weight: 400; }
-.staff-status-leave-summary { display: flex; flex-wrap: wrap; gap: 6px; }
-.staff-status-leave-summary span { padding: 4px 8px; border-radius: 999px; background: var(--panel2); font-size: 12px; font-weight: 700; white-space: nowrap; }
-.staff-status-leave-edit { font-size: 20px; line-height: 1; }
+.staff-status-absence-title-row { display: flex; align-items: center; gap: 10px; }
+.staff-status-absence-title-row h1 { margin: 0; }
+.staff-status-absence-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--ss-border);
+  border-radius: 10px;
+  background: var(--lp-surface-subtle, var(--panel2));
+  color: var(--ss-muted);
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.staff-status-absence-settings-btn svg { width: 19px; height: 19px; }
+.staff-status-absence-settings-btn:hover {
+  color: var(--ss-accent);
+  background: var(--lp-surface-hover, var(--panel2));
+  border-color: color-mix(in srgb, var(--ss-accent) 45%, var(--ss-border));
+}
+.staff-status-absence-settings-btn:active { transform: translateY(1px); }
+.staff-status-absence-settings-btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--lp-focus, var(--ss-accent)) 35%, transparent);
+  outline-offset: 2px;
+  border-color: var(--lp-focus, var(--ss-accent));
+}
+
+.staff-status-leave-modal-card {
+  width: min(1040px, 100%);
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--ss-border);
+  background: var(--lp-surface-modal, var(--panel));
+  color: var(--ss-text);
+}
+.staff-status-leave-modal-header {
+  margin: 0;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--ss-border);
+  background: var(--lp-surface-subtle, var(--panel2));
+}
+.staff-status-leave-modal-header h2 { color: var(--ss-text); }
+.staff-status-leave-modal-header .muted { margin: 4px 0 0; color: var(--ss-muted); }
+.staff-status-leave-modal-card > [data-leave-list],
+.staff-status-leave-modal-card > .staff-status-leave-edit-form { padding: 22px 24px 24px; }
+.staff-status-leave-table {
+  --leave-list-columns: minmax(280px, 1.4fr) minmax(160px, .8fr) minmax(360px, 1.6fr) 72px;
+  margin-top: 16px;
+  border: 1px solid var(--ss-border);
+  border-radius: 12px;
+  background: var(--lp-surface-card, var(--panel));
+  overflow-x: auto;
+}
+.staff-status-leave-header,
+.staff-status-leave-row {
+  display: grid;
+  grid-template-columns: var(--leave-list-columns);
+  gap: 16px;
+  align-items: start;
+  min-width: 920px;
+  padding: 14px 16px;
+}
+.staff-status-leave-header {
+  color: var(--ss-muted);
+  background: var(--lp-table-header, var(--panel2));
+  border-bottom: 1px solid var(--ss-border);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.staff-status-leave-row {
+  color: var(--ss-text);
+  background: var(--lp-table-row, var(--panel));
+  border-bottom: 1px solid var(--ss-border);
+  line-height: 1.35;
+}
+.staff-status-leave-row:last-child { border-bottom: 0; }
+.staff-status-leave-row:hover { background: var(--lp-table-hover, var(--panel2)); }
+.staff-status-leave-table small { display: block; margin-top: 5px; color: var(--ss-muted); font-weight: 500; line-height: 1.35; }
+.staff-status-leave-employee > span,
+.staff-status-leave-employee-id { display: block; min-height: 28px; line-height: 28px; }
+.staff-status-leave-employee-id { font-weight: 650; color: var(--ss-text); }
+.staff-status-leave-summary { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
+.staff-status-leave-summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--ss-border);
+  border-radius: 999px;
+  background: var(--lp-surface-subtle, var(--panel2));
+  color: var(--ss-text);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.staff-status-leave-actions { margin: 0; padding: 0; text-align: right; }
+.staff-status-leave-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ss-muted);
+  cursor: pointer;
+}
+.staff-status-leave-edit svg { width: 18px; height: 18px; }
+.staff-status-leave-edit:hover { color: var(--ss-accent); background: var(--lp-surface-hover, var(--panel2)); border-color: var(--ss-border); }
+.staff-status-leave-edit:focus-visible { outline: 3px solid color-mix(in srgb, var(--lp-focus, var(--ss-accent)) 35%, transparent); outline-offset: 1px; color: var(--lp-focus, var(--ss-accent)); }
 .staff-status-leave-edit-form { display: grid; gap: 20px; }
 .staff-status-leave-edit-form[hidden] { display: none !important; }
-.staff-status-leave-edit-form fieldset { margin: 0; padding: 18px; border: 1px solid var(--ss-border); border-radius: 12px; }
+.staff-status-leave-edit-form fieldset { margin: 0; padding: 18px; border: 1px solid var(--ss-border); border-radius: 12px; background: var(--lp-surface-subtle, var(--panel2)); }
 .staff-status-leave-edit-form legend { padding: 0 6px; font-weight: 800; }
 .staff-status-leave-edit-heading { display: flex; align-items: flex-start; gap: 16px; }
 .staff-status-leave-edit-heading h3, .staff-status-leave-edit-heading p { margin: 0 0 4px; }
+.staff-status-leave-modal-card .modal-close { color: var(--ss-muted); border-radius: 8px; }
+.staff-status-leave-modal-card .modal-close:hover { color: var(--ss-text); background: var(--lp-surface-hover, var(--panel)); }
+.staff-status-leave-modal-card .modal-close:focus-visible { outline: 3px solid color-mix(in srgb, var(--lp-focus, var(--ss-accent)) 35%, transparent); outline-offset: 2px; }
+
+:root[data-theme="dark"] .staff-status-leave-modal-card {
+  background: #111a2d;
+  border-color: #46566f;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, .58);
+}
+:root[data-theme="dark"] #leave-balances-modal { background: var(--lp-overlay, rgba(2, 6, 15, .72)); }
+:root[data-theme="dark"] .staff-status-leave-modal-header { background: #17243a; border-color: #46566f; }
+:root[data-theme="dark"] .staff-status-leave-table { background: #0f1a2e; border-color: #46566f; }
+:root[data-theme="dark"] .staff-status-leave-header { color: #bdc8d8; background: #1a2940; border-color: #46566f; }
+:root[data-theme="dark"] .staff-status-leave-row { color: #edf3fa; background: #0f1a2e; border-color: #34465f; }
+:root[data-theme="dark"] .staff-status-leave-row:hover { background: #192941; }
+:root[data-theme="dark"] .staff-status-leave-table small { color: #b7c3d4; }
+:root[data-theme="dark"] .staff-status-leave-employee-id { color: #e6edf6; }
+:root[data-theme="dark"] .staff-status-leave-summary span { background: #1c2d47; color: #eef5ff; border-color: #4b607e; }
+:root[data-theme="dark"] .staff-status-leave-edit { color: #b9c7da; }
+:root[data-theme="dark"] .staff-status-leave-edit:hover { color: #bcd4ff; background: #223957; border-color: #526887; }
+:root[data-theme="dark"] .staff-status-leave-edit-form fieldset { background: #17243a; border-color: #46566f; }
+:root[data-theme="dark"] .staff-status-leave-modal-card .modal-close { color: #c7d2e2; }
+:root[data-theme="dark"] .staff-status-leave-modal-card .modal-close:hover { color: #ffffff; background: #223957; }
 .staff-status-confirm-layer { z-index: 10001; }
 .staff-status-confirm-layer .modal-card { width: min(440px, 100%); }
 .staff-status-confirm-layer .form-actions { justify-content: flex-end; }
@@ -1733,10 +1870,13 @@ RESPONSIVE
     width: 100%;
   }
 
-  .staff-status-leave-table thead { display: none; }
-  .staff-status-leave-table table, .staff-status-leave-table tbody, .staff-status-leave-table tr, .staff-status-leave-table td { display: block; width: 100%; }
-  .staff-status-leave-table tr { padding: 14px 0; border-bottom: 1px solid var(--ss-border); }
-  .staff-status-leave-table td { padding: 5px 0; border: 0; }
+  .staff-status-leave-header { display: none; }
+  .staff-status-leave-table { overflow: visible; }
+  .staff-status-leave-row { grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; padding: 14px; }
+  .staff-status-leave-summary { padding-top: 2px; }
+  .staff-status-leave-actions { padding-top: 2px; text-align: left; }
+  .staff-status-leave-edit { width: auto; min-width: 42px; padding: 0 10px; border-color: var(--ss-border); }
+  .staff-status-leave-modal-header, .staff-status-leave-modal-card > [data-leave-list], .staff-status-leave-modal-card > .staff-status-leave-edit-form { padding-left: 18px; padding-right: 18px; }
   .staff-status-leave-edit-form .form-grid-equal { grid-template-columns: 1fr; }
 }
 
