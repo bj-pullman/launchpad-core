@@ -493,6 +493,10 @@ def board(department_name: str):
     accessible_departments = list_accessible_departments_for_user(user_id)
     refresh_seconds = 30
     app_timezone = get_setting("general.timezone", "America/Chicago") or "America/Chicago"
+    theme = (request.args.get("theme") or "").strip().lower()
+    theme = theme if theme in {"light", "dark", "system"} else None
+    display_mode = (request.args.get("display") or "").strip().lower()
+    display_mode = display_mode if display_mode == "carousel" else None
 
     return render_template(
         "staff_status/board.html",
@@ -1166,6 +1170,8 @@ def board_public(token: str):
         board_token=token,
         app_timezone=app_timezone,
         stream_url=url_for("staff_status.board_public_stream", token=token),
+        public_theme_override=theme,
+        public_display_mode=display_mode,
     )
     
 @bp.route("/board/<token>/stream")

@@ -11,6 +11,10 @@ function normalizeStaffStatusPublicTheme(preference) {
 }
 
 function getStoredTheme() {
+  const override = window.STAFF_STATUS_PUBLIC_THEME_OVERRIDE;
+  if (STAFF_STATUS_PUBLIC_THEMES.has(override)) {
+    return override;
+  }
   try {
     return normalizeStaffStatusPublicTheme(
       window.localStorage.getItem(STAFF_STATUS_PUBLIC_THEME_KEY)

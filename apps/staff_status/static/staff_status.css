@@ -32,6 +32,41 @@
   --ss-focus-ring: rgba(37, 99, 235, 0.22);
 }
 
+/* Explicit compact embedding mode used by the Technology Display carousel. */
+.staff-status-board-body.display-carousel { margin: 0; }
+.display-carousel .staff-status-board-shell {
+  width: 100%; max-width: none; min-height: 100vh; margin: 0; padding: 12px 14px;
+}
+.display-carousel .staff-status-board-header {
+  grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-bottom: 10px;
+}
+.display-carousel .staff-status-eyebrow,
+.display-carousel .staff-status-board-subtitle,
+.display-carousel .staff-status-board-refresh,
+.display-carousel .staff-status-board-date { display: none; }
+.display-carousel .staff-status-board-header h1 {
+  margin: 0; font-size: clamp(1.55rem, 3.4vw, 2rem); line-height: 1.08; overflow-wrap: anywhere;
+}
+.display-carousel .staff-status-board-meta {
+  min-width: 0; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; text-align: right;
+}
+.display-carousel .staff-status-board-datetime { align-items: flex-end; margin: 0; }
+.display-carousel .staff-status-board-time { font-size: 1rem; line-height: 1; white-space: nowrap; }
+.display-carousel .staff-status-board-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.display-carousel .staff-status-board-row {
+  grid-template-columns: minmax(0, 1fr); align-content: start; gap: 5px; min-width: 0;
+  padding: 12px 14px; border-radius: 13px; box-shadow: 0 4px 14px rgba(15, 23, 42, .07);
+}
+.display-carousel .staff-status-board-name { min-width: 0; font-size: 1.2rem; line-height: 1.15; overflow-wrap: anywhere; }
+.display-carousel .staff-status-board-status {
+  max-width: 100%; padding: 4px 8px; font-size: .95rem; line-height: 1.2; white-space: normal; overflow-wrap: anywhere;
+}
+.display-carousel .staff-status-board-updated { font-size: .8rem; line-height: 1.25; text-align: left; }
+.display-carousel .staff-status-board-empty { grid-column: 1 / -1; padding: 28px 18px; }
+@media (max-width: 560px) {
+  .display-carousel .staff-status-board-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 :root[data-theme] {
   --ss-bg: var(--lp-bg-page);
   --ss-panel: var(--lp-surface-card);
@@ -62,6 +97,13 @@
   --ss-error-border: #854052;
   --ss-warning-border: #785f27;
   --ss-focus-ring: rgba(122, 162, 255, 0.3);
+}
+
+:root[data-theme="dark"] .staff-status-kiosk-body,
+:root[data-theme="dark"] .staff-status-board-body,
+:root[data-theme="dark"] .staff-status-private-board-wrap {
+  --ss-text: #f1f5f9;
+  --ss-muted: #c3cfde;
 }
 
 * {
@@ -735,18 +777,18 @@ BOARD VIEW
 
 .staff-status-board-status {
   justify-self: start;
-  padding: 8px 12px;
-  border: 1px solid var(--ss-info-border);
-  border-radius: 999px;
-  background: var(--ss-info-bg);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--ss-info-text);
 }
 
 .staff-status-board-status.out {
-  border-color: var(--ss-warning-border);
-  background: var(--ss-warning-bg);
+  border: 0;
+  background: transparent;
   color: var(--ss-warning-text);
 }
 
@@ -2127,7 +2169,7 @@ PUBLIC BOARD RESPONSIVE
 
   .staff-status-board-status {
     max-width: 100%;
-    padding: 4px 8px;
+    padding: 0;
     font-size: .95rem;
     line-height: 1.2;
     white-space: normal;

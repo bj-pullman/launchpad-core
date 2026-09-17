@@ -1419,6 +1419,28 @@ class StaffStatusServiceTests(unittest.TestCase):
             self.assertNotIn('launchpad-theme-url', html)
             self.assertLess(html.index('staff_status_public_theme'), html.index('staff_status.css'))
 
+    def test_public_board_accepts_valid_theme_and_carousel_parameters(self):
+        board_token = staff_status_service.rotate_board_token("Technology")["board_token"]
+        app = self.make_route_app()
+        with app.test_client() as client:
+            response = client.get(
+                f"/staff-status/board/{board_token}?theme=dark&display=carousel"
+            )
+            invalid = client.get(
+                f"/staff-status/board/{board_token}?theme=invalid&display=invalid"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('const override = "dark";', html)
+        self.assertIn('class="staff-status-board-body display-carousel"', html)
+        self.assertNotIn('data-public-theme-control', html)
+
+        invalid_html = invalid.get_data(as_text=True)
+        self.assertIn('const override = null;', invalid_html)
+        self.assertIn('class="staff-status-board-body"', invalid_html)
+        self.assertIn('data-public-theme-control', invalid_html)
+
 
 if __name__ == "__main__":
     unittest.main()

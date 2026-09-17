@@ -12,7 +12,7 @@
     href="{{ url_for('staff_status.static', filename='staff_status.css') }}"
   >
 </head>
-<body class="staff-status-board-body">
+<body class="staff-status-board-body{% if public_display_mode == 'carousel' %} display-carousel{% endif %}">
   <main class="staff-status-board-shell">
     <header class="staff-status-board-header">
       <div>
@@ -22,7 +22,9 @@
       </div>
 
       <div class="staff-status-board-meta">
+        {% if public_display_mode != 'carousel' %}
         {% include "staff_status/_public_theme_control.html" %}
+        {% endif %}
         <div class="staff-status-board-datetime">
           <div id="staff-status-board-date" class="staff-status-board-date">—</div>
           <div id="staff-status-board-time" class="staff-status-board-time">—</div>
