@@ -1161,6 +1161,10 @@ def board_public(token: str):
     department_name = department["department_name"]
     refresh_seconds = 30
     app_timezone = get_setting("general.timezone", "America/Chicago") or "America/Chicago"
+    theme = (request.args.get("theme") or "").strip().lower()
+    theme = theme if theme in {"light", "dark", "system"} else None
+    display_mode = (request.args.get("display") or "").strip().lower()
+    display_mode = display_mode if display_mode == "carousel" else None
 
     return render_template(
         "staff_status/board_public.html",
