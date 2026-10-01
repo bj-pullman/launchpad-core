@@ -987,7 +987,7 @@ def monthly_leave_forms(department_name: str):
         )
         abort(503, description="The canonical monthly Employee Leave Form is unavailable. Verify the server template and try again.")
     if result["employee_count"] == 0:
-        flash("No Sick, Personal, or Vacation absences were found for the selected month.", "warning")
+        flash("No active employees were found for the selected department.", "warning")
         return redirect(url_for("staff_status.absences", department_name=department_name))
     return send_file(
         result["path"], mimetype="application/zip", as_attachment=True,

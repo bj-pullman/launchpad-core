@@ -1036,6 +1036,10 @@ class StaffStatusServiceTests(unittest.TestCase):
         pdf_bytes = attachment_path.read_bytes()
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertTrue(attachment_path.resolve().is_relative_to(staff_status_service.LEAVE_FORM_DIR.resolve()))
+        self.assertEqual(
+            attachment_path.parent.resolve(),
+            (staff_status_service.LEAVE_FORM_DIR / "2026" / "09").resolve(),
+        )
         pdf_text = PdfReader(str(attachment_path)).pages[0].extract_text()
         self.assertIn("Tech User", pdf_text)
         self.assertIn("VACATION / PERSONAL REQUEST FORM", pdf_text)
@@ -1048,12 +1052,32 @@ class StaffStatusServiceTests(unittest.TestCase):
         self.assertEqual(saved["leave_days_used"], 1.0)
         self.assertEqual(saved["leave_balance_before"], 3.0)
         self.assertEqual(saved["leave_balance_after"], 2.0)
+        self.assertEqual(Path(saved["leave_form_path"]).resolve(), attachment_path.resolve())
+        self.assertEqual(saved["leave_form_filename"], attachment_path.name)
+        self.assertIsNotNone(saved["leave_form_generated_at"])
         ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
         self.assertEqual(sum(row["transaction_type"] == "absence_deduction" for row in ledger), 1)
         send_mail.reset_mock()
-        regenerated = staff_status_service.generate_vacation_personal_request_form(absence["id"], force=True)
+        with patch.object(staff_status_service, "fill_vacation_personal_request_form") as fill_form:
+            cached = staff_status_service.generate_vacation_personal_request_form(absence["id"])
+        fill_form.assert_not_called()
+        self.assertEqual(cached["path"], attachment_path.resolve())
+        original_generated_at = cached["generated_at"]
+        with patch.object(
+            staff_status_service,
+            "fill_vacation_personal_request_form",
+            wraps=staff_status_service.fill_vacation_personal_request_form,
+        ) as fill_form:
+            regenerated = staff_status_service.generate_vacation_personal_request_form(absence["id"], force=True)
+        fill_form.assert_called_once()
         self.assertEqual(regenerated["path"].name, attachment_path.name)
         self.assertTrue(regenerated["path"].resolve().is_relative_to(staff_status_service.LEAVE_FORM_DIR.resolve()))
+        self.assertNotEqual(regenerated["generated_at"], original_generated_at)
+        regenerated_absence = staff_status_service.get_absence_by_id(absence["id"])
+        self.assertEqual(Path(regenerated_absence["leave_form_path"]).resolve(), regenerated["path"].resolve())
+        self.assertEqual(regenerated_absence["leave_form_filename"], regenerated["filename"])
+        self.assertEqual(regenerated_absence["leave_form_generated_at"], regenerated["generated_at"])
+        self.assertTrue(regenerated["path"].is_file())
         send_mail.assert_not_called()
         ledger = staff_status_service.list_leave_ledger_for_user(self.tech_user["id"])
         self.assertEqual(sum(row["transaction_type"] == "absence_deduction" for row in ledger), 1)
@@ -1219,6 +1243,11 @@ class StaffStatusServiceTests(unittest.TestCase):
         )
         self.assertEqual(result["employee_count"], 2)
         self.assertTrue(result["path"].resolve().is_relative_to(staff_status_service.MONTHLY_LEAVE_FORM_DIR.resolve()))
+        self.assertTrue(result["path"].is_file())
+        self.assertEqual(len(result["forms"]), 2)
+        self.assertTrue(all(form["path"].is_file() for form in result["forms"]))
+        self.assertEqual(len(result["path"].parent.name), 16)
+        self.assertEqual(result["path"].parent.parent.name, "2026-09")
         with zipfile.ZipFile(result["path"]) as archive:
             names = archive.namelist()
             self.assertEqual(len(names), 2)
@@ -1237,6 +1266,148 @@ class StaffStatusServiceTests(unittest.TestCase):
         for user_id in (self.tech_user["id"], self.admin_user["id"]):
             self.assertEqual(staff_status_service.get_employee_leave_profile(user_id)["balances"], balances_before[user_id])
             self.assertEqual(len(staff_status_service.list_leave_ledger_for_user(user_id)), ledger_before[user_id])
+
+    def test_monthly_leave_forms_include_zero_day_employees_and_exclude_inactive_employees(self):
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="OLD-42",
+            balances={"sick": 10, "personal": 5, "vacation": 8},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.admin_user["id"], department_name="Technology", employee_number="EMP-99",
+            balances={"sick": 10, "personal": 5, "vacation": 8},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        former_user = user_service.create_user({
+            "email": "former@example.test", "display_name": "Former User",
+            "department": "Technology", "is_active": 1,
+        })
+        staff_status_service.save_employee_leave_profile(
+            user_id=former_user["id"], department_name="Technology", employee_number="FORMER-1",
+            balances={"sick": 5, "personal": 5, "vacation": 5},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        with patch.object(staff_status_service, "send_mail"):
+            staff_status_service.create_absence(
+                user_id=self.tech_user["id"], department_name="Technology", absence_type="sick",
+                start_date="2026-09-03", end_date="2026-09-03", duration_mode="full_day",
+                days_value=1, note="", created_by_user_id=self.admin_user["id"],
+                created_by_display_name="Manager User", idempotency_key="zero-day-active",
+            )
+            staff_status_service.create_absence(
+                user_id=former_user["id"], department_name="Technology", absence_type="vacation",
+                start_date="2026-09-04", end_date="2026-09-04", duration_mode="full_day",
+                days_value=1, note="", created_by_user_id=self.admin_user["id"],
+                created_by_display_name="Manager User", idempotency_key="inactive-monthly",
+            )
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="CURRENT-42",
+            balances={"sick": 9, "personal": 5, "vacation": 8},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        with identity_db.get_connection() as conn:
+            conn.execute("UPDATE users SET is_active = 0 WHERE id = ?", (former_user["id"],))
+            conn.commit()
+
+        with patch.object(
+            staff_status_service,
+            "fill_monthly_employee_leave_form",
+            wraps=staff_status_service.fill_monthly_employee_leave_form,
+        ) as fill_form:
+            result = staff_status_service.generate_monthly_employee_leave_forms(
+                department_name="Technology", month_value="2026-09"
+            )
+
+        self.assertEqual(result["employee_count"], 2)
+        values_by_name = {
+            call.kwargs["employee_name"]: call.kwargs
+            for call in fill_form.call_args_list
+        }
+        self.assertEqual(set(values_by_name), {"Tech User", "Manager User"})
+        self.assertEqual(values_by_name["Tech User"]["employee_number"], "CURRENT-42")
+        self.assertEqual(values_by_name["Tech User"]["total_days_absent"], "1")
+        self.assertEqual(values_by_name["Tech User"]["classification_dates"]["sick"], "September 3")
+        self.assertEqual(values_by_name["Manager User"]["employee_number"], "EMP-99")
+        self.assertEqual(values_by_name["Manager User"]["total_days_absent"], "0")
+        self.assertEqual(
+            values_by_name["Manager User"]["classification_dates"],
+            {"sick": "", "personal": "", "vacation": ""},
+        )
+        self.assertTrue(result["path"].is_file())
+        self.assertTrue(all(form["path"].is_file() for form in result["forms"]))
+        with zipfile.ZipFile(result["path"]) as archive:
+            self.assertEqual(len(archive.namelist()), 2)
+            self.assertFalse(any("Former-User" in name for name in archive.namelist()))
+        manager_form = next(form["path"] for form in result["forms"] if "Manager-User" in form["filename"])
+        manager_text = PdfReader(str(manager_form)).pages[0].extract_text()
+        self.assertIn("EMP-99", manager_text)
+
+    def test_monthly_leave_forms_generate_for_completely_clean_month(self):
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="EMP-42",
+            balances={"sick": 0, "personal": 0, "vacation": 0},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.admin_user["id"], department_name="Technology", employee_number="EMP-99",
+            balances={"sick": 0, "personal": 0, "vacation": 0},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        with patch.object(
+            staff_status_service,
+            "fill_monthly_employee_leave_form",
+            wraps=staff_status_service.fill_monthly_employee_leave_form,
+        ) as fill_form:
+            result = staff_status_service.generate_monthly_employee_leave_forms(
+                department_name="Technology", month_value="2026-11"
+            )
+
+        self.assertEqual(result["employee_count"], 2)
+        self.assertTrue(result["path"].is_file())
+        self.assertTrue(all(form["path"].is_file() for form in result["forms"]))
+        self.assertEqual(len(fill_form.call_args_list), 2)
+        for call in fill_form.call_args_list:
+            self.assertEqual(call.kwargs["total_days_absent"], "0")
+            self.assertEqual(
+                call.kwargs["classification_dates"],
+                {"sick": "", "personal": "", "vacation": ""},
+            )
+        with zipfile.ZipFile(result["path"]) as archive:
+            self.assertEqual(len(archive.namelist()), 2)
+
+    def test_monthly_leave_form_uses_snapshot_only_when_profile_number_is_blank(self):
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="HISTORICAL-42",
+            balances={"sick": 2, "personal": 0, "vacation": 0},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+        with patch.object(staff_status_service, "send_mail"):
+            staff_status_service.create_absence(
+                user_id=self.tech_user["id"], department_name="Technology", absence_type="sick",
+                start_date="2026-09-10", end_date="2026-09-10", duration_mode="full_day",
+                days_value=1, note="", created_by_user_id=self.admin_user["id"],
+                created_by_display_name="Manager User", idempotency_key="snapshot-fallback",
+            )
+        staff_status_service.save_employee_leave_profile(
+            user_id=self.tech_user["id"], department_name="Technology", employee_number="",
+            balances={"sick": 1, "personal": 0, "vacation": 0},
+            actor_user_id=self.admin_user["id"], actor_display_name="Manager User",
+        )
+
+        with patch.object(
+            staff_status_service,
+            "fill_monthly_employee_leave_form",
+            wraps=staff_status_service.fill_monthly_employee_leave_form,
+        ) as fill_form:
+            staff_status_service.generate_monthly_employee_leave_forms(
+                department_name="Technology", month_value="2026-09"
+            )
+
+        tech_call = next(
+            call for call in fill_form.call_args_list
+            if call.kwargs["employee_name"] == "Tech User"
+        )
+        self.assertEqual(tech_call.kwargs["employee_number"], "HISTORICAL-42")
 
     def test_approved_request_negative_balance_is_snapshotted_and_idempotent(self):
         staff_status_service.save_employee_leave_profile(
@@ -1323,11 +1494,14 @@ class StaffStatusServiceTests(unittest.TestCase):
                 session["user_permissions"] = [
                     "staff_status.view", "staff_status.operator", "staff_status.admin"
                 ]
-            empty = client.post(
+            clean_month = client.post(
                 "/staff-status/Technology/absences/monthly-leave-forms",
                 data={"month": "2026-09"},
             )
-        self.assertEqual(empty.status_code, 302)
+        self.assertEqual(clean_month.status_code, 200)
+        self.assertEqual(clean_month.mimetype, "application/zip")
+        self.assertTrue(clean_month.data.startswith(b"PK"))
+        self.assertIn("attachment", clean_month.headers["Content-Disposition"])
 
     def test_leave_balances_modal_uses_custom_unsaved_change_confirmation(self):
         template = (PROJECT_ROOT / "apps" / "staff_status" / "templates" / "staff_status" / "absences.html").read_text(encoding="utf-8")

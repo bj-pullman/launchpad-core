@@ -1337,9 +1337,11 @@ def generate_vacation_personal_request_form(absence_id: int, *, force: bool = Fa
         raise StaffStatusValidationError("Only Personal and Vacation absences have an individual request form.")
     user = get_user_by_id(absence["user_id"]) or {}
     employee_name = build_display_name(user) if user else f"User {absence['user_id']}"
-    LEAVE_FORM_DIR.mkdir(parents=True, exist_ok=True)
+    archive_date = parse_iso_date(absence.get("start_date")) or date.today()
+    archive_dir = LEAVE_FORM_DIR / archive_date.strftime("%Y") / archive_date.strftime("%m")
+    archive_dir.mkdir(parents=True, exist_ok=True)
     filename = f"vacation-personal-request-form-{absence_id}.pdf"
-    path = LEAVE_FORM_DIR / filename
+    path = archive_dir / filename
     date_label = _leave_form_date_label(absence["start_date"], absence["end_date"])
     start_date = parse_iso_date(absence.get("start_date")) or date.today()
     created_at = absence.get("created_at") or ""
@@ -1410,6 +1412,19 @@ def generate_monthly_employee_leave_forms(*, department_name: str, month_value: 
         raise StaffStatusValidationError("Choose a valid month for monthly leave forms.") from exc
     month_start = selected_month.replace(day=1)
     month_end = selected_month.replace(day=calendar.monthrange(selected_month.year, selected_month.month)[1])
+    active_users = list_active_users_for_department(department_name)
+    grouped: dict[int, dict] = {}
+    for user in active_users:
+        user_id = int(user["id"])
+        profile = get_employee_leave_profile(user_id)
+        grouped[user_id] = {
+            "user_id": user_id,
+            "employee_number": profile["employee_number"],
+            "employee_name": user["resolved_display_name"],
+            "total_days": 0.0,
+            "dates": {"sick": [], "personal": [], "vacation": []},
+        }
+
     with get_connection() as conn:
         rows = [dict(row) for row in conn.execute(
             """
@@ -1422,16 +1437,13 @@ def generate_monthly_employee_leave_forms(*, department_name: str, month_value: 
             (department_name, month_end.isoformat(), month_start.isoformat()),
         ).fetchall()]
 
-    grouped: dict[int, dict] = {}
     for absence in rows:
         user_id = int(absence["user_id"])
-        user = get_user_by_id(user_id) or {}
-        group = grouped.setdefault(user_id, {
-            "employee_number": absence.get("employee_number_snapshot") or "",
-            "employee_name": build_display_name(user) if user else f"User {user_id}",
-            "total_days": 0.0,
-            "dates": {"sick": [], "personal": [], "vacation": []},
-        })
+        group = grouped.get(user_id)
+        if group is None:
+            continue
+        if not group["employee_number"] and absence.get("employee_number_snapshot"):
+            group["employee_number"] = absence["employee_number_snapshot"]
         leave_type = (absence.get("leave_type") or absence.get("absence_type") or "").lower()
         group["total_days"] += float(
             absence["leave_days_used"] if absence.get("leave_days_used") is not None
@@ -1451,11 +1463,19 @@ def generate_monthly_employee_leave_forms(*, department_name: str, month_value: 
     run_dir = MONTHLY_LEAVE_FORM_DIR / month_start.strftime("%Y-%m") / run_token
     run_dir.mkdir(parents=True, exist_ok=True)
     generated_forms = []
+    used_filenames: set[str] = set()
     for group in grouped.values():
         filename = (
             f"{month_start.strftime('%Y-%m')}_"
             f"{_safe_form_filename_part(group['employee_name'])}_Employee-Leave-Form.pdf"
         )
+        if filename.casefold() in used_filenames:
+            filename = (
+                f"{month_start.strftime('%Y-%m')}_"
+                f"{_safe_form_filename_part(group['employee_name'])}-{group['user_id']}_"
+                "Employee-Leave-Form.pdf"
+            )
+        used_filenames.add(filename.casefold())
         output_path = run_dir / filename
         fill_monthly_employee_leave_form(
             template_path=LEAVE_FORM_TEMPLATE_PATH,
