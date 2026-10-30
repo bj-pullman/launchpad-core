@@ -22,6 +22,9 @@ let studentCheckoutStatusFilter = "active";
 let studentCheckoutScopeFilter = "mine";
 let studentCheckoutSearchQuery = "";
 let pendingReturnCheckout = null;
+let pendingExtendCheckout = null;
+let extendingCheckout = false;
+let extendCheckoutTrigger = null;
 let studentCheckoutScopeInitialized = false;
 let assetCatalogQuery = "";
 let assetCatalogPage = 1;
@@ -132,6 +135,7 @@ async function apiPost(path, body, fallbackMessage) {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
+            "X-CSRF-Token": document.querySelector('meta[name="launchpad-csrf"]')?.content || "",
             "Accept": "application/json"
         },
         body: JSON.stringify(body || {})
@@ -160,6 +164,7 @@ async function initMediaCatalog() {
     bindStudentCheckoutModal();
     bindStudentCheckoutsPage();
     bindReturnStudentCheckoutModal();
+    bindExtendStudentCheckoutModal();
     hydrateActivityTimes();
     initManagedDeviceTotals();
 
@@ -1016,10 +1021,8 @@ function renderDashboardAttention(data) {
                 );
 
             return `
-                <button
+                <div
                     class="dashboard-attention-item priority"
-                    type="button"
-                    data-dashboard-overdue-checkout
                 >
                     <span>
                         ${escapeHtml(
@@ -1029,13 +1032,13 @@ function renderDashboardAttention(data) {
                         )}
                     </span>
 
-                    <div>
+                    <button type="button" class="dashboard-attention-details" data-dashboard-overdue-checkout>
                         <strong>
                             ${escapeHtml(device)}
                             · ${escapeHtml(student)}
                         </strong>
 
-                        <p>
+                        <span class="dashboard-attention-description">
                             ${
                                 cart
                                     ? `Cart ${escapeHtml(cart)} · `
@@ -1047,9 +1050,12 @@ function renderDashboardAttention(data) {
                                     ? ` · ${escapeHtml(daysOverdue)} day${daysOverdue === 1 ? "" : "s"} overdue`
                                     : ""
                             }
-                        </p>
-                    </div>
-                </button>
+                        </span>
+                    </button>
+                    ${window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS && checkout.status !== "returned" ? `
+                        <button type="button" class="mini-btn" data-dashboard-extend-checkout-id="${escapeHtml(checkout.id)}">Extend Due Date</button>
+                    ` : ""}
+                </div>
             `;
         })
         .join("");
@@ -1106,6 +1112,12 @@ function renderDashboardAttention(data) {
                 }
             );
         });
+    el.querySelectorAll("[data-dashboard-extend-checkout-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const checkout = overdueCheckouts.find(item => String(item.id) === btn.dataset.dashboardExtendCheckoutId);
+            if (checkout) openExtendStudentCheckoutModal(checkout, btn);
+        });
+    });
 }
 
 function renderDashboardCarts(carts) {
@@ -3805,6 +3817,10 @@ function renderStudentCheckouts(checkouts) {
                                     >
                                         Return
                                     </button>
+                                    <button class="mini-btn" type="button"
+                                        data-extend-checkout-id="${escapeHtml(checkout.id)}">
+                                        Extend Due Date
+                                    </button>
                                 `
                                 : ""
                         }
@@ -3836,6 +3852,13 @@ function renderStudentCheckouts(checkouts) {
                 }
             });
         });
+
+    tbody.querySelectorAll("[data-extend-checkout-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const checkout = studentCheckoutsCache.find(item => String(item.id) === btn.dataset.extendCheckoutId);
+            if (checkout) openExtendStudentCheckoutModal(checkout, btn);
+        });
+    });
 
     tbody
         .querySelectorAll(
@@ -4182,6 +4205,95 @@ async function completeStudentCheckout() {
             btn.textContent = "Complete Checkout";
             updateStudentCheckoutSubmitState();
         }
+    }
+}
+
+function bindExtendStudentCheckoutModal() {
+    if (!window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS) return;
+    $("closeExtendStudentCheckoutBtn")?.addEventListener("click", closeExtendStudentCheckoutModal);
+    $("cancelExtendStudentCheckoutBtn")?.addEventListener("click", closeExtendStudentCheckoutModal);
+    $("extendStudentCheckoutForm")?.addEventListener("submit", event => {
+        event.preventDefault();
+        confirmExtendStudentCheckout();
+    });
+    $("extendStudentCheckoutModal")?.addEventListener("click", event => {
+        if (event.target.id === "extendStudentCheckoutModal") closeExtendStudentCheckoutModal();
+    });
+    $("extendStudentCheckoutModal")?.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeExtendStudentCheckoutModal();
+    });
+}
+
+function openExtendStudentCheckoutModal(checkout, trigger = null) {
+    if (extendingCheckout || !window.MEDIA_CATALOG_CAN_MANAGE_STUDENT_CHECKOUTS || checkout.status === "returned") return;
+    pendingExtendCheckout = checkout;
+    extendCheckoutTrigger = trigger;
+    $("extendStudentCheckoutBody").innerHTML = renderDetailCard([
+        ["Device", checkout.device_asset_tag || checkout.device_serial || "Device"],
+        ["Student", checkout.student_name || "-"],
+        ["Current Return By", checkout.return_by_date || "-"]
+    ]);
+    const input = $("extendStudentCheckoutReturnBy");
+    input.min = checkout.extension_min_date || "";
+    input.value = checkout.extension_default_date || "";
+    setExtendStudentCheckoutStatus("");
+    $("extendStudentCheckoutModal").classList.remove("hidden");
+    input.focus();
+}
+
+function closeExtendStudentCheckoutModal() {
+    if (extendingCheckout) return;
+    pendingExtendCheckout = null;
+    $("extendStudentCheckoutModal")?.classList.add("hidden");
+    if (extendCheckoutTrigger?.isConnected) extendCheckoutTrigger.focus();
+    extendCheckoutTrigger = null;
+}
+
+function setExtendStudentCheckoutStatus(message, ok = true) {
+    const el = $("extendStudentCheckoutStatus");
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle("hidden", !message);
+    el.classList.toggle("ok", ok);
+    el.classList.toggle("bad", !ok);
+}
+
+async function confirmExtendStudentCheckout() {
+    const checkout = pendingExtendCheckout;
+    if (!checkout || extendingCheckout) return;
+    const form = $("extendStudentCheckoutForm");
+    if (!form.reportValidity()) return;
+    const input = $("extendStudentCheckoutReturnBy");
+    if (input.value <= checkout.return_by_date) {
+        setExtendStudentCheckoutStatus("Choose a date later than the current Return By date.", false);
+        return;
+    }
+    extendingCheckout = true;
+    const button = $("confirmExtendStudentCheckoutBtn");
+    button.disabled = true;
+    button.textContent = "Extending...";
+    input.disabled = true;
+    setExtendStudentCheckoutStatus("Saving the new Return By date...");
+    let saved = false;
+    try {
+        const data = await apiPost(`/api/student-checkouts/${checkout.id}/extend`, {
+            return_by_date: input.value,
+            expected_return_by_date: checkout.return_by_date
+        }, "Unable to extend checkout.");
+        saved = true;
+        extendingCheckout = false;
+        closeExtendStudentCheckoutModal();
+        extendingCheckout = true;
+        await refreshStudentCheckoutDependentViews();
+        setStatus(data.message || "Checkout extended.", true);
+    } catch (err) {
+        if (saved) setStatus("Checkout extended, but the view could not refresh. Reload to see the updated due date.", false);
+        else setExtendStudentCheckoutStatus(err.message || "Unable to extend checkout.", false);
+    } finally {
+        extendingCheckout = false;
+        input.disabled = false;
+        button.disabled = false;
+        button.textContent = "Extend Due Date";
     }
 }
 

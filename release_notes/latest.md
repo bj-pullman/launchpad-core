@@ -1,5 +1,26 @@
 # Launchpad Update Notes
 
+## Media Catalog Checkout Extensions
+
+- Added Extend Due Date for active and overdue Student Checkouts and Dashboard Needs Attention entries.
+- Choose a later Return By date without returning or recreating the checkout.
+- Extensions preserve cart ownership restrictions and record the previous date, new date, and actor in the audit log.
+- Checkout and overdue counts refresh after saving. No schema change is required.
+
+## Ledger Import Review Improvements
+
+- Compact Ledger-style review table with server-side filtering and 10/25/50/100-row pagination.
+- All active department Finance Records appear when opening the selector; search narrows the full list without loading additional pages.
+- Review actions update the table and counts in place, preserving filters and the current page when possible.
+- Concurrent changes are detected before saving a stale review action.
+- Future imports preserve original results and transaction membership in the existing import-run notes field.
+- Original import results are separate from current unresolved counts; unavailable legacy figures are explicitly labeled.
+- Review Unlinked Transactions appears beside Import Ledger with the unresolved count.
+- Both Ledger tables use seven readable columns, normalized dates, and visible Link Record / Create Record actions with Finance-style dialogs.
+- Review and Import actions are right-aligned; Back to Ledger uses the existing chevron button style below the navigation.
+- Imports reconcile earlier payments after later original encumbrances create their Records, eliminating source-order-dependent missed links.
+- No database schema or configuration change is required.
+
 ## System Maintenance Update
 
 > Adds safer update handling, manual backup support, and a more user-friendly update screen.

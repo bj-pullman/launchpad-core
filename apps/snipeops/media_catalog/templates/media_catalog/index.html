@@ -893,6 +893,29 @@
     </div>
 </div>
 
+<div id="extendStudentCheckoutModal" class="media-modal hidden" role="dialog" aria-modal="true" aria-labelledby="extendStudentCheckoutTitle">
+    <form id="extendStudentCheckoutForm" class="media-modal-card student-checkout-modal-card">
+        <div class="modal-head">
+            <div>
+                <p class="media-eyebrow">Student Checkout</p>
+                <h2 id="extendStudentCheckoutTitle">Extend Due Date</h2>
+                <p class="muted">Choose a later Return By date for this device.</p>
+            </div>
+            <button id="closeExtendStudentCheckoutBtn" class="mini-btn" type="button">Close</button>
+        </div>
+        <div id="extendStudentCheckoutBody" class="device-detail-body"></div>
+        <div class="form-card">
+            <label class="media-label" for="extendStudentCheckoutReturnBy">New Return By date</label>
+            <input id="extendStudentCheckoutReturnBy" class="media-input" type="date" required>
+        </div>
+        <div id="extendStudentCheckoutStatus" class="media-status hidden" role="status" aria-live="polite"></div>
+        <div class="media-modal-actions">
+            <button id="cancelExtendStudentCheckoutBtn" class="media-btn ghost" type="button">Cancel</button>
+            <button id="confirmExtendStudentCheckoutBtn" class="media-btn primary-action" type="submit">Extend Due Date</button>
+        </div>
+    </form>
+</div>
+
 <div id="returnStudentCheckoutModal" class="media-modal hidden" role="dialog" aria-modal="true">
     <div class="media-modal-card device-detail-card">
         <div class="modal-head">

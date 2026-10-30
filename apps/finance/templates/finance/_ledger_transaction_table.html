@@ -1,0 +1,62 @@
+{% if transactions %}
+<div class="table-wrap ledger-table-scroll" tabindex="0" role="region" aria-label="Ledger transactions">
+  <table class="data-table ledger-transaction-table">
+    <colgroup><col class="ledger-col-fy"><col class="ledger-col-date"><col class="ledger-col-description"><col class="ledger-col-po"><col class="ledger-col-money"><col class="ledger-col-money"><col class="ledger-col-actions"></colgroup>
+    <thead><tr>
+      <th scope="col">FY</th><th scope="col">Date</th><th scope="col">Vendor / Description</th>
+      <th scope="col">PO</th><th scope="col" class="ledger-money">Paid</th><th scope="col" class="ledger-money">Encumbrance</th><th scope="col">Actions</th>
+    </tr></thead>
+    <tbody>
+      {% for item in transactions %}
+      <tr data-review-row="{{ item.id }}">
+        <td class="ledger-nowrap">{{ item.fiscal_year_code or '—' }}</td>
+        <td class="ledger-nowrap">{{ item.purchase_date|ledger_date }}</td>
+        <td class="ledger-description">
+          <a class="ledger-description-link" href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">
+            <strong>{{ item.vendor_friendly_name or item.vendor_name or item.matched_vendor_name or 'No vendor' }}</strong>
+            <span>{{ item.description or item.title or 'Ledger transaction' }}</span>
+          </a>
+          <div class="ledger-record-context">
+            {% if item.linked_record_id %}
+              <span class="finance-pill">Linked</span>
+              <a href="{{ url_for('finance.record_detail', record_id=item.linked_record_id) }}">{{ item.linked_record_title or 'Record #' ~ item.linked_record_id }}</a>
+            {% elif item.review_status in ['ignored', 'reviewed'] %}
+              <span class="finance-pill finance-pill-muted">{{ item.review_status|title }}</span>
+            {% elif item.confidence|default(0) %}<span class="finance-pill">Possible match</span>
+            {% else %}<span class="finance-meta">Unlinked</span>{% endif %}
+          </div>
+        </td>
+        <td class="ledger-nowrap">{{ item.po_number or '—' }}</td>
+        <td class="ledger-money">{{ item.expenditure_amount|currency }}</td>
+        <td class="ledger-money">{{ item.encumbrance_amount|currency }}</td>
+        <td>
+          {% if can_manage and not item.linked_record_id and item.archive_status == 'active' %}
+          {% set transaction = dict(id=item.id, version=item.updated_at,
+              label=item.description or item.title or 'Ledger transaction',
+              vendor=item.vendor_friendly_name or item.vendor_name or item.matched_vendor_name or 'No vendor',
+              po=item.po_number or '—', date=item.purchase_date|ledger_date,
+              suggested=item.suggested_name|default(''), reason=item.match_reason|default('')) %}
+          <div class="ledger-row-actions">
+            <button type="button" class="btn btn-secondary" data-ledger-open="link" data-transaction="{{ transaction|tojson|forceescape }}">Link Record</button>
+            <button type="button" class="btn btn-primary" data-ledger-open="create" data-transaction="{{ transaction|tojson|forceescape }}">Create Record</button>
+            {% if review_mode and item.review_status not in ['ignored', 'reviewed'] %}
+            <details class="ledger-review-options">
+              <summary>Review options</summary>
+              <form method="post" action="{{ current_url }}" data-review-action>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="ledger_id" value="{{ item.id }}">
+                <input type="hidden" name="row_version" value="{{ item.updated_at }}">
+                <button class="btn btn-ghost" name="action" value="ignore">Ignore</button>
+                <button class="btn btn-ghost" name="action" value="reviewed">Mark Reviewed</button>
+              </form>
+            </details>
+            {% endif %}
+          </div>
+          {% else %}<a class="btn btn-ghost" href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">View</a>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}<div class="finance-empty"><h3>No matching transactions</h3><p>There are no transactions matching the current scope and filters.</p></div>{% endif %}

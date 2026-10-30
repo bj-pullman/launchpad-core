@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import abort, flash, redirect, render_template, request, session, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
 
 from modules.core.auth.decorators import login_required
 
@@ -10,6 +10,7 @@ from .derived_totals_service import rebuild_department_totals
 from .fiscal_year_service import list_fiscal_years
 from .ledger_budget_overview_service import get_ledger_budget_page_context
 from .ledger_import_service import execute_ledger_import
+from .ledger_review_service import review_counts, record_choices
 from .ledger_query_service import (
     get_budget_account_detail,
     get_ledger_transaction_detail,
@@ -237,13 +238,13 @@ def ledger(department_name: str):
         per_page=100,
     )
 
-    return render_template(
-        "finance/ledger.html",
+    context = dict(
         department_name=department_name,
         record_id=request.args.get("record_id", type=int),
         active_tab="ledger",
         ledger_page=ledger_page,
         ledgers=ledger_page["rows"],
+        unresolved_count=review_counts(department_name)["unresolved"],
         fiscal_years=_fiscal_year_options(department_name),
         selected_fiscal_year_code=selected_fiscal_year_code,
         selected_archive_status=(request.args.get("archive_status") or "active").strip(),
@@ -256,6 +257,25 @@ def ledger(department_name: str):
         can_manage=can_manage_department(user_id, department_name),
         can_view_budget=has_budget_view(user_id),
     )
+    query = request.args.to_dict()
+    query.pop("department_name", None)
+    query["page"] = ledger_page["page"]
+    context["current_url"] = url_for("finance.ledger", department_name=department_name, **query)
+    context["initial_records"] = record_choices(department_name, all_records=True) if context["can_manage"] else dict(rows=[], has_more=False)
+    context["review"] = dict(ledger_page, has_previous=ledger_page["has_prev"],
+        first=(ledger_page["page"] - 1) * ledger_page["per_page"] + 1 if ledger_page["total"] else 0,
+        last=min(ledger_page["page"] * ledger_page["per_page"], ledger_page["total"]))
+    context["page_links"] = {
+        name: url_for("finance.ledger", department_name=department_name, **{**query, "page": number})
+        for name, number in dict(first=1, previous=max(1, ledger_page["page"] - 1),
+            next=min(ledger_page["total_pages"], ledger_page["page"] + 1), last=ledger_page["total_pages"]).items()
+    }
+    if request.headers.get("X-Ledger-Review") == "1":
+        response = jsonify(ok=True, url=context["current_url"], unresolved_count=context["unresolved_count"],
+                           html=render_template("finance/_ledger_list_results.html", **context))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    return render_template("finance/ledger.html", **context)
 
 
 @bp.route("/ledger/<int:ledger_transaction_id>")

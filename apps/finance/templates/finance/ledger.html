@@ -5,23 +5,25 @@
 {% endblock %}
 
 {% block content %}
-<p><a class="btn btn-primary" href="{{ url_for('finance.ledger_review', department_name=department_name) }}">Review Unlinked Transactions</a></p>
-<div class="page-shell finance-shell">
+<div class="page-shell finance-shell ledger-workflow" data-ledger-review
+     data-action-url="{{ url_for('finance.ledger_record_action', department_name=department_name) }}">
   {% include "finance/_finance_tabs.html" %}
 
-  <div class="page-header">
+  <div class="page-header ledger-page-header">
     <div>
       <h1>{{ department_name }} Ledger</h1>
       <p class="page-subtitle">ERP audit trail activity grouped by fiscal year, transaction code, purchase order, budget
         account, and linked Finance Record.</p>
     </div>
-    {% if can_manage %}
-    <div class="page-header-actions">
+    <div class="page-header-actions ledger-header-actions">
+      <a class="btn btn-primary"
+        href="{{ url_for('finance.ledger_review', department_name=department_name) }}">Review Unlinked Transactions (<span data-unresolved-count>{{ unresolved_count }}</span>)</a>
+      {% if can_manage %}
       <a class="btn finance-import-btn"
         href="{{ url_for('finance.imports', department_name=department_name, import_type='transactions') }}">Import
         Ledger</a>
+      {% endif %}
     </div>
-    {% endif %}
   </div>
 
   <div class="content-card finance-filter-card">
@@ -31,7 +33,7 @@
         <label>Review Status</label>
         <select name="review_status">
           <option value="">All</option>
-          {% for value in ['unlinked', 'linked', 'ignored', 'reviewed'] %}
+          {% for value in ['unresolved', 'unlinked', 'linked', 'ignored', 'reviewed'] %}
           <option value="{{ value }}" {% if selected_review_status == value %}selected{% endif %}>{{ value|title }}</option>
           {% endfor %}
         </select>
@@ -85,68 +87,15 @@
     </form>
   </div>
 
-  <div class="content-card">
-    <div class="finance-section-header">
-      <div>
-        <h2 class="finance-section-title">Ledger Transactions</h2>
-        <p class="finance-section-subtitle">Showing page {{ ledger_page.page }} of {{ ledger_page.total_pages }} · {{
-          ledger_page.total }} transaction(s)</p>
-      </div>
-    </div>
-
-    {% if ledgers %}
-    <div class="table-wrap">
-      <table class="data-table finance-money-table">
-        <thead>
-          <tr>
-            <th>FY</th>
-            <th>Date</th>
-            <th>T/C</th>
-            <th>Vendor / Description</th>
-            <th>PO</th>
-            <th>Account</th>
-            <th>Paid</th>
-            <th>Encumbrance</th>
-            <th>Record</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in ledgers %}
-          <tr class="finance-row-link"
-            data-href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">
-            <td>{{ item.fiscal_year_code or "—" }}</td>
-            <td>{{ item.purchase_date or "—" }}</td>
-            <td><span class="finance-pill">{{ item.transaction_code or "—" }}</span>
-              <div class="finance-meta">{{ item.ledger_kind|replace("_", " ")|title }}</div>
-            </td>
-            <td>
-              <div class="finance-record-title">{{ item.vendor_friendly_name or item.vendor_name or
-                item.matched_vendor_name or "—" }}</div>
-              <div class="finance-meta">{{ item.description or item.title or "No description" }}</div>
-            </td>
-            <td>{{ item.po_number or "—" }}</td>
-            <td>{{ item.account_code or "—" }}<div class="finance-meta">{{ item.budget_unit or "" }}</div>
-            </td>
-            <td>{{ item.expenditure_amount|currency }}</td>
-            <td>{{ item.encumbrance_amount|currency }}</td>
-            <td>{{ item.linked_record_title or "Unlinked" }}</td>
-            <td><span class="finance-pill">{{ item.review_status|replace("_", " ")|title }}</span></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="finance-empty">
-      <h3>No ledger transactions found</h3>
-      <p>Import an eFinance Expenditure Audit Trail to populate the Ledger.</p>
-    </div>
-    {% endif %}
+  <div class="ledger-review-feedback">
+    <p data-review-message role="status" aria-live="polite"></p>
+    <button type="button" class="btn btn-secondary" data-review-refresh>Refresh Ledger</button>
   </div>
+  {% include "finance/_ledger_list_results.html" %}
 </div>
+{% include 'finance/_ledger_record_modal.html' %}
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('finance.static', filename='finance/finance.js') }}"></script>
+<script defer src="{{ url_for('finance.static', filename='finance/ledger_review.js') }}"></script>
 {% endblock %}

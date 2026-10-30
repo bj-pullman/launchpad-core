@@ -25,6 +25,16 @@ def format_currency(value) -> str:
     return f"${amount:,.2f}"
 
 
+@bp.app_template_filter("ledger_date")
+def format_ledger_date(value) -> str:
+    from .ledger_accounting_service import parse_ledger_date_for_sql
+    normalized = parse_ledger_date_for_sql(value)
+    if not normalized:
+        return "—"
+    year, month, day = normalized.split("-")
+    return f"{month}/{day}/{year}"
+
+
 from . import routes  # noqa: E402,F401
 from . import setup_guard_routes  # noqa: E402,F401
 from . import ledger_routes  # noqa: E402,F401

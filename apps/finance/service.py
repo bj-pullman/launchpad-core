@@ -1996,6 +1996,19 @@ def get_import_run_by_id(run_id: int) -> dict | None:
 
     return dict(row) if row else None
 
+def _preserve_ledger_import_snapshot(conn, run_id, run_notes):
+    """Mapping/status updates must not discard original Ledger results."""
+    if not conn.in_transaction:
+        conn.execute("BEGIN IMMEDIATE")
+    row = conn.execute("SELECT * FROM finance_import_runs WHERE id=?", (run_id,)).fetchone()
+    if row and row["import_type"] == "transactions":
+        from .ledger_review_service import read_original_snapshot, notes_with_snapshot
+        snapshot = read_original_snapshot(dict(row))
+        if snapshot is not None:
+            return notes_with_snapshot(run_notes if run_notes is not None else row["run_notes"], snapshot)
+    return run_notes
+
+
 def update_import_run_status(
     run_id: int,
     *,
@@ -2007,6 +2020,7 @@ def update_import_run_status(
     now = utc_now_iso()
 
     with get_connection() as conn:
+        run_notes = _preserve_ledger_import_snapshot(conn, run_id, run_notes)
         conn.execute(
             """
             UPDATE finance_import_runs
@@ -2876,6 +2890,7 @@ def update_import_run_results(
     now = utc_now_iso()
 
     with get_connection() as conn:
+        run_notes = _preserve_ledger_import_snapshot(conn, run_id, run_notes)
         conn.execute(
             """
             UPDATE finance_import_runs

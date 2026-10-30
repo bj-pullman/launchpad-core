@@ -29,6 +29,7 @@ from .ledger_service import (
     utc_now_iso,
 )
 from .ledger_vendor_service import get_or_create_vendor_for_ledger_import
+from .ledger_review_service import capture_original_snapshot, notes_with_snapshot, read_original_snapshot
 from .service import (
     apply_import_mapping,
     get_import_profile_fields,
@@ -220,6 +221,10 @@ def execute_ledger_import(
     if not run:
         raise ValueError("Import run not found")
 
+    original_snapshot = read_original_snapshot(run)
+    inserted_transaction_ids = set()
+    automatically_linked_transaction_ids = set()
+
     rows = read_import_rows(run["stored_filename"])
     mappings = get_import_profile_fields(profile_id or run.get("profile_id")) if (profile_id or run.get("profile_id")) else []
 
@@ -247,7 +252,7 @@ def execute_ledger_import(
         updated_rows=0,
         skipped_rows=0,
         error_rows=0,
-        run_notes="Ledger import started.",
+        run_notes=notes_with_snapshot("Ledger import started.", original_snapshot),
         completed=False,
     )
 
@@ -347,6 +352,7 @@ def execute_ledger_import(
                 ledger_id, was_inserted = insert_ledger_transaction(conn, ledger=ledger)
                 if was_inserted:
                     inserted_rows += 1
+                    inserted_transaction_ids.add(ledger_id)
                 else:
                     duplicate_rows += 1
 
@@ -388,6 +394,7 @@ def execute_ledger_import(
                             confidence=confidence,
                             reason=reason,
                         )
+                        automatically_linked_transaction_ids.add(ledger_id)
                         touched_record_ids.add(record_id)
                         linked_rows += 1
 
@@ -395,6 +402,22 @@ def execute_ledger_import(
                 error_rows += 1
                 source_identifier = row.get(next(iter(row.keys()), ""), "") if row else None
                 import_errors.append((index, source_identifier, str(exc)))
+
+        # Source order is not meaningful: a payment can precede the original
+        # encumbrance that creates its Record. Revisit only unresolved active
+        # rows in this import, using the same unambiguous matching rules.
+        candidates = conn.execute("""SELECT * FROM finance_ledger_transactions
+            WHERE import_run_id=? AND linked_record_id IS NULL
+              AND archive_status='active' AND review_status NOT IN ('ignored','reviewed')""",
+            (run_id,)).fetchall()
+        for candidate in candidates:
+            record_id, confidence, reason = find_record_match(conn, ledger=dict(candidate))
+            if record_id and confidence >= 90:
+                link_ledger_to_record(conn, ledger_transaction_id=candidate["id"],
+                                      record_id=record_id, confidence=confidence, reason=reason)
+                automatically_linked_transaction_ids.add(candidate["id"])
+                touched_record_ids.add(record_id)
+                linked_rows += 1
 
         for record_id in sorted(touched_record_ids):
             update_record_financials_from_ledger(
@@ -404,6 +427,20 @@ def execute_ledger_import(
             )
             records_refreshed += 1
 
+        # Another execution may have completed while this one waited for the
+        # database writer lock. The first persisted snapshot remains authoritative.
+        saved_run = conn.execute("SELECT * FROM finance_import_runs WHERE id=?", (run_id,)).fetchone()
+        if saved_run:
+            original_snapshot = read_original_snapshot(dict(saved_run)) or original_snapshot
+        if original_snapshot is None:
+            original_snapshot = capture_original_snapshot(
+                conn, run_id, inserted_transaction_ids,
+                automatically_linked_transaction_ids, default_department_name,
+            )
+        # Save membership and original results atomically with imported data.
+        conn.execute("UPDATE finance_import_runs SET run_notes=? WHERE id=?", (
+            notes_with_snapshot("Ledger import transactions saved.", original_snapshot), run_id,
+        ))
         conn.commit()
 
     for row_number, source_identifier, error_message in import_errors:
@@ -423,6 +460,7 @@ def execute_ledger_import(
         f"Known T/C: {len(known_transaction_codes)}, Unknown T/C: {len(unknown_transaction_codes)}, "
         f"Skipped: {skipped_rows}, Errors: {error_rows}."
     )
+    run_notes = notes_with_snapshot(run_notes, original_snapshot)
     final_status = "completed"
     if error_rows and not inserted_rows:
         final_status = "completed_with_errors"

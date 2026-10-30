@@ -3164,3 +3164,82 @@ body.finance-modal-open {
     grid-template-columns: 1fr;
   }
 }
+
+/* Ledger tables and actions share the existing Finance theme and components. */
+.ledger-workflow .ledger-page-header { display: flex; flex-wrap: wrap; gap: 12px; }
+.ledger-workflow .ledger-header-actions {
+  display: flex; flex-wrap: wrap; justify-content: flex-end;
+  margin-left: auto; width: 100%; gap: 8px;
+}
+.ledger-back-row { display: flex; justify-content: flex-end; margin: 0 0 16px; }
+.ledger-review .ledger-review-filters {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 12px; align-items: end;
+}
+.ledger-review .ledger-review-filters .form-field { min-width: 0; margin: 0; }
+.ledger-review .ledger-review-stats {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
+}
+.ledger-review .ledger-review-stats .finance-stat-card {
+  padding: 12px; background: var(--panel); box-shadow: none;
+}
+.ledger-review .ledger-review-stats .finance-stat-value { font-size: 1.35rem; }
+.ledger-review .ledger-review-summary { margin-bottom: 12px; }
+.ledger-review-counts, .ledger-review-feedback {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+.ledger-review-feedback { justify-content: flex-end; margin: 8px 0; }
+.ledger-review-feedback p { flex: 1 1 240px; margin: 0; }
+.ledger-review-feedback p:empty { display: none; }
+.ledger-table-scroll { width: 100%; overflow-x: auto; }
+.ledger-workflow .ledger-transaction-table {
+  width: 100%; min-width: 1100px; table-layout: auto;
+}
+.ledger-transaction-table .ledger-col-fy { width: 80px; }
+.ledger-transaction-table .ledger-col-date { width: 110px; }
+.ledger-transaction-table .ledger-col-description { width: auto; }
+.ledger-transaction-table .ledger-col-po { width: 125px; }
+.ledger-transaction-table .ledger-col-money { width: 120px; }
+.ledger-transaction-table .ledger-col-actions { width: 155px; }
+.ledger-workflow .ledger-transaction-table th,
+.ledger-workflow .ledger-transaction-table td {
+  padding: 12px 10px; vertical-align: top; word-break: normal; overflow-wrap: normal;
+}
+.ledger-workflow .ledger-transaction-table .ledger-nowrap,
+.ledger-workflow .ledger-transaction-table .ledger-money { white-space: nowrap; }
+.ledger-workflow .ledger-transaction-table .ledger-money {
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.ledger-description { min-width: 240px; }
+.ledger-description-link {
+  display: grid; gap: 5px; color: var(--text); text-decoration: none;
+  border-radius: 6px; line-height: 1.4; overflow-wrap: break-word;
+}
+.ledger-description-link strong { font-weight: 650; }
+.ledger-description-link > span { color: var(--muted); font-size: 0.88rem; }
+.ledger-description-link:hover strong { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.ledger-description-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.ledger-record-context { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-top: 7px; font-size: 0.8rem; }
+.ledger-record-context a { color: var(--muted); text-decoration: none; }
+.ledger-record-context a:hover { color: var(--accent); text-decoration: underline; }
+.ledger-row-actions { display: grid; gap: 6px; min-width: 125px; }
+.ledger-row-actions > .btn { padding: 6px 10px; min-height: 32px; font-size: 0.82rem; white-space: nowrap; }
+.ledger-review-options summary { color: var(--muted); font-size: 0.8rem; cursor: pointer; padding: 3px 0; }
+.ledger-review-options form { display: grid; gap: 4px; margin-top: 4px; }
+.ledger-review-options .btn { padding: 5px 8px; font-size: 0.8rem; }
+.ledger-workflow .finance-pagination, .ledger-workflow .finance-pagination-actions {
+  flex-wrap: wrap; align-items: center; gap: 8px;
+}
+.ledger-workflow .btn:disabled, .ledger-record-modal .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.ledger-record-modal .finance-modal-dialog { color: var(--text) !important; }
+.ledger-record-modal .finance-modal-form .finance-field { margin: 12px 0; }
+.ledger-record-modal .finance-modal-form input,
+.ledger-record-modal .finance-modal-form select { width: 100%; min-width: 0; box-sizing: border-box; }
+.ledger-record-modal [data-ledger-picker] { min-width: 0; }
+.ledger-modal-transaction { font-weight: 650; margin: 0; line-height: 1.5; }
+.ledger-record-modal [data-ledger-modal-message]:empty { display: none; }
+@media (max-width: 700px) {
+  .ledger-workflow .ledger-header-actions { justify-content: flex-end; }
+  .ledger-review .finance-filter-actions { flex-wrap: wrap; }
+  .ledger-workflow .finance-pagination { align-items: flex-start; }
+}

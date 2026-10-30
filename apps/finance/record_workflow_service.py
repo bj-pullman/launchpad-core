@@ -120,13 +120,15 @@ def import_summary(department, run_id):
     return result
 
 
-def review_action(department, ledger_id, action, user_id, record_id=None):
+def review_action(department, ledger_id, action, user_id, record_id=None, expected_updated_at=None):
     with get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT * FROM finance_ledger_transactions WHERE id=? AND department_name=?",
                            (ledger_id, department)).fetchone()
         if not row or row["archive_status"] != "active":
             raise ValueError("Ledger transaction not found.")
+        if expected_updated_at is not None and (row["updated_at"] or "") != expected_updated_at:
+            raise ValueError("This transaction changed after the page loaded. Refresh the review before trying again.")
         if row["linked_record_id"]:
             raise ValueError("This transaction is already linked. Reload to see its Record.")
         if action in ("ignore", "reviewed"):

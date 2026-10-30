@@ -1,0 +1,52 @@
+<div data-review-results data-current-url="{{ current_url }}">
+  {% if import_info %}
+  {% set original = import_info.original %}
+  <section class="content-card ledger-review-summary" aria-label="Original import results">
+    <div class="finance-section-header"><div>
+      <h2 class="finance-section-title">Original results · Import #{{ run_id }}</h2>
+      <p class="finance-section-subtitle">These figures describe the original import and do not change when transactions are resolved.</p>
+    </div></div>
+    <div class="finance-stats ledger-review-stats">
+      {% for label, value in [
+        ('New transactions imported', original.inserted if original else none),
+        ('Automatically linked', original.auto_linked if original else none),
+        ('Flagged for review', original.unresolved if original else none),
+        ('Possible matches', original.possible if original else none),
+        ('Reviewed / ignored at completion', original.reviewed if original else none)] %}
+      <div class="finance-stat-card">
+        <div class="finance-stat-label">{{ label }}</div>
+        <div class="finance-stat-value">{{ value if value is not none else 'Unavailable' }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if original and original.transactions is not none %}
+    <p class="finance-meta">{{ original.transactions }} distinct transactions processed. {{ original.linked }} linked at completion, including previously linked transactions. Possible matches are included in Flagged for review.</p>
+    {% elif original and original.linked is not none %}
+    <p class="finance-meta">Legacy import notes recorded {{ original.linked }} linked rows. That total may include previously linked transactions.</p>
+    {% endif %}
+    {% if not original or import_info.legacy %}
+    <p class="finance-meta">This import predates the detailed snapshot. Historical figures that cannot be established reliably are shown as Unavailable.</p>
+    {% endif %}
+    {% if not import_info.exact_membership %}
+    <p class="finance-meta">Current import counts use transactions still assigned to this run. A later reimport may have reassigned some transactions.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+  <section class="content-card">
+    <div class="finance-section-header"><div>
+      <h2 class="finance-section-title">{{ 'This import' if scope == 'import' else department_name ~ ' Ledger' }}</h2>
+      <p class="finance-section-subtitle">Showing {{ review.first }}–{{ review.last }} of {{ review.total }} matching transactions</p>
+    </div></div>
+    <div class="ledger-review-counts" aria-label="Current review counts">
+      {% if import_counts %}
+      <span class="finance-pill">This import: {{ import_counts.unresolved }} unresolved</span>
+      <span class="finance-pill finance-pill-muted">{{ import_counts.linked }} linked now</span>
+      <span class="finance-pill finance-pill-muted">{{ import_counts.reviewed + import_counts.ignored }} reviewed / ignored now</span>
+      {% endif %}
+      <span class="finance-pill">Overall: {{ overall_counts.unresolved }} unresolved</span>
+    </div>
+    <p class="finance-meta">Current counts cover active transactions and are independent of the table filters.</p>
+    {% with transactions=review.rows, review_mode=true %}{% include 'finance/_ledger_transaction_table.html' %}{% endwith %}
+    {% include 'finance/_ledger_pagination.html' %}
+  </section>
+</div>

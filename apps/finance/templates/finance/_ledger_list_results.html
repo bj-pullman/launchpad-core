@@ -1,0 +1,10 @@
+<div data-review-results data-current-url="{{ current_url }}">
+  <section class="content-card">
+    <div class="finance-section-header"><div>
+      <h2 class="finance-section-title">Ledger Transactions</h2>
+      <p class="finance-section-subtitle">Showing {{ review.first }}–{{ review.last }} of {{ review.total }} transactions</p>
+    </div></div>
+    {% with transactions=ledgers, review_mode=false %}{% include 'finance/_ledger_transaction_table.html' %}{% endwith %}
+    {% include 'finance/_ledger_pagination.html' %}
+  </section>
+</div>

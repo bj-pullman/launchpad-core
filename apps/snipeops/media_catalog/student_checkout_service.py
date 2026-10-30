@@ -11,6 +11,7 @@ from apps.snipeops.snipe_catalog.catalog_db import (
 )
 from apps.snipeops.media_catalog.media_catalog_db import (
     create_student_checkout_record,
+    extend_student_checkout_record,
     get_active_student_checkout_for_device,
     get_cart_ownership,
     get_student_checkout,
@@ -49,6 +50,10 @@ class StudentCheckoutDuplicateError(StudentCheckoutError):
 
 class StudentCheckoutNotFoundError(StudentCheckoutError):
     status_code = 404
+
+
+class StudentCheckoutConflictError(StudentCheckoutError):
+    status_code = 409
 
 
 class StudentCheckoutPermissionError(StudentCheckoutError):
@@ -164,6 +169,11 @@ def decorate_checkout(record: dict, *, today: date | None = None) -> dict:
     item["is_overdue"] = status == OVERDUE_STATUS
     item["days_overdue"] = days_overdue(item, today=today)
     item["device_url"] = build_asset_url(item.get("device_asset_id"))
+    if not item.get("returned_at"):
+        local_today = today or _local_date()
+        due = _parse_date(item.get("return_by_date")) or local_today
+        item["extension_min_date"] = max(due + timedelta(days=1), local_today).isoformat()
+        item["extension_default_date"] = calculate_next_business_day(max(due, local_today)).isoformat()
     return item
 
 
@@ -656,6 +666,45 @@ def return_student_checkout(
     )
 
     return decorate_checkout(updated)
+
+
+def extend_student_checkout(
+    *, checkout_id: int, actor_user: dict, return_by_date: str,
+    expected_return_by_date: str, can_manage_ownership: bool = False,
+    now: datetime | None = None,
+) -> dict:
+    record = get_student_checkout(int(checkout_id))
+    if not record:
+        raise StudentCheckoutNotFoundError("Student Checkout record not found.")
+    assert_checkout_scope(record, actor_user, can_manage_ownership=can_manage_ownership)
+    if record.get("returned_at"):
+        raise StudentCheckoutConflictError("This device has already been returned.")
+    if expected_return_by_date != record["return_by_date"]:
+        raise StudentCheckoutConflictError("The due date changed. Refresh the checkouts and try again.")
+    try:
+        due = date.fromisoformat(return_by_date)
+        if due.isoformat() != return_by_date:
+            raise ValueError
+    except (ValueError, TypeError):
+        raise StudentCheckoutError("Choose a valid new Return By date.") from None
+    current_due = _parse_date(record["return_by_date"])
+    if current_due is None or due <= current_due:
+        raise StudentCheckoutError("The new Return By date must be later than the current due date.")
+    now = _coerce_datetime(now)
+    today = _local_date(now)
+    if due < today:
+        raise StudentCheckoutError("The new Return By date cannot be in the past.")
+    try:
+        updated = extend_student_checkout_record(
+            checkout_id=int(checkout_id), actor_user=actor_user,
+            return_by_date=due.isoformat(), expected_return_by_date=expected_return_by_date,
+            updated_at=now.astimezone(timezone.utc).isoformat(),
+        )
+    except PermissionError as exc:
+        raise StudentCheckoutPermissionError(str(exc)) from exc
+    if not updated:
+        raise StudentCheckoutConflictError("This checkout changed or was returned. Refresh the checkouts and try again.")
+    return decorate_checkout(updated, today=today)
 
 
 def _checkout_matches_query(record: dict, query: str) -> bool:

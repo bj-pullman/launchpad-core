@@ -87,9 +87,14 @@ def list_ledger_transactions(
     filters = {
         "l.fiscal_year_code": fiscal_year_code,
         "l.ledger_kind": ledger_kind,
-        "l.review_status": review_status,
         "l.transaction_code": transaction_code,
     }
+    review_status = normalize_text(review_status)
+    if review_status == "unresolved":
+        where.append("l.linked_record_id IS NULL AND l.review_status NOT IN ('ignored', 'reviewed')")
+    elif review_status:
+        where.append("l.review_status = ?")
+        params.append(review_status)
     for column, value in filters.items():
         value = normalize_text(value)
         if value:
@@ -148,6 +153,9 @@ def list_ledger_transactions(
             """,
             params,
         ).fetchone()["count"]
+
+        page = min(page, max((total + per_page - 1) // per_page, 1))
+        offset = (page - 1) * per_page
 
         rows = conn.execute(
             f"""

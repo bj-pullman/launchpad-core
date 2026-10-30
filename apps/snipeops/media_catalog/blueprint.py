@@ -23,6 +23,7 @@ from reportlab.platypus import (
 from tasks.job_runs import get_recent_job_runs
 
 from modules.core.auth.decorators import login_required, require_permission
+from modules.core.auth.session_policy import require_csrf
 from modules.core.identity.user_service import get_user_by_id
 from modules.core.identity.identity_db import get_connection
 
@@ -63,6 +64,7 @@ from apps.snipeops.media_catalog.student_checkout_service import (
     attach_checkout_summaries_to_carts,
     checkout_lookup_payload,
     create_student_checkout,
+    extend_student_checkout,
     list_student_checkouts_for_scope,
     recent_student_checkout_activity,
     return_student_checkout,
@@ -1770,6 +1772,27 @@ def api_create_student_checkout():
         "message": "Student Checkout created.",
         "checkout": checkout,
     })
+
+
+@bp.post("/api/student-checkouts/<int:checkout_id>/extend")
+@login_required
+@require_permission(STUDENT_CHECKOUT_PERMISSION)
+def api_extend_student_checkout(checkout_id: int):
+    require_csrf()
+    user = _current_user_profile()
+    if not user:
+        return jsonify({"ok": False, "error": "User profile not found."}), 404
+    body = _body()
+    try:
+        checkout = extend_student_checkout(
+            checkout_id=checkout_id, actor_user=user,
+            return_by_date=body.get("return_by_date"),
+            expected_return_by_date=body.get("expected_return_by_date"),
+            can_manage_ownership=_can_manage_ownership(),
+        )
+    except StudentCheckoutError as exc:
+        return _student_checkout_error_response(exc)
+    return jsonify({"ok": True, "message": f"Checkout extended until {checkout['return_by_date']}.", "checkout": checkout})
 
 
 @bp.post("/api/student-checkouts/<int:checkout_id>/return")

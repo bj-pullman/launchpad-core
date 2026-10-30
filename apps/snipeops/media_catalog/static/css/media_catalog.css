@@ -3604,8 +3604,26 @@ body[data-theme="light"] .dashboard-metric-card.overdue .dashboard-metric-value 
   min-height: 76px;
   text-align: left;
   font: inherit;
+  box-sizing: border-box;
+}
+
+.dashboard-attention-details {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
+
+.dashboard-attention-details strong,
+.dashboard-attention-description { display: block; }
+.dashboard-attention-description { margin-top: 0.15rem; color: var(--muted); }
+.dashboard-attention-details:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.dashboard-attention-item > .mini-btn { flex-shrink: 0; }
 
 .dashboard-attention-item.priority {
   border-color: rgba(251, 146, 60, 0.36);

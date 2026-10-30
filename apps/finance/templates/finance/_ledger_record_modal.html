@@ -1,0 +1,43 @@
+{% if can_manage %}
+<div class="finance-modal ledger-record-modal" id="ledger-record-modal" data-ledger-modal hidden>
+  <div class="finance-modal-backdrop" data-ledger-close></div>
+  <div class="finance-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="ledger-record-title" tabindex="-1">
+    <div class="finance-modal-header">
+      <div><h2 id="ledger-record-title">Link Record</h2><p class="finance-modal-subtitle" data-ledger-modal-subtitle></p></div>
+      <button class="finance-modal-close" type="button" data-ledger-close aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="finance-modal-body">
+      <p class="ledger-modal-transaction" data-ledger-modal-description></p>
+      <p class="finance-meta" data-ledger-modal-context></p>
+      <form class="finance-modal-form" method="post" data-review-action data-review-link-form
+            data-search-url="{{ url_for('finance.record_search', department_name=department_name, all=1) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="ledger_id"><input type="hidden" name="row_version"><input type="hidden" name="action">
+        <div data-ledger-picker>
+          <p class="finance-mapping-help" data-ledger-match></p>
+          <div class="finance-field">
+            <label for="ledger-record-query">Search Finance Records</label>
+            <input id="ledger-record-query" type="search" data-review-record-query placeholder="Name, title, vendor, PO or Record ID" autocomplete="off">
+          </div>
+          <div class="finance-field">
+            <label for="ledger-record-select">Choose Record</label>
+            <select id="ledger-record-select" name="record_id" required data-review-record-select><option value="">Choose a Record</option></select>
+          </div>
+          <p class="finance-meta" data-review-picker-message role="status"></p>
+        </div>
+        <div data-ledger-create-help hidden>
+          <p>Create a Finance Record from this transaction and link it immediately.</p>
+          <p class="finance-mapping-help">Qualifying unlinked transactions with a matching PO will also be reconciled. You can edit the Record afterward. If a Record already uses this PO, use Link Record instead.</p>
+        </div>
+        <p data-ledger-modal-message role="status" aria-live="polite"></p>
+        <div class="finance-modal-actions">
+          <button type="button" class="btn btn-secondary" data-ledger-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" data-review-link-button>Link Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}

@@ -458,6 +458,43 @@ def return_student_checkout_record(
     return get_student_checkout(checkout_id)
 
 
+def extend_student_checkout_record(
+    *, checkout_id: int, actor_user: dict, return_by_date: str,
+    expected_return_by_date: str, updated_at: str,
+) -> dict | None:
+    """Update the due date and its audit entry together, only while unreturned."""
+    init_db()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        record = conn.execute(
+            "SELECT * FROM media_student_checkouts WHERE id=?", (checkout_id,)
+        ).fetchone()
+        if not record or record["returned_at"] or record["return_by_date"] != expected_return_by_date:
+            return None
+        # Recheck cart ownership under the writer lock to prevent a scope race.
+        ownership = conn.execute(
+            "SELECT owner_user_id FROM media_cart_ownership WHERE cart_asset_id=?",
+            (record["original_cart_asset_id"],),
+        ).fetchone()
+        if not ownership or ownership["owner_user_id"] != actor_user.get("id"):
+            raise PermissionError("This cart is no longer assigned to you.")
+        conn.execute("""UPDATE media_student_checkouts
+            SET return_by_date=?, due_date_overridden=1, status='active', updated_at=?
+            WHERE id=? AND returned_at IS NULL""", (return_by_date, updated_at, checkout_id))
+        conn.execute("""INSERT INTO media_catalog_logs (
+            created_at, action, cart_asset_id, cart_asset_tag, cart_asset_name,
+            device_asset_id, device_asset_tag, device_serial, device_name,
+            ok, message, actor_user_id, actor_email, actor_display_name
+        ) VALUES (?, 'student_checkout_extended', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""", (
+            updated_at, record["original_cart_asset_id"], record["original_cart_asset_tag"],
+            record["original_cart_name"], record["device_asset_id"], record["device_asset_tag"],
+            record["device_serial"], record["device_name"],
+            f"Extended checkout #{checkout_id} from {expected_return_by_date} to {return_by_date}.",
+            actor_user.get("id"), actor_user.get("email") or "", actor_user.get("display_name") or "",
+        ))
+        return dict(conn.execute("SELECT * FROM media_student_checkouts WHERE id=?", (checkout_id,)).fetchone())
+
+
 def get_cart_ownership(cart_asset_id: int) -> dict | None:
     init_db()
 

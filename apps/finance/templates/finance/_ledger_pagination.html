@@ -1,0 +1,15 @@
+<nav class="finance-pagination" aria-label="Ledger pagination">
+  <div class="finance-pagination-meta">Showing {{ review.first }}–{{ review.last }} of {{ review.total }}</div>
+  <div class="finance-pagination-actions">
+    {% if review.has_previous %}<a class="btn btn-secondary" href="{{ page_links.first }}">First</a><a class="btn btn-secondary" href="{{ page_links.previous }}">Previous</a>
+    {% else %}<button class="btn btn-secondary" disabled>First</button><button class="btn btn-secondary" disabled>Previous</button>{% endif %}
+    <span class="finance-pagination-meta" aria-current="page">Page {{ review.page }} of {{ review.total_pages }}</span>
+    {% if review.has_next %}<a class="btn btn-secondary" href="{{ page_links.next }}">Next</a><a class="btn btn-secondary" href="{{ page_links.last }}">Last</a>
+    {% else %}<button class="btn btn-secondary" disabled>Next</button><button class="btn btn-secondary" disabled>Last</button>{% endif %}
+  </div>
+</nav>
+{% if can_manage %}
+<template data-review-initial-records>
+  {% for record in initial_records.rows %}<option value="{{ record.id }}">{{ record.label }}</option>{% endfor %}
+</template>
+{% endif %}

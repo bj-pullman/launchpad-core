@@ -1,39 +1,90 @@
 {% extends "launchpad_ui/base.html" %}
-{% block extra_css %}<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('finance.static', filename='finance/finance.css') }}">
+{% endblock %}
 {% block content %}
-<div class="page-shell finance-shell">
-  <a href="{{ url_for('finance.ledger', department_name=department_name) }}">Ledger</a>
-  <h1>{{ 'Ledger Import Complete' if summary else 'Review Unlinked Transactions' }}</h1>
-  {% if summary %}<div class="content-card">
-    <p>{{ summary.transactions }} transactions in this import · {{ summary.linked }} linked · {{ summary.possible }} possible matches · {{ summary.needs_review }} need review · {{ summary.reviewed }} reviewed/ignored</p>
-    <a class="btn btn-primary" href="#review">Review Unlinked Transactions</a>
-  </div>{% endif %}
-  <h2 id="review">{{ review.total }} unresolved transactions</h2>
-  {% for item in review.rows %}
-  <section class="content-card">
-    <h3><a href="{{ url_for('finance.ledger_detail', ledger_transaction_id=item.id) }}">{{ item.description or item.title or 'Ledger transaction' }}</a></h3>
-    <p>{{ item.vendor_name or 'No vendor' }} · PO {{ item.po_number or '—' }} · {{ item.fiscal_year_code or 'Unassigned year' }} · Account {{ item.account_code or '—' }}</p>
-    <p>Paid {{ item.expenditure_amount|currency }} · Encumbrance {{ item.encumbrance_amount|currency }}</p>
-    <p>{{ item.match_reason }}{% if item.confidence %} · Confidence {{ item.confidence }}%{% endif %}</p>
-    {% if can_manage %}
-    <form method="post" data-record-picker data-search-url="{{ url_for('finance.record_search', department_name=department_name) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="ledger_id" value="{{ item.id }}">
-      <label>Choose Record <input type="search" data-record-query placeholder="Friendly name, title, vendor or PO" autocomplete="off"></label>
-      <select name="record_id" aria-label="Matching Records">
-        {% if item.suggested_record_id %}<option value="{{ item.suggested_record_id }}">{{ item.suggested_name }}</option>{% else %}<option value="">Choose a Record</option>{% endif %}
-      </select>
-      <p data-picker-message role="status"></p>
-      <button name="action" value="link" class="btn btn-primary">Link</button>
-      <button name="action" value="create" class="btn btn-secondary">Create Record</button>
-      <button name="action" value="ignore" class="btn btn-secondary">Ignore</button>
-      <button name="action" value="reviewed" class="btn btn-secondary">Mark Reviewed</button>
+<div class="page-shell finance-shell ledger-review ledger-workflow" data-ledger-review>
+  {% include "finance/_finance_tabs.html" %}
+  <div class="finance-back-row ledger-back-row">
+    <a class="finance-back-link" href="{{ url_for('finance.ledger', department_name=department_name) }}">
+      <span class="finance-back-link-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>
+      <span>Back to Ledger</span>
+    </a>
+  </div>
+  <div class="page-header">
+    <div>
+      <h1>Review Unlinked Transactions</h1>
+      <p class="page-subtitle">{{ department_name }} Ledger · Match transactions to Finance Records or record a review decision.</p>
+    </div>
+  </div>
+  <div class="content-card finance-filter-card">
+    <form method="get" action="{{ url_for('finance.ledger_review', department_name=department_name) }}"
+          class="finance-record-filters ledger-review-filters" data-review-filters>
+      {% if run_id %}
+      <input type="hidden" name="run_id" value="{{ run_id }}">
+      <div class="form-field">
+        <label for="review-scope">Transactions</label>
+        <select id="review-scope" name="scope">
+          <option value="import" {% if scope == 'import' %}selected{% endif %}>This import</option>
+          <option value="all" {% if scope == 'all' %}selected{% endif %}>All department transactions</option>
+        </select>
+      </div>
+      {% endif %}
+      <div class="form-field">
+        <label for="review-fy">Fiscal Year</label>
+        <select id="review-fy" name="fiscal_year_code">
+          <option value="">All Fiscal Years</option>
+          {% for year in fiscal_years %}<option value="{{ year }}" {% if filters.fiscal_year_code == year %}selected{% endif %}>{{ year }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="review-tc">T/C</label>
+        <input id="review-tc" name="transaction_code" value="{{ filters.transaction_code }}" placeholder="Transaction code">
+      </div>
+      <div class="form-field">
+        <label for="review-vendor">Vendor</label>
+        <input id="review-vendor" name="vendor_q" value="{{ filters.vendor_q }}" placeholder="Name or vendor code">
+      </div>
+      <div class="form-field">
+        <label for="review-account">Budget Account</label>
+        <input id="review-account" name="account_q" value="{{ filters.account_q }}" placeholder="Account, fund or budget unit">
+      </div>
+      <div class="form-field">
+        <label for="review-status">Review Status</label>
+        <select id="review-status" name="review_status">
+          {% for value, label in [('unresolved','Unresolved'), ('linked','Linked'), ('ignored','Ignored'), ('reviewed','Reviewed'), ('all','All statuses')] %}
+          <option value="{{ value }}" {% if filters.review_status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="review-po">Purchase Order</label>
+        <input id="review-po" name="po_number" value="{{ filters.po_number }}" placeholder="PO number">
+      </div>
+      <div class="form-field">
+        <label for="review-search">Search</label>
+        <input type="search" id="review-search" name="q" value="{{ filters.q }}" placeholder="Description, vendor or transaction details">
+      </div>
+      <div class="form-field">
+        <label for="review-per-page">Rows Per Page</label>
+        <select id="review-per-page" name="per_page" data-review-page-size>
+          {% for size in [10,25,50,100] %}<option value="{{ size }}" {% if review.per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="finance-filter-actions">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a class="btn btn-ghost" href="{{ reset_url }}">Reset</a>
+      </div>
     </form>
-    {% endif %}
-  </section>
-  {% else %}<p class="empty-state">No unresolved transactions remain in this view.</p>{% endfor %}
-  {% if review.page > 1 %}<a href="{{ url_for('finance.ledger_review', department_name=department_name, run_id=run_id, page=review.page-1) }}">Previous</a>{% endif %}
-  {% if review.has_next %}<a href="{{ url_for('finance.ledger_review', department_name=department_name, run_id=run_id, page=review.page+1) }}">Next</a>{% endif %}
+  </div>
+  <div class="ledger-review-feedback">
+    <p data-review-message role="status" aria-live="polite"></p>
+    <button type="button" class="btn btn-secondary" data-review-refresh>Refresh review</button>
+  </div>
+  {% include "finance/_ledger_review_results.html" %}
 </div>
-<script defer src="{{ url_for('finance.static', filename='finance/record_workflow.js') }}"></script>
+{% include 'finance/_ledger_record_modal.html' %}
+{% endblock %}
+{% block extra_js %}
+<script defer src="{{ url_for('finance.static', filename='finance/ledger_review.js') }}"></script>
 {% endblock %}

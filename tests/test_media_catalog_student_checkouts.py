@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import sqlite3
 import sys
 import types
 import unittest
@@ -156,6 +157,66 @@ class StudentCheckoutServiceTests(unittest.TestCase):
         self.assertEqual(checkout["original_cart_room_number"], "300")
         self.assertEqual(checkout["return_by_date"], "2026-08-14")
         self.assertEqual(checkout["status"], service.ACTIVE_STATUS)
+
+    def test_extend_preserves_checkout_and_logs_date_change(self):
+        checkout = service.create_student_checkout(actor_user=self.actor, identifier="CB100", student_name="John Smith",
+            now=datetime(2026, 8, 10, 15, tzinfo=timezone.utc))
+        updated = service.extend_student_checkout(checkout_id=checkout["id"], actor_user=self.actor,
+            return_by_date="2026-08-20", expected_return_by_date=checkout["return_by_date"],
+            now=datetime(2026, 8, 18, 15, tzinfo=timezone.utc))
+        self.assertEqual(updated["return_by_date"], "2026-08-20")
+        self.assertEqual(updated["status"], "active")
+        self.assertEqual(updated["due_date_overridden"], 1)
+        self.assertIsNone(updated["returned_at"])
+        for key in ("id", "checked_out_at", "student_name", "device_asset_id", "original_cart_asset_id", "checkout_actor_user_id"):
+            self.assertEqual(updated[key], checkout[key])
+        self.assertEqual(len(media_catalog_db.list_student_checkouts()), 1)
+        log = media_catalog_db.get_recent(1)[0]
+        self.assertEqual(log["action"], "student_checkout_extended")
+        self.assertEqual(log["actor_user_id"], self.actor["id"])
+        self.assertIn("2026-08-11 to 2026-08-20", log["message"])
+        self.assertEqual(updated["extension_default_date"], "2026-08-21")
+
+    def test_extend_rejects_invalid_shortened_past_stale_and_returned_checkouts(self):
+        checkout = service.create_student_checkout(actor_user=self.actor, identifier="CB100", student_name="John",
+            now=datetime(2026, 8, 10, 15, tzinfo=timezone.utc))
+        args = dict(checkout_id=checkout["id"], actor_user=self.actor,
+                    expected_return_by_date=checkout["return_by_date"], now=datetime(2026, 8, 18, 15, tzinfo=timezone.utc))
+        for due in (None, "bad", "2026-08-20junk", "2026-08-11", "2026-08-10", "2026-08-17"):
+            with self.subTest(due=due), self.assertRaises(service.StudentCheckoutError):
+                service.extend_student_checkout(return_by_date=due, **args)
+        with self.assertRaises(service.StudentCheckoutConflictError):
+            service.extend_student_checkout(return_by_date="2026-08-20", **{**args, "expected_return_by_date": "old"})
+        service.return_student_checkout(checkout_id=checkout["id"], actor_user=self.actor)
+        with self.assertRaises(service.StudentCheckoutConflictError):
+            service.extend_student_checkout(return_by_date="2026-08-20", **args)
+        self.assertFalse(any(log["action"] == "student_checkout_extended" for log in media_catalog_db.get_recent()))
+
+    def test_extend_enforces_ownership_and_rolls_back_when_audit_fails(self):
+        checkout = service.create_student_checkout(actor_user=self.actor, identifier="CB100", student_name="John",
+            now=datetime(2026, 8, 10, 15, tzinfo=timezone.utc))
+        args = dict(checkout_id=checkout["id"], return_by_date="2026-08-20",
+                    expected_return_by_date=checkout["return_by_date"], now=datetime(2026, 8, 18, 15, tzinfo=timezone.utc))
+        with self.assertRaises(service.StudentCheckoutPermissionError):
+            service.extend_student_checkout(actor_user={"id": 8}, can_manage_ownership=True, **args)
+        with media_catalog_db._connect() as conn:
+            conn.execute("""CREATE TRIGGER reject_extension_log BEFORE INSERT ON media_catalog_logs
+                WHEN NEW.action='student_checkout_extended' BEGIN SELECT RAISE(ABORT,'test failure'); END""")
+        with self.assertRaises(sqlite3.IntegrityError):
+            service.extend_student_checkout(actor_user=self.actor, **args)
+        self.assertEqual(media_catalog_db.get_student_checkout(checkout["id"])["return_by_date"], checkout["return_by_date"])
+
+    def test_extend_rechecks_return_and_cart_ownership_under_lock(self):
+        checkout = service.create_student_checkout(actor_user=self.actor, identifier="CB100", student_name="John",
+            now=datetime(2026, 8, 10, 15, tzinfo=timezone.utc))
+        args = dict(checkout_id=checkout["id"], return_by_date="2026-08-20", actor_user=self.actor,
+                    expected_return_by_date=checkout["return_by_date"], updated_at="2026-08-18T15:00:00+00:00")
+        with media_catalog_db._connect() as conn:
+            conn.execute("UPDATE media_cart_ownership SET owner_user_id=8 WHERE cart_asset_id=100")
+        with self.assertRaises(PermissionError):
+            media_catalog_db.extend_student_checkout_record(**args)
+        media_catalog_db.return_student_checkout_record(checkout_id=checkout["id"], actor_user=self.actor)
+        self.assertIsNone(media_catalog_db.extend_student_checkout_record(**args))
 
     def test_student_name_is_required(self):
         with self.assertRaises(service.StudentCheckoutError):
@@ -445,6 +506,45 @@ class StudentCheckoutApiFreshnessTests(unittest.TestCase):
             session["is_authenticated"] = True
             session["user_id"] = user_id
             session["user_permissions"] = sorted(permissions)
+
+    def test_extend_api_refreshes_due_date_and_overdue_counts(self):
+        self.login()
+        with self.client.session_transaction() as session:
+            session["csrf_token"] = "extend-test"
+        checkout = service.create_student_checkout(actor_user=self.actor, identifier="CB100", student_name="John",
+            now=datetime(2026, 8, 10, 15, tzinfo=timezone.utc))
+        url = f"/snipeops/media-catalog/api/student-checkouts/{checkout['id']}/extend"
+        body = dict(return_by_date="2026-08-20", expected_return_by_date=checkout["return_by_date"])
+        with patch.object(service, "_now_utc", return_value=datetime(2026, 8, 18, 15, tzinfo=timezone.utc)):
+            self.assertEqual(self.client.post(url, json=body).status_code, 400)
+            before = self.client.get("/snipeops/media-catalog/api/dashboard").get_json()
+            self.assertEqual(before["summary"]["overdue_checkout_count"], 1)
+            attention = before["attention"]["overdue_checkouts"][0]
+            self.assertEqual(attention["id"], checkout["id"])
+            self.assertEqual(attention["return_by_date"], checkout["return_by_date"])
+            self.assertEqual(attention["extension_min_date"], "2026-08-18")
+            response = self.client.post(url, json=body, headers={"X-CSRF-Token": "extend-test"})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json["checkout"]["return_by_date"], "2026-08-20")
+            self.assertEqual(self.client.post(url, json=body, headers={"X-CSRF-Token": "extend-test"}).status_code, 409)
+            after = self.client.get("/snipeops/media-catalog/api/dashboard").get_json()
+            self.assertEqual(after["summary"]["overdue_checkout_count"], 0)
+            self.assertEqual(after["attention"]["overdue_checkouts"], [])
+            self.assertEqual(after["summary"]["active_checkout_count"], 1)
+
+    def test_extend_api_requires_permission_and_owned_cart(self):
+        checkout = service.create_student_checkout(actor_user=self.actor, identifier="CB100", student_name="John")
+        url = f"/snipeops/media-catalog/api/student-checkouts/{checkout['id']}/extend"
+        self.login(user_id=8, extra_permissions={"snipeops.media_catalog.ownership.manage"})
+        with self.client.session_transaction() as session:
+            session["csrf_token"] = "extend-test"
+        response = self.client.post(url, json=dict(return_by_date="2099-08-20", expected_return_by_date=checkout["return_by_date"]),
+                                    headers={"X-CSRF-Token": "extend-test"})
+        self.assertEqual(response.status_code, 403)
+        self.login()
+        with self.client.session_transaction() as session:
+            session["user_permissions"] = ["snipeops.media_catalog.view"]
+        self.assertEqual(self.client.post(url, json={}, headers={"X-CSRF-Token": "extend-test"}).status_code, 403)
 
     def test_checkout_create_is_immediately_visible_to_list_and_dashboard(self):
         self.login()
